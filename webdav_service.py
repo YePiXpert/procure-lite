@@ -19,6 +19,10 @@ DEFAULT_TIMEOUT_SECONDS = 20
 MAX_DOWNLOAD_BYTES = 1024 * 1024 * 1024  # 1 GB
 STREAM_CHUNK_SIZE = 1024 * 1024
 JIANGUOYUN_DEFAULT_REMOTE_DIR = "office-supplies/backups"
+WEBDAV_AUTH_FAILURE_MESSAGE = (
+    "WebDAV 认证失败: HTTP 401，请检查用户名和授权密码"
+    "（坚果云需使用应用密码而不是登录密码），并确认 WebDAV 地址正确"
+)
 
 
 class WebDAVError(RuntimeError):
@@ -62,14 +66,30 @@ def _resolve_remote_dir(base_url: str, remote_dir: Optional[str]) -> str:
         return normalized
 
     path = (urlparse(base_url).path or "").rstrip("/").lower()
-    if not path.startswith("/dav"):
+    path_parts = [part for part in path.split("/") if part]
+    if not path_parts or path_parts[0] != "dav":
         raise WebDAVError("坚果云地址应填写为 https://dav.jianguoyun.com/dav/")
     if normalized.startswith("dav/"):
         normalized = normalized[4:]
-    if not normalized:
+    base_remote_dir = "/".join(path_parts[1:])
+    if base_remote_dir and normalized == base_remote_dir:
+        return ""
+    if base_remote_dir and normalized.startswith(f"{base_remote_dir}/"):
+        normalized = normalized[len(base_remote_dir) + 1 :]
+    if not normalized and len(path_parts) == 1:
         # Jianguoyun does not accept PUT uploads directly under the DAV root.
         normalized = JIANGUOYUN_DEFAULT_REMOTE_DIR
     return normalized
+
+
+def _format_webdav_http_error(action: str, status_code: int, detail: str = "") -> str:
+    if status_code == 401:
+        message = WEBDAV_AUTH_FAILURE_MESSAGE
+    else:
+        message = f"{action}: HTTP {status_code}"
+    if detail:
+        message = f"{message} - {detail[:200]}"
+    return message
 
 
 def normalize_webdav_config(payload: dict) -> dict:
@@ -133,9 +153,7 @@ def _request(
             return int(response.status), dict(response.headers.items()), body
     except HTTPError as e:
         detail = e.read().decode("utf-8", errors="ignore").strip()
-        message = f"WebDAV 请求失败: HTTP {e.code}"
-        if detail:
-            message = f"{message} - {detail[:200]}"
+        message = _format_webdav_http_error("WebDAV 请求失败", e.code, detail)
         parsed = urlparse(url)
         if e.code == 404 and "jianguoyun.com" in parsed.netloc.lower():
             if "/dav/" not in parsed.path and parsed.path != "/dav":
@@ -252,9 +270,7 @@ def upload_file(config: dict, filename: str, file_path: Path) -> str:
         status = int(response.status)
         body = response.read().decode("utf-8", errors="ignore").strip()
         if status not in (200, 201, 204):
-            message = f"上传备份失败: HTTP {status}"
-            if body:
-                message = f"{message} - {body[:200]}"
+            message = _format_webdav_http_error("上传备份失败", status, body)
             raise WebDAVError(message, status_code=status)
         return target
     except OSError as exc:
@@ -410,9 +426,7 @@ def download_backup_to_file(config: dict, filename: str, destination: Path) -> P
         return destination
     except HTTPError as e:
         detail = e.read().decode("utf-8", errors="ignore").strip()
-        message = f"下载 WebDAV 备份失败: HTTP {e.code}"
-        if detail:
-            message = f"{message} - {detail[:200]}"
+        message = _format_webdav_http_error("下载 WebDAV 备份失败", e.code, detail)
         raise WebDAVError(message, status_code=e.code)
     except URLError as e:
         raise WebDAVError(f"下载 WebDAV 备份失败: {e.reason}")

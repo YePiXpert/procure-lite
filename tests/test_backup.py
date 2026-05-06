@@ -6,6 +6,7 @@ from io import BytesIO
 from pathlib import Path
 
 import pytest
+import backup_service
 
 from backup_service import (
     MAX_BACKUP_ENTRIES,
@@ -107,3 +108,10 @@ class TestValidateSqliteDb:
 
         with pytest.raises((ValueError, sqlite3.DatabaseError)):
             _validate_sqlite_db_file(corrupt_path)
+
+
+def test_build_backup_archive_requires_database(tmp_path, monkeypatch):
+    monkeypatch.setattr(backup_service, "resolve_db_path", lambda: tmp_path / "missing.db")
+
+    with pytest.raises(FileNotFoundError, match="数据库文件不存在"):
+        backup_service.build_backup_archive_file(tmp_path / "backup.zip")

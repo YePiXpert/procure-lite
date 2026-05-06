@@ -30,6 +30,7 @@ from schemas import (
 )
 from webdav_service import (
     WebDAVError,
+    WEBDAV_AUTH_FAILURE_MESSAGE,
     download_backup_to_file,
     prune_backups,
     upload_file,
@@ -177,7 +178,13 @@ def _require_webdav_config() -> dict:
 
 def _handle_webdav_error(error: Exception) -> None:
     if isinstance(error, WebDAVError):
-        raise HTTPException(status_code=error.status_code, detail=str(error))
+        detail = str(error)
+        status_code = error.status_code
+        if status_code == 401:
+            status_code = 400
+            if "WebDAV 认证失败" not in detail:
+                detail = WEBDAV_AUTH_FAILURE_MESSAGE
+        raise HTTPException(status_code=status_code, detail=detail)
     raise HTTPException(status_code=500, detail=f"WebDAV 操作失败: {str(error)}")
 
 
