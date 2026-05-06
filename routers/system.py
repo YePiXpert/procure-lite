@@ -5,9 +5,10 @@ from pathlib import Path
 from uuid import uuid4
 
 from fastapi import APIRouter, File, HTTPException, UploadFile
-from fastapi.responses import FileResponse, HTMLResponse, StreamingResponse
+from fastapi.responses import FileResponse, HTMLResponse
 from itsdangerous import URLSafeSerializer
 from itsdangerous.exc import BadData
+from starlette.background import BackgroundTask
 from starlette.concurrency import run_in_threadpool
 
 from api_utils import safe_unlink, save_upload_file_with_limit
@@ -17,12 +18,12 @@ from app_runtime import APP_STATE_DIR, STATIC_DIR, UPLOAD_DIR
 from auth_security import _load_or_create_cookie_secret
 from backup_service import (
     MAX_BACKUP_TOTAL_SIZE,
-    build_backup_archive,
     build_backup_archive_file,
     inspect_backup_archive,
     restore_from_archive,
 )
 from database import init_db
+from time_utils import beijing_filename_timestamp
 from schemas import (
     BackupHealthCheckResponse,
     WebDAVConfigRequest,
@@ -198,15 +199,19 @@ async def root():
 @router.get("/api/backup")
 async def backup_data():
     """下载当前数据库与上传文件备份。"""
+    local_archive_path = APP_STATE_DIR / f".download_backup_{uuid4().hex}.zip"
     async with DATA_MUTATION_LOCK:
         try:
-            archive_buffer, filename = await run_in_threadpool(build_backup_archive)
+            await run_in_threadpool(build_backup_archive_file, local_archive_path)
         except Exception as e:
+            safe_unlink(local_archive_path)
             raise HTTPException(status_code=500, detail=f"备份失败: {str(e)}")
-    return StreamingResponse(
-        archive_buffer,
+    filename = f"office_supplies_backup_{beijing_filename_timestamp()}.zip"
+    return FileResponse(
+        local_archive_path,
         media_type="application/zip",
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        filename=filename,
+        background=BackgroundTask(safe_unlink, local_archive_path),
     )
 
 

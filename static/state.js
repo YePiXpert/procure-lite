@@ -93,6 +93,7 @@
                     uploadPollInFlight: false,
                     uploadStatusText: '智能深度扫描中，请稍候',
                     restoring: false,
+                    backupLoading: false,
                     importSubmitting: false,
                     parseResult: null,
                     error: null,

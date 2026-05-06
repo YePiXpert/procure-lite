@@ -19,6 +19,8 @@ MAX_BACKUP_TOTAL_SIZE = 1024 * 1024 * 1024  # 1 GB
 MAX_BACKUP_FILE_SIZE = 200 * 1024 * 1024  # 200 MB
 MAX_COMPRESSION_RATIO = 200
 SQLITE_INTEGRITY_OK = "ok"
+DB_BACKUP_COMPRESSION = zipfile.ZIP_DEFLATED
+UPLOAD_BACKUP_COMPRESSION = zipfile.ZIP_STORED
 
 REQUIRED_DB_TABLES = {"items"}
 REQUIRED_ITEMS_COLUMNS = {
@@ -173,7 +175,11 @@ def _build_archive(target: zipfile.ZipFile) -> None:
                 snapshot_conn.close()
         finally:
             source_conn.close()
-        target.write(snapshot_path, arcname="office_supplies.db")
+        target.write(
+            snapshot_path,
+            arcname="office_supplies.db",
+            compress_type=DB_BACKUP_COMPRESSION,
+        )
     finally:
         try:
             os.unlink(snapshot_path)
@@ -183,14 +189,18 @@ def _build_archive(target: zipfile.ZipFile) -> None:
         for file_path in UPLOAD_DIR.rglob("*"):
             if file_path.is_file():
                 arcname = Path("uploads") / file_path.relative_to(UPLOAD_DIR)
-                target.write(file_path, arcname=arcname.as_posix())
+                target.write(
+                    file_path,
+                    arcname=arcname.as_posix(),
+                    compress_type=UPLOAD_BACKUP_COMPRESSION,
+                )
 
 
 def build_backup_archive() -> tuple[BytesIO, str]:
     """打包数据库与上传目录为 zip。"""
     buffer = BytesIO()
     filename = f"office_supplies_backup_{beijing_filename_timestamp()}.zip"
-    with zipfile.ZipFile(buffer, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+    with zipfile.ZipFile(buffer, "w", compression=zipfile.ZIP_STORED) as archive:
         _build_archive(archive)
     buffer.seek(0)
     return buffer, filename
@@ -199,7 +209,7 @@ def build_backup_archive() -> tuple[BytesIO, str]:
 def build_backup_archive_file(destination: Path) -> Path:
     """打包为磁盘文件（用于大文件上传场景）。"""
     destination.parent.mkdir(parents=True, exist_ok=True)
-    with zipfile.ZipFile(destination, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+    with zipfile.ZipFile(destination, "w", compression=zipfile.ZIP_STORED) as archive:
         _build_archive(archive)
     return destination
 

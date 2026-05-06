@@ -16,6 +16,7 @@ from time_utils import format_http_datetime_beijing
 
 
 DEFAULT_TIMEOUT_SECONDS = 20
+WEBDAV_UPLOAD_TIMEOUT_SECONDS = 15 * 60
 MAX_DOWNLOAD_BYTES = 1024 * 1024 * 1024  # 1 GB
 STREAM_CHUNK_SIZE = 1024 * 1024
 JIANGUOYUN_DEFAULT_REMOTE_DIR = "office-supplies/backups"
@@ -243,7 +244,7 @@ def upload_file(config: dict, filename: str, file_path: Path) -> str:
     connection = connection_cls(
         parsed.hostname,
         parsed.port,
-        timeout=max(DEFAULT_TIMEOUT_SECONDS, 120),
+        timeout=max(DEFAULT_TIMEOUT_SECONDS, WEBDAV_UPLOAD_TIMEOUT_SECONDS),
     )
     path = parsed.path or "/"
     if parsed.query:

@@ -8,10 +8,14 @@ import threading
 import time
 import traceback
 import urllib.request
+import urllib.error
 from pathlib import Path
 from typing import Optional
+from uuid import uuid4
 
 from app_runtime import LOG_DIR, UPLOAD_DIR
+from api_utils import STREAM_CHUNK_SIZE, safe_unlink
+from time_utils import beijing_filename_timestamp
 
 APP_TITLE = "办公用品采购系统"
 HOST = "127.0.0.1"
@@ -19,6 +23,7 @@ WINDOW_WIDTH = 1280
 WINDOW_HEIGHT = 720
 STARTUP_TIMEOUT_SECONDS = 45
 BACKEND_CRASH_LOG_FILENAME = "backend_crash.log"
+DESKTOP_BACKUP_TIMEOUT_SECONDS = 15 * 60
 _FALLBACK_STREAM = None
 
 
@@ -135,18 +140,47 @@ class JsApi:
     def __init__(self, app: "DesktopApp") -> None:
         self._app = app
 
-    def _internal_get(self, path: str) -> tuple:
-        """向内部 FastAPI 发 GET 请求，附带有效认证 Cookie，返回 (bytes, headers_dict)。"""
+    def _build_internal_request(self, path: str):
+        """构造附带有效认证 Cookie 的内部 FastAPI 请求。"""
         import auth_security
 
         token = auth_security.create_auth_cookie()
         url = f"http://{self._app.host}:{self._app.port}{path}"
         req = urllib.request.Request(url)
         req.add_header("Cookie", f"{auth_security.AUTH_COOKIE_NAME}={token}")
-        with urllib.request.urlopen(req, timeout=60) as resp:
+        return req
+
+    def _internal_get(self, path: str, timeout: int = 60) -> tuple:
+        """向内部 FastAPI 发 GET 请求，附带有效认证 Cookie，返回 (bytes, headers_dict)。"""
+        req = self._build_internal_request(path)
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
             data = resp.read()
             headers = {k.lower(): v for k, v in resp.headers.items()}
         return data, headers
+
+    def _internal_download_to_file(
+        self,
+        path: str,
+        destination: Path,
+        timeout: int = DESKTOP_BACKUP_TIMEOUT_SECONDS,
+    ) -> dict:
+        """向内部 FastAPI 下载文件并流式写入磁盘，避免大备份占用内存。"""
+        req = self._build_internal_request(path)
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        temp_destination = destination.with_name(f".{destination.name}.{uuid4().hex}.tmp")
+        try:
+            with urllib.request.urlopen(req, timeout=timeout) as resp, temp_destination.open("wb") as buffer:
+                while True:
+                    chunk = resp.read(STREAM_CHUNK_SIZE)
+                    if not chunk:
+                        break
+                    buffer.write(chunk)
+                headers = {k.lower(): v for k, v in resp.headers.items()}
+            os.replace(temp_destination, destination)
+            return headers
+        except Exception:
+            safe_unlink(temp_destination)
+            raise
 
     def _parse_filename_from_headers(self, headers: dict, fallback: str) -> str:
         """从 Content-Disposition 头解析文件名（支持 RFC 5987 编码）。"""
@@ -167,13 +201,13 @@ class JsApi:
             return m.group(1).strip()
         return fallback
 
-    def _save_with_dialog(self, data: bytes, suggested_filename: str) -> dict:
-        """弹出原生另存为对话框并将数据写入用户选择的路径。"""
+    def _select_save_path(self, suggested_filename: str) -> tuple[Optional[Path], Optional[str]]:
+        """弹出原生另存为对话框并返回用户选择的路径。"""
         import webview
 
         window = self._app.window
         if window is None:
-            return {"ok": False, "message": "窗口未就绪"}
+            return None, "窗口未就绪"
 
         ext = Path(suggested_filename).suffix.lower()
         file_types = self._FILE_TYPE_MAP.get(ext, ("All files (*.*)",))
@@ -185,17 +219,25 @@ class JsApi:
                 file_types=file_types,
             )
         except Exception as exc:
-            return {"ok": False, "message": f"无法打开保存对话框: {exc}"}
+            return None, f"无法打开保存对话框: {exc}"
 
         if not result:
-            return {"ok": False, "message": "已取消保存"}
+            return None, "已取消保存"
 
         save_path = result[0] if isinstance(result, (tuple, list)) else result
         if not save_path:
-            return {"ok": False, "message": "已取消保存"}
+            return None, "已取消保存"
+
+        return Path(save_path), None
+
+    def _save_with_dialog(self, data: bytes, suggested_filename: str) -> dict:
+        """弹出原生另存为对话框并将数据写入用户选择的路径。"""
+        save_path, error_message = self._select_save_path(suggested_filename)
+        if error_message or save_path is None:
+            return {"ok": False, "message": error_message or "已取消保存"}
 
         try:
-            Path(save_path).write_bytes(data)
+            save_path.write_bytes(data)
         except OSError as exc:
             return {"ok": False, "message": f"写入文件失败: {exc}"}
 
@@ -203,12 +245,18 @@ class JsApi:
 
     def download_backup(self) -> dict:
         """备份下载：Python 内部 HTTP 获取文件 → 原生另存为对话框。"""
+        filename = f"office_supplies_backup_{beijing_filename_timestamp()}.zip"
+        save_path, error_message = self._select_save_path(filename)
+        if error_message or save_path is None:
+            return {"ok": False, "message": error_message or "已取消保存"}
+
         try:
-            data, headers = self._internal_get("/api/backup")
+            self._internal_download_to_file("/api/backup", save_path)
+        except (OSError, urllib.error.URLError) as exc:
+            return {"ok": False, "message": f"获取备份失败: {exc}"}
         except Exception as exc:
             return {"ok": False, "message": f"获取备份失败: {exc}"}
-        filename = self._parse_filename_from_headers(headers, "office_supplies_backup.zip")
-        return self._save_with_dialog(data, filename)
+        return {"ok": True, "message": f"已保存到 {save_path}"}
 
     def download_export(self, query_string: str) -> dict:
         """台账 Excel 导出：Python 内部 HTTP 获取文件 → 原生另存为对话框。"""

@@ -1446,13 +1446,13 @@
                 </div>
             </div>
             <div class="backup-action-grid">
-                <button @click="$root.backupData()" class="backup-action-card backup-action-primary">
+                <button @click="$root.backupData()" :disabled="$root.backupLoading" :class="{ 'opacity-60 cursor-wait': $root.backupLoading }" class="backup-action-card backup-action-primary disabled:pointer-events-none">
                     <span class="backup-action-icon">
                         <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M12 3v10m0 0l-4-4m4 4l4-4M5 17.5A3.5 3.5 0 018.5 14h7a3.5 3.5 0 010 7h-7A3.5 3.5 0 015 17.5z"/></svg>
                     </span>
                     <span class="backup-action-copy">
-                        <span class="backup-action-title">立即备份</span>
-                        <span class="backup-action-desc">导出数据库与附件压缩包</span>
+                        <span class="backup-action-title">{{ $root.backupLoading ? '正在备份...' : '立即备份' }}</span>
+                        <span class="backup-action-desc">{{ $root.backupLoading ? '正在生成压缩包，请勿重复点击' : '导出数据库与附件压缩包' }}</span>
                     </span>
                 </button>
                 <button @click="$root.$refs.restoreInput && $root.$refs.restoreInput.click()" class="backup-action-card">

@@ -2761,6 +2761,8 @@
                     await this.updateItem(item.id, { invoice_issued: item.invoice_issued });
                 },
                 async backupData() {
+                    if (this.backupLoading) return;
+                    this.backupLoading = true;
                     // 桌面模式：Python 侧内部 HTTP 请求 → 原生另存为对话框
                     if (window.pywebview?.api?.download_backup) {
                         try {
@@ -2772,6 +2774,8 @@
                             }
                         } catch (error) {
                             this.showToast('下载备份失败', 'error');
+                        } finally {
+                            this.backupLoading = false;
                         }
                         return;
                     }
@@ -2789,6 +2793,8 @@
                     } catch (error) {
                         const detail = await this.getBlobErrorDetail(error, '备份失败');
                         this.showToast(`下载备份失败: ${detail}`, 'error');
+                    } finally {
+                        this.backupLoading = false;
                     }
                 },
                 handleRestoreSelect(e) {
