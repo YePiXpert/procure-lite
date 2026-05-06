@@ -15,7 +15,7 @@ from .constants import (
 )
 from .filters import build_item_filters
 from .history import diff_item_fields, safe_json_loads, to_json_text
-from .orm import AsyncSessionLocal
+from .orm import AsyncSessionLocal, _convert_placeholders
 from .sqlalchemy_models import Item, ItemHistory
 
 
@@ -445,6 +445,11 @@ def _item_unique_key(source) -> tuple[str, str, str]:
     )
 
 
+def _build_text_query(sql: str, params: list) -> tuple:
+    converted_sql, named_params = _convert_placeholders(sql, params)
+    return text(converted_sql), named_params
+
+
 async def _load_items_by_unique_keys(
     session, keys: list[tuple[str, str, str]]
 ) -> dict[tuple[str, str, str], Item]:
@@ -472,16 +477,19 @@ async def get_items(
     )
     where_clause = " WHERE " + " AND ".join(conditions) if conditions else ""
     query = "SELECT * FROM items" + where_clause + " ORDER BY created_at DESC, id DESC"
-    named_params = {f"p{i}": v for i, v in enumerate(params)}
+    text_query, named_params = _build_text_query(query, params)
 
     if page is not None and page_size is not None:
         offset = max(0, (page - 1) * page_size)
-        query += " LIMIT :limit OFFSET :offset"
+        text_query, named_params = _build_text_query(
+            query + " LIMIT :limit OFFSET :offset",
+            params,
+        )
         named_params["limit"] = page_size
         named_params["offset"] = offset
 
     async with AsyncSessionLocal() as session:
-        result = await session.execute(text(query), named_params)
+        result = await session.execute(text_query, named_params)
         rows = result.mappings().all()
         return [dict(row) for row in rows]
 
@@ -497,11 +505,10 @@ async def stream_items(
     )
     where_clause = " WHERE " + " AND ".join(conditions) if conditions else ""
     query = "SELECT * FROM items" + where_clause + " ORDER BY created_at DESC, id DESC"
+    text_query, named_params = _build_text_query(query, params)
 
     async with AsyncSessionLocal() as session:
-        result = await session.execute(
-            text(query), {f"p{i}": v for i, v in enumerate(params)}
-        )
+        result = await session.execute(text_query, named_params)
         for row in result.mappings():
             yield dict(row)
 
@@ -582,9 +589,8 @@ async def count_items(
         query += " WHERE " + " AND ".join(conditions)
 
     async with AsyncSessionLocal() as session:
-        result = await session.execute(
-            text(query), {f"p{i}": v for i, v in enumerate(params)}
-        )
+        text_query, named_params = _build_text_query(query, params)
+        result = await session.execute(text_query, named_params)
         return int(result.scalar_one())
 
 
@@ -609,15 +615,14 @@ async def get_items_page(
     )
 
     async with AsyncSessionLocal() as session:
-        count_result = await session.execute(
-            text(count_query), {f"p{i}": v for i, v in enumerate(params)}
-        )
+        count_text_query, count_named_params = _build_text_query(count_query, params)
+        count_result = await session.execute(count_text_query, count_named_params)
         total = int(count_result.scalar_one())
 
-        list_params: dict = {f"p{i}": v for i, v in enumerate(params)}
+        list_text_query, list_params = _build_text_query(list_query, params)
         list_params["limit"] = page_size
         list_params["offset"] = offset
-        list_result = await session.execute(text(list_query), list_params)
+        list_result = await session.execute(list_text_query, list_params)
         items = [dict(row) for row in list_result.mappings().all()]
 
     return items, total
@@ -979,13 +984,18 @@ async def get_deleted_items_page(
     count_query = "SELECT COUNT(*) FROM items" + base_where
 
     async with AsyncSessionLocal() as session:
-        named_params: dict = {f"p{i}": v for i, v in enumerate(params)}
+        count_text_query, named_params = _build_text_query(count_query, params)
+        data_text_query, data_named_params = _build_text_query(data_query, params)
         data_result = await session.execute(
-            text(data_query),
-            {**named_params, "limit": page_size, "offset": max(0, (page - 1) * page_size)},
+            data_text_query,
+            {
+                **data_named_params,
+                "limit": page_size,
+                "offset": max(0, (page - 1) * page_size),
+            },
         )
         items = [dict(row) for row in data_result.mappings().all()]
-        count_result = await session.execute(text(count_query), named_params)
+        count_result = await session.execute(count_text_query, named_params)
         total = int(count_result.scalar_one())
     return items, total
 
@@ -1002,11 +1012,10 @@ async def list_deleted_items(
     query += " ORDER BY deleted_at DESC, id DESC LIMIT :limit OFFSET :offset"
 
     async with AsyncSessionLocal() as session:
+        text_query, named_params = _build_text_query(query, params)
         result = await session.execute(
-            text(query),
-            {
-                f"p{i}": v for i, v in enumerate(params)
-            } | {"limit": page_size, "offset": max(0, (page - 1) * page_size)},
+            text_query,
+            named_params | {"limit": page_size, "offset": max(0, (page - 1) * page_size)},
         )
         return [dict(row) for row in result.mappings().all()]
 
@@ -1017,9 +1026,8 @@ async def count_deleted_items(keyword: Optional[str] = None) -> int:
     if conditions:
         query += " WHERE " + " AND ".join(conditions)
     async with AsyncSessionLocal() as session:
-        result = await session.execute(
-            text(query), {f"p{i}": v for i, v in enumerate(params)}
-        )
+        text_query, named_params = _build_text_query(query, params)
+        result = await session.execute(text_query, named_params)
         return int(result.scalar_one())
 
 
