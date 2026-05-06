@@ -1,6 +1,7 @@
 import os
 import sqlite3
 import sqlite3
+import time
 import zipfile
 from io import BytesIO
 from pathlib import Path
@@ -115,3 +116,43 @@ def test_build_backup_archive_requires_database(tmp_path, monkeypatch):
 
     with pytest.raises(FileNotFoundError, match="数据库文件不存在"):
         backup_service.build_backup_archive_file(tmp_path / "backup.zip")
+
+
+def test_build_backup_archive_file_keeps_existing_file_on_failure(tmp_path, monkeypatch):
+    destination = tmp_path / "backup.zip"
+    destination.write_bytes(b"existing-backup")
+
+    def _fail(_target):
+        raise OSError("boom")
+
+    monkeypatch.setattr(backup_service, "write_backup_archive", _fail)
+
+    with pytest.raises(OSError, match="boom"):
+        backup_service.build_backup_archive_file(destination)
+
+    assert destination.read_bytes() == b"existing-backup"
+
+
+def test_cleanup_temp_backup_archives_only_removes_stale_files(tmp_path, monkeypatch):
+    app_dir = tmp_path / "app"
+    temp_dir = tmp_path / "temp"
+    app_dir.mkdir()
+    temp_dir.mkdir()
+
+    stale_file = app_dir / ".download_backup_stale.zip"
+    fresh_file = temp_dir / ".download_backup_fresh.zip"
+    stale_file.write_bytes(b"stale")
+    fresh_file.write_bytes(b"fresh")
+
+    stale_ts = time.time() - 3600
+    fresh_ts = time.time()
+    os.utime(stale_file, (stale_ts, stale_ts))
+    os.utime(fresh_file, (fresh_ts, fresh_ts))
+
+    monkeypatch.setattr(backup_service, "APP_STATE_DIR", app_dir)
+    monkeypatch.setattr(backup_service, "resolve_temp_backup_dir", lambda: temp_dir)
+
+    backup_service.cleanup_temp_backup_archives(".download_backup_*.zip", stale_seconds=60)
+
+    assert not stale_file.exists()
+    assert fresh_file.exists()

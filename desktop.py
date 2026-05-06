@@ -8,13 +8,11 @@ import threading
 import time
 import traceback
 import urllib.request
-import urllib.error
 from pathlib import Path
 from typing import Optional
-from uuid import uuid4
 
 from app_runtime import LOG_DIR, UPLOAD_DIR
-from api_utils import STREAM_CHUNK_SIZE, safe_unlink
+from backup_service import build_backup_archive_file, format_backup_error
 from time_utils import beijing_filename_timestamp
 
 APP_TITLE = "办公用品采购系统"
@@ -23,7 +21,6 @@ WINDOW_WIDTH = 1280
 WINDOW_HEIGHT = 720
 STARTUP_TIMEOUT_SECONDS = 45
 BACKEND_CRASH_LOG_FILENAME = "backend_crash.log"
-DESKTOP_BACKUP_TIMEOUT_SECONDS = 15 * 60
 _FALLBACK_STREAM = None
 
 
@@ -158,30 +155,6 @@ class JsApi:
             headers = {k.lower(): v for k, v in resp.headers.items()}
         return data, headers
 
-    def _internal_download_to_file(
-        self,
-        path: str,
-        destination: Path,
-        timeout: int = DESKTOP_BACKUP_TIMEOUT_SECONDS,
-    ) -> dict:
-        """向内部 FastAPI 下载文件并流式写入磁盘，避免大备份占用内存。"""
-        req = self._build_internal_request(path)
-        destination.parent.mkdir(parents=True, exist_ok=True)
-        temp_destination = destination.with_name(f".{destination.name}.{uuid4().hex}.tmp")
-        try:
-            with urllib.request.urlopen(req, timeout=timeout) as resp, temp_destination.open("wb") as buffer:
-                while True:
-                    chunk = resp.read(STREAM_CHUNK_SIZE)
-                    if not chunk:
-                        break
-                    buffer.write(chunk)
-                headers = {k.lower(): v for k, v in resp.headers.items()}
-            os.replace(temp_destination, destination)
-            return headers
-        except Exception:
-            safe_unlink(temp_destination)
-            raise
-
     def _parse_filename_from_headers(self, headers: dict, fallback: str) -> str:
         """从 Content-Disposition 头解析文件名（支持 RFC 5987 编码）。"""
         import re
@@ -244,18 +217,18 @@ class JsApi:
         return {"ok": True, "message": f"已保存到 {save_path}"}
 
     def download_backup(self) -> dict:
-        """备份下载：Python 内部 HTTP 获取文件 → 原生另存为对话框。"""
+        """备份下载：直接打包到用户选择的路径，避免中间临时副本。"""
         filename = f"office_supplies_backup_{beijing_filename_timestamp()}.zip"
         save_path, error_message = self._select_save_path(filename)
         if error_message or save_path is None:
             return {"ok": False, "message": error_message or "已取消保存"}
 
         try:
-            self._internal_download_to_file("/api/backup", save_path)
-        except (OSError, urllib.error.URLError) as exc:
-            return {"ok": False, "message": f"获取备份失败: {exc}"}
+            build_backup_archive_file(save_path)
+        except OSError as exc:
+            return {"ok": False, "message": format_backup_error(exc, prefix="生成备份失败")}
         except Exception as exc:
-            return {"ok": False, "message": f"获取备份失败: {exc}"}
+            return {"ok": False, "message": f"生成备份失败: {exc}"}
         return {"ok": True, "message": f"已保存到 {save_path}"}
 
     def download_export(self, query_string: str) -> dict:

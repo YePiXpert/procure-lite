@@ -1,8 +1,10 @@
 import os
+import errno
 import shutil
 import sqlite3
 import stat
 import tempfile
+import time
 import zipfile
 from io import BytesIO
 from pathlib import Path
@@ -21,6 +23,9 @@ MAX_COMPRESSION_RATIO = 200
 SQLITE_INTEGRITY_OK = "ok"
 DB_BACKUP_COMPRESSION = zipfile.ZIP_DEFLATED
 UPLOAD_BACKUP_COMPRESSION = zipfile.ZIP_STORED
+TEMP_BACKUP_DIR_NAME = "office-supplies-tracker-temp"
+TEMP_BACKUP_STALE_SECONDS = 6 * 60 * 60
+BACKUP_NO_SPACE_MESSAGE = "本地磁盘空间不足，无法生成备份，请释放磁盘空间后重试"
 
 REQUIRED_DB_TABLES = {"items"}
 REQUIRED_ITEMS_COLUMNS = {
@@ -47,6 +52,46 @@ def resolve_db_path() -> Path:
     if db_path.is_absolute():
         return db_path
     return APP_STATE_DIR / db_path
+
+
+def resolve_temp_backup_dir() -> Path:
+    """返回用于临时备份文件的系统临时目录。"""
+    temp_dir = Path(tempfile.gettempdir()) / TEMP_BACKUP_DIR_NAME
+    temp_dir.mkdir(parents=True, exist_ok=True)
+    return temp_dir
+
+
+def is_no_space_error(exc: BaseException) -> bool:
+    return isinstance(exc, OSError) and getattr(exc, "errno", None) == errno.ENOSPC
+
+
+def format_backup_error(exc: BaseException, prefix: str = "备份失败") -> str:
+    if is_no_space_error(exc):
+        return BACKUP_NO_SPACE_MESSAGE
+    return f"{prefix}: {exc}"
+
+
+def cleanup_temp_backup_archives(
+    pattern: str,
+    *,
+    stale_seconds: int = TEMP_BACKUP_STALE_SECONDS,
+) -> None:
+    """清理遗留的临时备份文件，避免失败重试后占满磁盘。"""
+    cutoff = 0.0
+    if stale_seconds > 0:
+        cutoff = max(0.0, time.time() - float(stale_seconds))
+    for base_dir in (APP_STATE_DIR, resolve_temp_backup_dir()):
+        try:
+            for path in base_dir.glob(pattern):
+                if cutoff:
+                    try:
+                        if path.stat().st_mtime >= cutoff:
+                            continue
+                    except OSError:
+                        continue
+                safe_unlink(path)
+        except OSError:
+            continue
 
 
 def is_safe_zip_entry(name: str) -> bool:
@@ -161,9 +206,15 @@ def _build_archive(target: zipfile.ZipFile) -> None:
     if not db_path.exists():
         raise FileNotFoundError("数据库文件不存在，无法创建备份")
 
+    cleanup_temp_backup_archives(".backup_db_snapshot_*.db")
+
     # 使用 SQLite online backup API 创建一致性快照，避免直接复制
     # 正在使用的数据库文件（可能有 WAL 日志或 Windows 文件锁）。
-    fd, snapshot_path = tempfile.mkstemp(suffix=".db")
+    fd, snapshot_path = tempfile.mkstemp(
+        prefix=".backup_db_snapshot_",
+        suffix=".db",
+        dir=str(resolve_temp_backup_dir()),
+    )
     os.close(fd)
     try:
         source_conn = sqlite3.connect(str(db_path))
@@ -196,12 +247,17 @@ def _build_archive(target: zipfile.ZipFile) -> None:
                 )
 
 
+def write_backup_archive(target) -> None:
+    """将备份 zip 写入目标文件或文件流。"""
+    with zipfile.ZipFile(target, "w", compression=zipfile.ZIP_STORED) as archive:
+        _build_archive(archive)
+
+
 def build_backup_archive() -> tuple[BytesIO, str]:
     """打包数据库与上传目录为 zip。"""
     buffer = BytesIO()
     filename = f"office_supplies_backup_{beijing_filename_timestamp()}.zip"
-    with zipfile.ZipFile(buffer, "w", compression=zipfile.ZIP_STORED) as archive:
-        _build_archive(archive)
+    write_backup_archive(buffer)
     buffer.seek(0)
     return buffer, filename
 
@@ -209,8 +265,13 @@ def build_backup_archive() -> tuple[BytesIO, str]:
 def build_backup_archive_file(destination: Path) -> Path:
     """打包为磁盘文件（用于大文件上传场景）。"""
     destination.parent.mkdir(parents=True, exist_ok=True)
-    with zipfile.ZipFile(destination, "w", compression=zipfile.ZIP_STORED) as archive:
-        _build_archive(archive)
+    temp_destination = destination.with_name(f".{destination.name}.{uuid4().hex}.tmp")
+    try:
+        write_backup_archive(temp_destination)
+        os.replace(temp_destination, destination)
+    except Exception:
+        safe_unlink(temp_destination)
+        raise
     return destination
 
 

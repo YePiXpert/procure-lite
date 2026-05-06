@@ -12,6 +12,7 @@ from urllib.request import Request, urlopen
 from uuid import uuid4
 import xml.etree.ElementTree as ET
 
+from backup_service import format_backup_error, is_no_space_error, write_backup_archive
 from time_utils import format_http_datetime_beijing
 
 
@@ -30,6 +31,45 @@ class WebDAVError(RuntimeError):
     def __init__(self, message: str, status_code: int = 400):
         super().__init__(message)
         self.status_code = status_code
+
+
+class _ChunkedUploadWriter:
+    def __init__(self, connection, chunk_size: int = STREAM_CHUNK_SIZE):
+        self._connection = connection
+        self._chunk_size = max(64 * 1024, int(chunk_size or STREAM_CHUNK_SIZE))
+        self._buffer = bytearray()
+        self._closed = False
+
+    def _send_chunk(self, data: bytes) -> None:
+        if not data:
+            return
+        self._connection.send(f"{len(data):X}\r\n".encode("ascii"))
+        self._connection.send(data)
+        self._connection.send(b"\r\n")
+
+    def write(self, data) -> int:
+        if self._closed:
+            raise ValueError("writer already closed")
+        if not data:
+            return 0
+        chunk = data.tobytes() if isinstance(data, memoryview) else bytes(data)
+        self._buffer.extend(chunk)
+        while len(self._buffer) >= self._chunk_size:
+            payload = bytes(self._buffer[: self._chunk_size])
+            del self._buffer[: self._chunk_size]
+            self._send_chunk(payload)
+        return len(chunk)
+
+    def flush(self) -> None:
+        if self._buffer:
+            self._send_chunk(bytes(self._buffer))
+            self._buffer.clear()
+
+    def close(self) -> None:
+        if self._closed:
+            return
+        self.flush()
+        self._closed = True
 
 
 def _normalize_base_url(base_url: str) -> str:
@@ -275,7 +315,56 @@ def upload_file(config: dict, filename: str, file_path: Path) -> str:
             raise WebDAVError(message, status_code=status)
         return target
     except OSError as exc:
-        raise WebDAVError(f"上传备份失败: {exc}")
+        status_code = 507 if is_no_space_error(exc) else 400
+        raise WebDAVError(format_backup_error(exc, prefix="上传备份失败"), status_code=status_code)
+    finally:
+        connection.close()
+
+
+def upload_backup_archive(config: dict, filename: str) -> str:
+    target, auth_headers = _build_backup_target(config, filename)
+    parsed = urlparse(target)
+    connection_cls = (
+        http.client.HTTPSConnection if parsed.scheme.lower() == "https" else http.client.HTTPConnection
+    )
+    connection = connection_cls(
+        parsed.hostname,
+        parsed.port,
+        timeout=max(DEFAULT_TIMEOUT_SECONDS, WEBDAV_UPLOAD_TIMEOUT_SECONDS),
+    )
+    path = parsed.path or "/"
+    if parsed.query:
+        path = f"{path}?{parsed.query}"
+
+    try:
+        connection.putrequest("PUT", path)
+        for key, value in {
+            **auth_headers,
+            "Content-Type": "application/zip",
+            "Transfer-Encoding": "chunked",
+        }.items():
+            connection.putheader(key, value)
+        connection.endheaders()
+
+        writer = _ChunkedUploadWriter(connection)
+        write_backup_archive(writer)
+        writer.close()
+        connection.send(b"0\r\n\r\n")
+
+        response = connection.getresponse()
+        status = int(response.status)
+        body = response.read().decode("utf-8", errors="ignore").strip()
+        if status not in (200, 201, 204):
+            message = _format_webdav_http_error("上传备份失败", status, body)
+            raise WebDAVError(message, status_code=status)
+        return target
+    except OSError as exc:
+        status_code = 507 if is_no_space_error(exc) else 400
+        raise WebDAVError(format_backup_error(exc, prefix="上传备份失败"), status_code=status_code)
+    except WebDAVError:
+        raise
+    except Exception as exc:
+        raise WebDAVError(f"上传备份失败: {exc}") from exc
     finally:
         connection.close()
 

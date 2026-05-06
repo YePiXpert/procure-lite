@@ -19,7 +19,10 @@ from auth_security import _load_or_create_cookie_secret
 from backup_service import (
     MAX_BACKUP_TOTAL_SIZE,
     build_backup_archive_file,
+    cleanup_temp_backup_archives,
+    format_backup_error,
     inspect_backup_archive,
+    resolve_temp_backup_dir,
     restore_from_archive,
 )
 from database import init_db
@@ -34,7 +37,7 @@ from webdav_service import (
     WEBDAV_AUTH_FAILURE_MESSAGE,
     download_backup_to_file,
     prune_backups,
-    upload_file,
+    upload_backup_archive,
     list_backups,
     normalize_webdav_config,
     test_connection,
@@ -199,13 +202,17 @@ async def root():
 @router.get("/api/backup")
 async def backup_data():
     """下载当前数据库与上传文件备份。"""
-    local_archive_path = APP_STATE_DIR / f".download_backup_{uuid4().hex}.zip"
+    cleanup_temp_backup_archives(".download_backup_*.zip")
+    local_archive_path = resolve_temp_backup_dir() / f".download_backup_{uuid4().hex}.zip"
     async with DATA_MUTATION_LOCK:
         try:
             await run_in_threadpool(build_backup_archive_file, local_archive_path)
+        except OSError as e:
+            safe_unlink(local_archive_path)
+            raise HTTPException(status_code=507, detail=format_backup_error(e))
         except Exception as e:
             safe_unlink(local_archive_path)
-            raise HTTPException(status_code=500, detail=f"备份失败: {str(e)}")
+            raise HTTPException(status_code=500, detail=format_backup_error(e))
     filename = f"office_supplies_backup_{beijing_filename_timestamp()}.zip"
     return FileResponse(
         local_archive_path,
@@ -313,23 +320,20 @@ async def list_webdav_backups():
 
 @router.post("/api/webdav/backup")
 async def backup_to_webdav():
-    """创建本地备份并上传到 WebDAV。"""
+    """创建备份并直接上传到 WebDAV。"""
     config = _require_webdav_config()
-    local_archive_path = APP_STATE_DIR / f".webdav_backup_{uuid4().hex}.zip"
+    cleanup_temp_backup_archives(".webdav_backup_*.zip")
     retention = {}
     async with DATA_MUTATION_LOCK:
         try:
-            await run_in_threadpool(build_backup_archive_file, local_archive_path)
             upload_name = f"office_supplies_backup_{uuid4().hex[:8]}.zip"
             remote_url = await run_in_threadpool(
-                upload_file, config, upload_name, local_archive_path
+                upload_backup_archive, config, upload_name
             )
             keep_backups = max(0, int(config.get("keep_backups") or 0))
             retention = await run_in_threadpool(prune_backups, config, keep_backups)
         except Exception as e:
             _handle_webdav_error(e)
-        finally:
-            safe_unlink(local_archive_path)
     deleted_count = len(retention.get("deleted", []))
     retention_errors = retention.get("errors", [])
     message = f"备份已上传到 WebDAV：{upload_name}"

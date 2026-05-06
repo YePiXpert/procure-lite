@@ -1,11 +1,15 @@
+import errno
+
 import pytest
 from fastapi import HTTPException
 
 from routers.system import _handle_webdav_error
+import webdav_service
 from webdav_service import (
     JIANGUOYUN_DEFAULT_REMOTE_DIR,
     WebDAVError,
     normalize_webdav_config,
+    upload_backup_archive,
 )
 
 
@@ -56,3 +60,70 @@ def test_jianguoyun_duplicate_remote_dir_is_stripped():
     })
 
     assert config["remote_dir"] == "backups"
+
+
+class _FakeResponse:
+    def __init__(self, status=201, body=b""):
+        self.status = status
+        self._body = body
+
+    def read(self):
+        return self._body
+
+
+class _FakeConnection:
+    def __init__(self, *args, **kwargs):
+        self.headers = {}
+        self.sent = bytearray()
+        self.closed = False
+
+    def putrequest(self, method, path):
+        self.method = method
+        self.path = path
+
+    def putheader(self, key, value):
+        self.headers[key] = value
+
+    def endheaders(self):
+        pass
+
+    def send(self, data):
+        self.sent.extend(data)
+
+    def getresponse(self):
+        return _FakeResponse()
+
+    def close(self):
+        self.closed = True
+
+
+def test_upload_backup_archive_uses_chunked_transfer(monkeypatch):
+    fake_connection = _FakeConnection()
+
+    monkeypatch.setattr(webdav_service, "_build_backup_target", lambda config, filename: ("https://example.com/backup.zip", {"Authorization": "Basic abc"}))
+    monkeypatch.setattr(webdav_service.http.client, "HTTPSConnection", lambda *args, **kwargs: fake_connection)
+    monkeypatch.setattr(webdav_service, "write_backup_archive", lambda writer: writer.write(b"abc"))
+
+    result = upload_backup_archive({}, "backup.zip")
+
+    assert result == "https://example.com/backup.zip"
+    assert fake_connection.headers["Transfer-Encoding"] == "chunked"
+    assert bytes(fake_connection.sent) == b"3\r\nabc\r\n0\r\n\r\n"
+
+
+def test_upload_backup_archive_maps_no_space_to_storage_error(monkeypatch):
+    fake_connection = _FakeConnection()
+
+    monkeypatch.setattr(webdav_service, "_build_backup_target", lambda config, filename: ("https://example.com/backup.zip", {}))
+    monkeypatch.setattr(webdav_service.http.client, "HTTPSConnection", lambda *args, **kwargs: fake_connection)
+
+    def _raise_no_space(_writer):
+        raise OSError(errno.ENOSPC, "No space left on device")
+
+    monkeypatch.setattr(webdav_service, "write_backup_archive", _raise_no_space)
+
+    with pytest.raises(WebDAVError) as exc_info:
+        upload_backup_archive({}, "backup.zip")
+
+    assert exc_info.value.status_code == 507
+    assert "本地磁盘空间不足" in str(exc_info.value)
