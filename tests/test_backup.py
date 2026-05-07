@@ -1,6 +1,5 @@
 import os
 import sqlite3
-import sqlite3
 import time
 import zipfile
 from io import BytesIO
@@ -16,9 +15,28 @@ from backup_service import (
     MAX_COMPRESSION_RATIO,
     is_safe_zip_entry,
     is_safe_zip_member,
+    should_skip_upload_file_in_backup,
     _validate_archive_members,
     _validate_sqlite_db_file,
 )
+
+
+def _create_valid_items_db(db_path: Path) -> None:
+    conn = sqlite3.connect(str(db_path))
+    try:
+        conn.execute(
+            "CREATE TABLE items (id INTEGER, serial_number TEXT, department TEXT, "
+            "handler TEXT, request_date TEXT, item_name TEXT, quantity REAL, "
+            "purchase_link TEXT, unit_price REAL, status TEXT, "
+            "invoice_issued INTEGER, payment_status TEXT, created_at TEXT, updated_at TEXT)"
+        )
+        conn.execute(
+            "INSERT INTO items VALUES (1, 'S001', 'Dept', 'User', '2024-01-01', "
+            "'Pen', 10, NULL, 2.5, 'Pending', 0, 'Unpaid', '2024-01-01', '2024-01-01')"
+        )
+        conn.commit()
+    finally:
+        conn.close()
 
 
 class TestZipSafety:
@@ -156,3 +174,100 @@ def test_cleanup_temp_backup_archives_only_removes_stale_files(tmp_path, monkeyp
 
     assert not stale_file.exists()
     assert fresh_file.exists()
+
+
+def test_upload_backup_artifact_filter_preserves_regular_attachments():
+    skipped_names = [
+        "office_supplies_backup_20260507_120000.zip",
+        ".office_supplies_backup_20260507_120000.zip.abcdef.tmp",
+        ".download_backup_deadbeef.zip",
+        "webdav_backup_deadbeef.zip",
+        ".webdav_backup_deadbeef.zip.abcdef.tmp",
+        "restore_webdav_deadbeef.zip",
+        "health_deadbeef.zip",
+        "restore_deadbeef.zip",
+    ]
+    kept_names = [
+        "manual_archive.zip",
+        "receipt.pdf",
+        "office_supplies_backup_notes.txt",
+    ]
+
+    for name in skipped_names:
+        assert should_skip_upload_file_in_backup(Path(name))
+    for name in kept_names:
+        assert not should_skip_upload_file_in_backup(Path(name))
+
+
+def test_build_backup_archive_file_rejects_destination_inside_uploads(tmp_path, monkeypatch):
+    upload_dir = tmp_path / "uploads"
+    upload_dir.mkdir()
+    monkeypatch.setattr(backup_service, "UPLOAD_DIR", upload_dir)
+
+    with pytest.raises(ValueError, match="uploads"):
+        backup_service.build_backup_archive_file(upload_dir / "office_supplies_backup_test.zip")
+
+
+def test_build_backup_archive_skips_system_backup_artifacts_in_uploads(tmp_path, monkeypatch):
+    upload_dir = tmp_path / "uploads"
+    upload_dir.mkdir()
+    temp_dir = tmp_path / "temp"
+    temp_dir.mkdir()
+    db_path = tmp_path / "office_supplies.db"
+    _create_valid_items_db(db_path)
+
+    kept_pdf = upload_dir / "invoice_attachments" / "receipt.pdf"
+    kept_pdf.parent.mkdir()
+    kept_pdf.write_bytes(b"pdf")
+    kept_zip = upload_dir / "manual_archive.zip"
+    kept_zip.write_bytes(b"zip")
+
+    skipped_files = [
+        upload_dir / "office_supplies_backup_20260507_120000.zip",
+        upload_dir / ".office_supplies_backup_20260507_120000.zip.abcdef.tmp",
+        upload_dir / "webdav_backup_deadbeef.zip",
+        upload_dir / ".webdav_backup_deadbeef.zip",
+        upload_dir / ".webdav_backup_deadbeef.zip.abcdef.tmp",
+        upload_dir / "restore_webdav_deadbeef.zip",
+        upload_dir / "health_deadbeef.zip",
+        upload_dir / "restore_deadbeef.zip",
+    ]
+    for path in skipped_files:
+        path.write_bytes(b"skip")
+
+    monkeypatch.setattr(backup_service, "UPLOAD_DIR", upload_dir)
+    monkeypatch.setattr(backup_service, "resolve_db_path", lambda: db_path)
+    monkeypatch.setattr(backup_service, "resolve_temp_backup_dir", lambda: temp_dir)
+
+    destination = tmp_path / "backup.zip"
+    backup_service.build_backup_archive_file(destination)
+
+    with zipfile.ZipFile(destination, "r") as archive:
+        names = set(archive.namelist())
+
+    assert "office_supplies.db" in names
+    assert "uploads/invoice_attachments/receipt.pdf" in names
+    assert "uploads/manual_archive.zip" in names
+    for path in skipped_files:
+        assert f"uploads/{path.name}" not in names
+
+
+def test_build_backup_archive_file_fails_fast_when_disk_space_is_low(tmp_path, monkeypatch):
+    upload_dir = tmp_path / "uploads"
+    upload_dir.mkdir()
+    db_path = tmp_path / "office_supplies.db"
+    _create_valid_items_db(db_path)
+
+    class _Usage:
+        free = 1
+
+    monkeypatch.setattr(backup_service, "UPLOAD_DIR", upload_dir)
+    monkeypatch.setattr(backup_service, "resolve_db_path", lambda: db_path)
+    monkeypatch.setattr(backup_service.shutil, "disk_usage", lambda _path: _Usage())
+
+    destination = tmp_path / "out" / "backup.zip"
+    with pytest.raises(OSError) as exc_info:
+        backup_service.build_backup_archive_file(destination)
+
+    assert backup_service.is_no_space_error(exc_info.value)
+    assert not destination.exists()

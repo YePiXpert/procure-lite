@@ -14,7 +14,7 @@ from starlette.concurrency import run_in_threadpool
 from api_utils import safe_unlink, save_upload_file_with_limit
 from app_metadata import APP_VERSION
 from app_locks import DATA_MUTATION_LOCK, MAINTENANCE_MODE
-from app_runtime import APP_STATE_DIR, STATIC_DIR, UPLOAD_DIR
+from app_runtime import APP_STATE_DIR, STATIC_DIR
 from auth_security import _load_or_create_cookie_secret
 from backup_service import (
     MAX_BACKUP_TOTAL_SIZE,
@@ -81,7 +81,7 @@ def _validate_backup_filename(filename: str) -> str:
 
 async def _save_backup_upload(file: UploadFile, prefix: str) -> Path:
     """保存上传的备份压缩包并返回临时路径。"""
-    archive_path = UPLOAD_DIR / f"{prefix}_{uuid4().hex}.zip"
+    archive_path = resolve_temp_backup_dir() / f".{prefix}_{uuid4().hex}.zip"
     try:
         save_upload_file_with_limit(
             file,

@@ -1,5 +1,6 @@
 import os
 import errno
+import fnmatch
 import shutil
 import sqlite3
 import stat
@@ -8,7 +9,7 @@ import time
 import zipfile
 from io import BytesIO
 from pathlib import Path
-from typing import Callable, Optional
+from typing import Callable, Iterator, Optional
 from uuid import uuid4
 
 from api_utils import safe_unlink
@@ -26,6 +27,22 @@ UPLOAD_BACKUP_COMPRESSION = zipfile.ZIP_STORED
 TEMP_BACKUP_DIR_NAME = "office-supplies-tracker-temp"
 TEMP_BACKUP_STALE_SECONDS = 6 * 60 * 60
 BACKUP_NO_SPACE_MESSAGE = "本地磁盘空间不足，无法生成备份，请释放磁盘空间后重试"
+BACKUP_DESTINATION_IN_UPLOADS_MESSAGE = "备份文件不能保存到 uploads 上传附件目录内，请选择其他目录"
+BACKUP_DISK_SPACE_MARGIN_BYTES = 64 * 1024 * 1024
+SYSTEM_UPLOAD_BACKUP_EXCLUDE_PATTERNS = (
+    "office_supplies_backup_*.zip",
+    ".office_supplies_backup_*.zip.*.tmp",
+    ".download_backup_*.zip",
+    ".download_backup_*.zip.*.tmp",
+    "webdav_backup_*.zip",
+    ".webdav_backup_*.zip",
+    ".webdav_backup_*.zip.*.tmp",
+    "restore_webdav_*.zip",
+    ".restore_webdav_*.zip",
+    ".restore_webdav_*.zip.*.tmp",
+    "health_*.zip",
+    "restore_*.zip",
+)
 
 REQUIRED_DB_TABLES = {"items"}
 REQUIRED_ITEMS_COLUMNS = {
@@ -92,6 +109,66 @@ def cleanup_temp_backup_archives(
                 safe_unlink(path)
         except OSError:
             continue
+
+
+def _resolve_for_path_compare(path: Path) -> Path:
+    try:
+        return path.resolve(strict=False)
+    except OSError:
+        return path.absolute()
+
+
+def _is_path_within(path: Path, directory: Path) -> bool:
+    resolved_path = _resolve_for_path_compare(path)
+    resolved_directory = _resolve_for_path_compare(directory)
+    return resolved_path == resolved_directory or resolved_directory in resolved_path.parents
+
+
+def validate_backup_destination(destination: Path) -> None:
+    if _is_path_within(destination, UPLOAD_DIR):
+        raise ValueError(BACKUP_DESTINATION_IN_UPLOADS_MESSAGE)
+
+
+def should_skip_upload_file_in_backup(file_path: Path) -> bool:
+    filename = file_path.name.lower()
+    return any(
+        fnmatch.fnmatchcase(filename, pattern)
+        for pattern in SYSTEM_UPLOAD_BACKUP_EXCLUDE_PATTERNS
+    )
+
+
+def iter_upload_files_for_backup() -> Iterator[Path]:
+    if not UPLOAD_DIR.exists():
+        return
+    for file_path in UPLOAD_DIR.rglob("*"):
+        if file_path.is_file() and not should_skip_upload_file_in_backup(file_path):
+            yield file_path
+
+
+def estimate_backup_source_size() -> int:
+    total_size = 0
+    db_path = resolve_db_path()
+    if db_path.exists():
+        try:
+            total_size += db_path.stat().st_size
+        except OSError:
+            pass
+    for file_path in iter_upload_files_for_backup():
+        try:
+            total_size += file_path.stat().st_size
+        except OSError:
+            continue
+    return total_size
+
+
+def ensure_backup_disk_space(destination: Path) -> None:
+    try:
+        free_space = shutil.disk_usage(destination.parent).free
+    except OSError:
+        return
+    required_space = estimate_backup_source_size() + BACKUP_DISK_SPACE_MARGIN_BYTES
+    if free_space < required_space:
+        raise OSError(errno.ENOSPC, BACKUP_NO_SPACE_MESSAGE)
 
 
 def is_safe_zip_entry(name: str) -> bool:
@@ -236,15 +313,13 @@ def _build_archive(target: zipfile.ZipFile) -> None:
             os.unlink(snapshot_path)
         except OSError:
             pass
-    if UPLOAD_DIR.exists():
-        for file_path in UPLOAD_DIR.rglob("*"):
-            if file_path.is_file():
-                arcname = Path("uploads") / file_path.relative_to(UPLOAD_DIR)
-                target.write(
-                    file_path,
-                    arcname=arcname.as_posix(),
-                    compress_type=UPLOAD_BACKUP_COMPRESSION,
-                )
+    for file_path in iter_upload_files_for_backup():
+        arcname = Path("uploads") / file_path.relative_to(UPLOAD_DIR)
+        target.write(
+            file_path,
+            arcname=arcname.as_posix(),
+            compress_type=UPLOAD_BACKUP_COMPRESSION,
+        )
 
 
 def write_backup_archive(target) -> None:
@@ -264,7 +339,10 @@ def build_backup_archive() -> tuple[BytesIO, str]:
 
 def build_backup_archive_file(destination: Path) -> Path:
     """打包为磁盘文件（用于大文件上传场景）。"""
+    destination = Path(destination)
+    validate_backup_destination(destination)
     destination.parent.mkdir(parents=True, exist_ok=True)
+    ensure_backup_disk_space(destination)
     temp_destination = destination.with_name(f".{destination.name}.{uuid4().hex}.tmp")
     try:
         write_backup_archive(temp_destination)
