@@ -1,9 +1,22 @@
 services:
   office-supplies-tracker:
-    image: ghcr.io/percivalee/office-supplies-tracker:latest
+    build: .
+    image: ghcr.io/yepixpert/office-supplies-tracker:latest
     container_name: office-supplies-tracker
     restart: unless-stopped
     ports:
-      - "8000:8000"
+      - "${OFFICE_SUPPLIES_PORT:-8000}:8000"
+    environment:
+      OFFICE_SUPPLIES_DATA_DIR: /app/state/data
+      OFFICE_AUTH_COOKIE_SECURE: ${OFFICE_AUTH_COOKIE_SECURE:-auto}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GEMINI_MODEL_NAME: ${GEMINI_MODEL_NAME:-gemini-3.0-flash}
+      GEMINI_REQUEST_TIMEOUT_SECONDS: ${GEMINI_REQUEST_TIMEOUT_SECONDS:-90}
     volumes:
-      - ./data:/app/data
+      - ./office-supplies-state:/app/state
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/app/metadata', timeout=5).read()"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s

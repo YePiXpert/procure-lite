@@ -17,6 +17,9 @@ from time_utils import beijing_filename_timestamp
 
 APP_TITLE = "办公用品采购系统"
 HOST = "127.0.0.1"
+LAN_HOST = "0.0.0.0"
+LOCAL_URL_HOST = "127.0.0.1"
+DEFAULT_LAN_PORT = 8000
 WINDOW_WIDTH = 1280
 WINDOW_HEIGHT = 720
 STARTUP_TIMEOUT_SECONDS = 45
@@ -74,6 +77,61 @@ def _find_free_port(host: str) -> int:
         sock.bind((host, 0))
         sock.listen(1)
         return int(sock.getsockname()[1])
+
+
+def _env_flag(name: str) -> bool:
+    value = os.environ.get(name, "").strip().lower()
+    return value in {"1", "true", "yes", "on"}
+
+
+def _parse_port(value: str, default: int) -> int:
+    raw_value = str(value or "").strip()
+    if not raw_value:
+        return default
+    try:
+        port = int(raw_value)
+    except ValueError as exc:
+        raise ValueError(f"{raw_value} is not a valid TCP port.") from exc
+    if port < 1 or port > 65535:
+        raise ValueError(f"{raw_value} is outside the valid TCP port range.")
+    return port
+
+
+def _is_port_available(host: str, port: int) -> bool:
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+        try:
+            sock.bind((host, port))
+        except OSError:
+            return False
+        return True
+
+
+def _resolve_desktop_network_config() -> tuple[str, str, int, bool]:
+    """Resolve desktop listener settings.
+
+    Default desktop mode stays loopback-only. Set OFFICE_SUPPLIES_LAN=1 to expose
+    the bundled web app to devices on the same trusted LAN, using port 8000.
+    """
+    lan_enabled = _env_flag("OFFICE_SUPPLIES_LAN")
+    host = os.environ.get("OFFICE_SUPPLIES_HOST", "").strip()
+    if not host:
+        host = LAN_HOST if lan_enabled else HOST
+
+    if os.environ.get("OFFICE_SUPPLIES_PORT", "").strip():
+        port = _parse_port(os.environ["OFFICE_SUPPLIES_PORT"], DEFAULT_LAN_PORT)
+    elif lan_enabled:
+        port = DEFAULT_LAN_PORT
+    else:
+        port = _find_free_port(host)
+
+    if lan_enabled or os.environ.get("OFFICE_SUPPLIES_PORT", "").strip():
+        if not _is_port_available(host, port):
+            raise RuntimeError(
+                f"Port {port} is already in use. Close the other service or set OFFICE_SUPPLIES_PORT to another port."
+            )
+
+    url_host = LOCAL_URL_HOST if host in {LAN_HOST, "::"} else host
+    return host, url_host, port, lan_enabled
 
 
 def _read_text_tail(path: Path, max_chars: int = 1600) -> str:
@@ -142,7 +200,7 @@ class JsApi:
         import auth_security
 
         token = auth_security.create_auth_cookie()
-        url = f"http://{self._app.host}:{self._app.port}{path}"
+        url = f"http://{self._app.url_host}:{self._app.port}{path}"
         req = urllib.request.Request(url)
         req.add_header("Cookie", f"{auth_security.AUTH_COOKIE_NAME}={token}")
         return req
@@ -258,8 +316,7 @@ class JsApi:
 
 class DesktopApp:
     def __init__(self) -> None:
-        self.host = HOST
-        self.port = _find_free_port(self.host)
+        self.host, self.url_host, self.port, self.lan_enabled = _resolve_desktop_network_config()
         self.runtime_dir = _runtime_dir()
 
         self.server_process: Optional[mp.Process] = None
@@ -270,7 +327,7 @@ class DesktopApp:
 
     def _wait_server_ready(self, timeout: int = STARTUP_TIMEOUT_SECONDS) -> None:
         """等待后端可访问。"""
-        url = f"http://{self.host}:{self.port}/"
+        url = f"http://{self.url_host}:{self.port}/"
         deadline = time.time() + timeout
 
         while time.time() < deadline:
@@ -357,7 +414,7 @@ class DesktopApp:
         webview.settings["ALLOW_DOWNLOADS"] = True
 
         js_api = JsApi(self)
-        url = f"http://{self.host}:{self.port}/"
+        url = f"http://{self.url_host}:{self.port}/"
         self.window = webview.create_window(
             APP_TITLE,
             url,

@@ -33,6 +33,7 @@ Source: "..\dist\OfficeSuppliesTracker\*"; DestDir: "{app}"; Flags: ignoreversio
 
 [Icons]
 Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"
+Name: "{group}\{#MyAppName} Mobile Access"; Filename: "{app}\StartMobileAccess.bat"; WorkingDir: "{app}"
 Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
 
 [Run]

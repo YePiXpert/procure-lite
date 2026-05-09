@@ -11,6 +11,7 @@ venv/
 *.db
 *.db-*
 data/
+office-supplies-state/
 uploads/
 build/
 dist/

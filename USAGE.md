@@ -10,9 +10,44 @@
 ./start.sh
 ```
 
+Windows PowerShell 可使用：
+
+```powershell
+.\venv\Scripts\python.exe -m uvicorn main:app --host 0.0.0.0 --port 8000
+```
+
 打开：`http://localhost:8000`
 
 启动时会自动执行数据库迁移（`alembic upgrade head`），用于版本平滑升级。
+
+### 1.1.1 手机访问
+
+如果希望手机直接访问且不依赖电脑开机，请使用云端部署，见 [`docs/cloud-deployment.md`](./docs/cloud-deployment.md)。
+
+手机和运行服务的电脑连接到同一个局域网后，可以用手机浏览器访问。
+
+安装版使用方式：
+
+1. 先关闭已经打开的普通桌面版窗口
+2. 在 Windows 开始菜单打开 `OfficeSuppliesTracker Mobile Access`，或 `办公用品采购系统（手机访问模式）`
+3. 如果 Windows 防火墙弹窗，允许在“专用网络/家庭或工作网络”中访问
+4. 在电脑上查看局域网 IP，例如 PowerShell 执行：
+
+```powershell
+ipconfig
+```
+
+5. 手机浏览器打开：
+
+```text
+http://电脑局域网 IP:8000
+```
+
+例如电脑 IP 是 `192.168.1.23`，手机访问 `http://192.168.1.23:8000`。
+
+普通桌面快捷方式仍只允许本机桌面窗口访问；需要手机访问时，请使用“Mobile Access / 手机访问模式”快捷方式。
+
+手机窄屏会自动切换为移动端布局：顶部导航横向滚动，台账记录以卡片展示，便于送货时快速搜索物品、部门、状态和到货/分发日期。
 
 ### 1.2 桌面模式（本机）
 
@@ -282,6 +317,11 @@ pytest tests/ -v
 | `test_backup.py` | 11 | Zip 安全、归档校验、DB 完整性 |
 | `test_import_flow.py` | 25 | 全角转换、日期归一化、导入合并 |
 | `test_parser.py` | 28 | 文件检测、表头提取、表格解析、跳词 |
+| `test_webdav.py` | 7 | WebDAV 配置、连接与备份 |
+| `test_operations_transactions.py` | 4 | 采购/收货事务一致性 |
+| `test_desktop_network.py` | 3 | 桌面本机模式与手机访问模式 |
+
+当前完整测试集共 98 个用例。
 
 ### 15.2 代码结构
 

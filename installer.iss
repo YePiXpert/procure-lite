@@ -22,7 +22,9 @@ Name: "desktopicon"; Description: "创建桌面快捷方式"; GroupDescription: 
 [Files]
 Source: "dist\办公用品采购系统-文件夹版\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "assets\app_icon.ico"; DestDir: "{app}"; Flags: ignoreversion
+Source: "scripts\start_mobile_access.bat"; DestDir: "{app}"; DestName: "StartMobileAccess.bat"; Flags: ignoreversion
 
 [Icons]
 Name: "{group}\办公用品采购系统"; Filename: "{app}\办公用品采购系统-文件夹版.exe"; IconFilename: "{app}\app_icon.ico"
+Name: "{group}\办公用品采购系统（手机访问模式）"; Filename: "{app}\StartMobileAccess.bat"; WorkingDir: "{app}"; IconFilename: "{app}\app_icon.ico"
 Name: "{autodesktop}\办公用品采购系统"; Filename: "{app}\办公用品采购系统-文件夹版.exe"; IconFilename: "{app}\app_icon.ico"; Tasks: desktopicon

@@ -164,6 +164,12 @@ try {
     throw "Desktop executable not found: $distExe"
   }
 
+  $mobileLauncher = Join-Path $projectRoot "scripts\start_mobile_access.bat"
+  $distDir = Split-Path -Parent $distExe
+  if (Test-Path $mobileLauncher) {
+    Copy-Item -Path $mobileLauncher -Destination (Join-Path $distDir "StartMobileAccess.bat") -Force
+  }
+
   Write-Step "Locating Inno Setup compiler..."
   $iscc = Resolve-Iscc -ManualPath $IsccPath
   Write-Host "ISCC: $iscc"

@@ -2147,6 +2147,168 @@
                         </tr>
                     </tbody>
                 </table>
+                <div v-if="items.length > 0" class="ledger-mobile-list">
+                    <article
+                        v-for="item in items"
+                        :key="`mobile-ledger-${item.id}`"
+                        :data-ledger-item-id="item.id"
+                        :class="{
+                            'ledger-mobile-card-selected': selectedItemsModel.includes(item.id),
+                            'ledger-mobile-card-focused': Number(item.id) === Number(focusedLedgerItemId),
+                        }"
+                        class="ledger-mobile-card"
+                    >
+                        <div class="ledger-mobile-card-header">
+                            <label class="ledger-mobile-check" title="选择此记录">
+                                <input type="checkbox" :value="item.id" v-model="selectedItemsModel" class="rounded text-blue-600 focus:ring-blue-500/40">
+                            </label>
+                            <div class="ledger-mobile-card-title">
+                                <input
+                                    type="text"
+                                    v-model="item.item_name"
+                                    @blur="$root.updateItem(item.id, { item_name: item.item_name })"
+                                    class="ledger-mobile-name-input"
+                                    placeholder="物品名称"
+                                >
+                                <div class="ledger-mobile-subtitle">
+                                    <span>{{ item.serial_number || (item.id ? `REC-${item.id}` : '自动生成') }}</span>
+                                    <span>{{ item.department || '未分配部门' }}</span>
+                                </div>
+                            </div>
+                            <button @click="$root.openLedgerDetail(item)" class="ledger-mobile-icon-button" title="详情 / 审计轨迹">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
+                            </button>
+                        </div>
+
+                        <div class="ledger-mobile-status-row">
+                            <select
+                                :value="$root.normalizeProcurementStatus(item.status)"
+                                @change="$root.handleLedgerStatusChange(item, $event.target.value)"
+                                :class="$root.statusSelectClass(item.status)"
+                                class="ledger-mobile-status-select"
+                            >
+                                <option v-for="s in statuses" :key="`mobile-status-${item.id}-${s}`" :value="s">{{ s }}</option>
+                            </select>
+                            <button
+                                @click="$root.toggleInvoice(item)"
+                                :class="item.invoice_issued ? 'bg-green-50 text-green-700 ring-1 ring-inset ring-green-600/20' : 'bg-yellow-50 text-yellow-800 ring-1 ring-inset ring-yellow-600/20'"
+                                class="ledger-mobile-pill-button"
+                            >
+                                {{ item.invoice_issued ? '已入账' : '待报票' }}
+                            </button>
+                            <select
+                                v-model="item.payment_status"
+                                @change="$root.updateItem(item.id, { payment_status: item.payment_status })"
+                                class="ledger-mobile-payment-select"
+                            >
+                                <option v-for="p in paymentStatuses" :key="`mobile-payment-${item.id}-${p}`" :value="p">{{ p }}</option>
+                            </select>
+                        </div>
+
+                        <div class="ledger-mobile-field-grid">
+                            <label class="ledger-mobile-field">
+                                <span>部门</span>
+                                <input
+                                    type="text"
+                                    v-model="item.department"
+                                    @blur="$root.updateItem(item.id, { department: item.department })"
+                                    placeholder="部门"
+                                >
+                            </label>
+                            <label class="ledger-mobile-field">
+                                <span>经办人</span>
+                                <input
+                                    type="text"
+                                    v-model="item.handler"
+                                    @blur="$root.updateItem(item.id, { handler: item.handler })"
+                                    placeholder="经办人"
+                                >
+                            </label>
+                            <label class="ledger-mobile-field">
+                                <span>数量</span>
+                                <input
+                                    type="number"
+                                    v-model.number="item.quantity"
+                                    @blur="$root.updateItem(item.id, { quantity: item.quantity })"
+                                    inputmode="decimal"
+                                >
+                            </label>
+                            <label class="ledger-mobile-field">
+                                <span>单价</span>
+                                <input
+                                    type="number"
+                                    step="0.01"
+                                    v-model.number="item.unit_price"
+                                    @blur="$root.updateItem(item.id, { unit_price: item.unit_price })"
+                                    inputmode="decimal"
+                                    placeholder="-"
+                                >
+                            </label>
+                            <label class="ledger-mobile-field">
+                                <span>到货</span>
+                                <input
+                                    type="date"
+                                    v-model="item.arrival_date"
+                                    @change="$root.updateItem(item.id, { arrival_date: item.arrival_date })"
+                                >
+                            </label>
+                            <label class="ledger-mobile-field">
+                                <span>分发</span>
+                                <input
+                                    type="date"
+                                    v-model="item.distribution_date"
+                                    @change="$root.updateItem(item.id, { distribution_date: item.distribution_date })"
+                                >
+                            </label>
+                        </div>
+
+                        <label class="ledger-mobile-field ledger-mobile-field-wide">
+                            <span>签收备注</span>
+                            <input
+                                type="text"
+                                v-model="item.signoff_note"
+                                @blur="$root.updateItem(item.id, { signoff_note: item.signoff_note })"
+                                placeholder="签收备注"
+                            >
+                        </label>
+
+                        <label class="ledger-mobile-field ledger-mobile-field-wide">
+                            <span>采购链接</span>
+                            <input
+                                type="url"
+                                v-model="item.purchase_link"
+                                @blur="$root.updateItem(item.id, { purchase_link: item.purchase_link })"
+                                placeholder="采购链接"
+                            >
+                        </label>
+
+                        <div class="ledger-mobile-card-actions">
+                            <button
+                                v-if="item.purchase_link"
+                                @click="$root.copyPurchaseLink(item.purchase_link)"
+                                type="button"
+                                class="ledger-mobile-action-button"
+                            >
+                                复制链接
+                            </button>
+                            <a
+                                v-if="item.purchase_link"
+                                :href="item.purchase_link"
+                                target="_blank"
+                                class="ledger-mobile-action-button"
+                            >
+                                打开链接
+                            </a>
+                            <button
+                                @click="$root.deleteItem(item.id)"
+                                type="button"
+                                class="ledger-mobile-action-button ledger-mobile-action-danger"
+                            >
+                                删除
+                            </button>
+                        </div>
+                    </article>
+                </div>
                 <div v-if="items.length === 0" class="ledger-empty-state flex flex-col items-center justify-center py-24 px-6 text-center">
                     <div class="inline-flex h-14 w-14 items-center justify-center rounded-xl bg-slate-100 text-slate-400">
                         <svg class="h-7 w-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">

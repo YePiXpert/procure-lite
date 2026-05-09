@@ -117,6 +117,11 @@ try {
     throw "Build finished but exe not found: $exePath"
   }
 
+  $mobileLauncher = Join-Path $projectRoot "scripts\start_mobile_access.bat"
+  if (Test-Path $mobileLauncher) {
+    Copy-Item -Path $mobileLauncher -Destination (Join-Path $projectRoot "dist\OfficeSuppliesTracker\StartMobileAccess.bat") -Force
+  }
+
   Write-Host ""
   Write-Host "Build success." -ForegroundColor Green
   Write-Host "EXE: $exePath"

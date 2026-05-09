@@ -17,6 +17,7 @@ venv/
 .restore_uploads_snapshot_*
 data/*
 !data/.gitkeep
+office-supplies-state/
 samples/regression/last_report.json
 samples/regression/pdf_text/*
 !samples/regression/pdf_text/.gitkeep

@@ -6,15 +6,19 @@
 
 详细页面操作、字段说明和常见问题见 [`USAGE.md`](./USAGE.md)。
 
+云端部署、手机直接访问见 [`docs/cloud-deployment.md`](./docs/cloud-deployment.md)。
+
 ## 核心能力
 
 - 上传 PDF 或图片后自动提取流水号、部门、经办人、日期和物品明细
 - 支持 `local` 与 `cloud` 两类 OCR/视觉解析模式
 - 台账支持筛选、分页、在线编辑、批量修改和批量删除
+- 台账支持手机浏览器卡片视图，便于送货途中查询和更新状态
 - 执行看板支持状态流转
 - 支持报表、审计日志、回收站、数据质检
 - 支持本地备份和 WebDAV 云备份/恢复
 - 支持 Windows 桌面版、便携版和安装包发布
+- 支持 Docker 云端部署，手机可直接访问服务器地址
 
 ## 快速开始
 
@@ -36,17 +40,27 @@ pip install pytest pytest-asyncio
 pytest tests/ -v
 ```
 
-当前覆盖率：auth (11 tests)、backup (11 tests)、import (25 tests)、parser (28 tests)，共 75 个。
+当前测试：auth、backup、import、parser、WebDAV、运营事务和桌面网络配置，共 98 个用例。
 
 ### Windows 桌面运行
 
 - 直接双击 `start_windows.bat`
 - 或运行 `python desktop.py`
+- 安装版需要手机访问时，从开始菜单打开 `OfficeSuppliesTracker Mobile Access`，手机访问 `http://电脑局域网IP:8000`
 
 ### 获取安装包
 
 - 直接从 GitHub Releases 下载最新 `office-supplies-portable.exe`
 - 或下载 `office-supplies-setup.exe`
+
+### 云端部署
+
+```bash
+cp .env.example .env
+docker compose up -d --build
+```
+
+访问：`http://服务器IP:8000`
 
 ## 最近更新
 
@@ -123,7 +137,9 @@ pytest tests/ -v
 │   ├── test_auth.py        #   认证流程
 │   ├── test_backup.py      #   备份安全
 │   ├── test_import_flow.py #   导入归一化
-│   └── test_parser.py      #   文档解析
+│   ├── test_parser.py      #   文档解析
+│   ├── test_webdav.py      #   WebDAV 配置与备份
+│   └── test_desktop_network.py # 桌面/手机访问网络配置
 ├── samples/regression/     # 回归测试样本
 └── scripts/                # 构建脚本
 ```
