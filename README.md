@@ -1,32 +1,16 @@
 # 办公用品采购系统
 
-用于内部办公用品采购、台账维护、执行跟踪、报表统计和备份恢复的单用户工具。
+用于内部办公用品采购、台账维护、执行跟踪、报表统计和备份恢复的单用户 Web 工具。
 
 当前版本：`1.2.43`
 
-详细页面操作、字段说明和常见问题见 [`USAGE.md`](./USAGE.md)。
-
-Windows 电脑和手机共用同一套数据时，推荐使用 Docker Web 服务模式，见 [`docs/shared-web-service.md`](./docs/shared-web-service.md)。
-
-云端部署、手机直接访问见 [`docs/cloud-deployment.md`](./docs/cloud-deployment.md)。
-
-## 核心能力
-
-- 上传 PDF 或图片后自动提取流水号、部门、经办人、日期和物品明细
-- 支持 PaddleOCR 本地离线解析，无需 API Key
-- 台账支持筛选、分页、在线编辑、批量修改和批量删除
-- 台账支持手机浏览器卡片视图，便于送货途中查询和更新状态
-- 执行看板支持状态流转
-- 支持报表、审计日志、回收站、数据质检
-- 支持本地备份和 WebDAV 云备份/恢复
-- 支持 Windows 桌面版、便携版和安装包发布
-- 支持 Docker Web 服务部署，Windows 和手机可访问同一地址、同一份数据
+推荐部署方式是 Docker Web 服务：Windows 电脑和手机都通过浏览器访问同一个地址、同一份数据。文档解析默认使用 PaddleOCR 本地离线处理，不需要 API Key，也不会把单据上传到云端解析服务。
 
 ## 快速开始
 
-### 推荐：Docker Web 服务（Windows + 手机共用）
+### 推荐：Windows + 手机共用
 
-Windows 安装 Docker Desktop 后，在项目根目录双击：
+先安装并启动 Docker Desktop，然后在项目根目录双击：
 
 ```text
 start_docker_server.bat
@@ -37,9 +21,34 @@ start_docker_server.bat
 - Windows 本机：`http://localhost:8000`
 - 手机/其他电脑：`http://电脑局域网IP:8000`
 
-这种方式让 Windows 和手机都访问同一个 Web 服务、同一份数据。更多说明见 [`docs/shared-web-service.md`](./docs/shared-web-service.md)。
+详细说明见 [Windows 与手机共用的 Docker Web 服务](./docs/shared-web-service.md)。
 
-### 源码运行
+### 服务器、NAS 或云主机
+
+```bash
+cp .env.example .env
+docker compose up -d --build
+```
+
+访问：
+
+```text
+http://服务器IP:8000
+```
+
+长期部署、HTTPS 和排障见 [云端部署与手机直接访问](./docs/cloud-deployment.md)。
+
+### 单机桌面使用
+
+只在一台 Windows 电脑上离线使用时，可以双击：
+
+```text
+start_windows.bat
+```
+
+桌面版适合单机使用；如果手机也要长期访问，优先使用 Docker Web 服务。
+
+### 开发运行
 
 ```bash
 python3 -m venv venv
@@ -48,168 +57,41 @@ pip install -r requirements.txt
 ./start.sh
 ```
 
-访问：`http://localhost:8000`
+Windows PowerShell 可使用：
 
-### 运行测试
-
-```bash
-pip install pytest pytest-asyncio
-pytest tests/ -v
+```powershell
+.\venv\Scripts\python.exe -m uvicorn main:app --host 0.0.0.0 --port 8000
 ```
 
-当前测试：auth、backup、import、parser、WebDAV、运营事务和桌面网络配置，共 98 个用例。
+## 核心能力
 
-### Windows 桌面运行
+- 上传 PDF 或图片后自动提取流水号、部门、经办人、日期和物品明细
+- PaddleOCR 本地离线解析，无需 API Key
+- 台账筛选、分页、在线编辑、批量修改和批量删除
+- 手机浏览器卡片视图，适合送货途中查询和更新状态
+- 执行看板、统计报表、审计日志、回收站、数据质检
+- 本地备份和 WebDAV 云备份/恢复
+- Docker Web 服务部署，以及可选 Windows 桌面版/安装包
 
-- 直接双击 `start_windows.bat`
-- 或运行 `python desktop.py`
-- 安装版需要手机访问时，从开始菜单打开 `OfficeSuppliesTracker Mobile Access`，手机访问 `http://电脑局域网IP:8000`
+## 常用文档
 
-桌面版更适合单台 Windows 本机使用；如果 Windows 和手机都要长期使用同一份数据，优先使用上面的 Docker Web 服务模式。
-
-### 获取安装包
-
-- 直接从 GitHub Releases 下载最新 `office-supplies-portable.exe`
-- 或下载 `office-supplies-setup.exe`
-
-### 云端部署
-
-```bash
-cp .env.example .env
-docker compose up -d --build
-```
-
-访问：`http://服务器IP:8000`
-
-## 最近更新
-
-### v1.2.35 (开发中)
-
-- 数据库访问层从裸 aiosqlite 统一迁移到 SQLAlchemy async
-- `parser.py` 拆分为 `parser/` 包 (ocr_utils, strategies, department_extractor, parser_core)
-- 路由器拆分：`routers/items.py` → items + reports + history + audit
-- 新增安全响应头中间件 (CSP, X-Frame-Options, Referrer-Policy)
-- WebDAV 密码改为加密存储
-- 新增 `api_utils.validate_pagination` / `normalize_item_filters` 消除 router 重复代码
-- 修复 Cookie Secret 多进程竞态条件
-- 修复 `update_supplier`/`delete_supplier` 不检查 rowcount 的问题
-- 新增 75 个单元测试 (pytest: auth, backup, import, parser)
-
-### v1.2.12
-
-- 前端第三方依赖已内置到 `static/vendor/`，不再依赖公网 CDN
-- Windows 安装包和便携版可以离线打开前端界面
-- 版本号统一从根目录 `VERSION` 读取
-- 新增 `/api/app/metadata`，前端启动时读取应用版本
-- README 精简，详细说明迁移到 `USAGE.md`
-
-### v1.2.11
-
-- 修复 Windows 构建链路中的回归校验输出问题
-- 自动发布链路恢复正常
-
-### v1.2.6
-
-- 引入本地管理员密码、恢复码、Cookie 会话和锁定策略
+- [使用说明](./USAGE.md)
+- [文档索引](./docs/README.md)
+- [Windows 与手机共用的 Docker Web 服务](./docs/shared-web-service.md)
+- [云端部署与手机直接访问](./docs/cloud-deployment.md)
 
 ## 技术栈
 
-- 后端：FastAPI + SQLite + SQLAlchemy (async) + Alembic
+- 后端：FastAPI + SQLite + SQLAlchemy async + Alembic
 - 文档解析：pdfplumber + PaddleOCR + pypdfium2
 - 前端：Vue 3 + TailwindCSS + Axios
 - 桌面容器：pywebview
-- 导出：openpyxl
 - 测试：pytest + pytest-asyncio
 
-## 项目结构
+## 测试
 
-```
-├── main.py                 # FastAPI 入口（中间件、路由注册）
-├── auth_security.py        # 认证（argon2 密码哈希、Cookie 签名、登录锁定）
-├── api_utils.py            # 共享工具（分页校验、筛选器归一化）
-├── security_headers.py     # 安全响应头中间件
-├── import_flow.py          # 导入流程（归一化、去重、合并）
-├── parser/                 # 文档解析器（策略模式）
-│   ├── parser_core.py      #   DocumentParser 主类
-│   ├── strategies.py       #   解析策略类
-│   ├── ocr_utils.py        #   OCR 工具函数
-│   └── department_extractor.py  # 部门提取
-├── db/                     # 数据库层（SQLAlchemy async）
-│   ├── orm.py              #   引擎、Session 工厂、SQL 工具
-│   ├── sqlalchemy_models.py  # ORM 模型 + 审计事件监听
-│   ├── items.py            #   物品 CRUD
-│   ├── operations.py       #   供应商/采购单/发票
-│   ├── reports.py          #   统计报表
-│   ├── security.py         #   认证数据
-│   ├── history.py          #   变更历史
-│   ├── audit.py            #   审计日志
-│   ├── filters.py          #   SQL 筛选条件构造
-│   ├── schema.py           #   DDL 迁移
-│   └── constants.py        #   枚举与常量
-├── routers/                # FastAPI 路由
-│   ├── auth.py / items.py / imports.py / ops.py
-│   ├── reports.py / history.py / audit.py
-│   └── system.py           #   备份/恢复/WebDAV/主页
-├── static/                 # 前端静态资源 (Vue + Tailwind)
-├── tests/                  # 单元测试 (pytest)
-│   ├── test_auth.py        #   认证流程
-│   ├── test_backup.py      #   备份安全
-│   ├── test_import_flow.py #   导入归一化
-│   ├── test_parser.py      #   文档解析
-│   ├── test_webdav.py      #   WebDAV 配置与备份
-│   └── test_desktop_network.py # 桌面/手机访问网络配置
-├── samples/regression/     # 回归测试样本
-└── scripts/                # 构建脚本
+```bash
+pytest tests/ -v
 ```
 
-## 运行与配置说明
-
-### 版本来源
-
-- 根目录 `VERSION` 是唯一版本来源
-- 后端通过 `app_metadata.py` 读取版本
-- 前端通过 `/api/app/metadata` 显示版本号
-
-### OCR 默认配置
-
-- 默认使用 PaddleOCR 本地离线解析
-- 不需要配置 API Key，单据文件不会上传到云端解析服务
-
-### 离线运行
-
-- `Vue`、`Tailwind`、`Axios` 已内置到 `static/vendor/`
-- 不再依赖 `jsdelivr`、`cdn.tailwindcss.com`、Google Fonts
-
-## 常用接口
-
-| 方法 | 路径 | 路由器 | 说明 |
-|---|---|---|---|
-| GET | `/` | system | 主页 |
-| GET | `/api/app/metadata` | system | 应用版本 |
-| POST | `/api/auth/setup` | auth | 初始化管理员密码 |
-| POST | `/api/auth/login` | auth | 登录 |
-| GET | `/api/items` | items | 台账列表（筛选/分页） |
-| GET | `/api/execution-board` | items | 执行看板 |
-| GET | `/api/autocomplete` | items | 自动补全数据 |
-| GET | `/api/stats` | items | 统计概览 |
-| POST | `/api/upload-ocr` | imports | 上传并创建解析任务 |
-| GET | `/api/tasks/{task_id}` | imports | 查询解析任务状态 |
-| POST | `/api/import/confirm` | imports | 确认导入 |
-| GET | `/api/export` | reports | 导出台账 Excel |
-| GET | `/api/reports/amount` | reports | 金额统计报表 |
-| GET | `/api/reports/operations` | reports | 执行分析报表 |
-| GET | `/api/reports/suppliers` | reports | 供应商采购分析 |
-| GET | `/api/history` | history | 变更历史 |
-| GET | `/api/audit-logs` | audit | 字段级审计日志 |
-| GET | `/api/backup` | system | 下载本地备份 |
-| POST | `/api/restore` | system | 上传备份并恢复 |
-| GET | `/api/webdav/backups` | system | 列出 WebDAV 备份 |
-| POST | `/api/webdav/backup` | system | 上传备份到 WebDAV |
-| POST | `/api/webdav/restore` | system | 从 WebDAV 恢复 |
-| GET | `/api/ops/center` | ops | 运营工作台 |
-
-## 相关文档
-
-- 使用说明：[`USAGE.md`](./USAGE.md)
-- 回归样例：`samples/regression/`
-- 构建脚本：`scripts/`
+当前完整测试集共 98 个用例，覆盖认证、备份、导入、解析、WebDAV、运营事务和桌面网络配置。

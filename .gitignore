@@ -10,6 +10,9 @@ venv/
 .env
 .env.*
 !.env.example
+.pytest_cache/
+.tmp-pytest-temp/
+outputs/
 *.db
 *.db-wal
 *.db-shm
