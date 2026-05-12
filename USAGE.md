@@ -4,7 +4,28 @@
 
 ## 1. 启动方式
 
-### 1.1 Web 模式（开发/局域网）
+### 1.1 推荐：Docker Web 服务（Windows + 手机共用）
+
+如果 Windows 电脑和手机都要使用同一套台账，推荐把系统作为 Docker Web 服务运行。这样只有一个后台服务和一份数据，电脑和手机都通过浏览器访问。
+
+Windows 上先安装并启动 Docker Desktop，然后在项目根目录双击：
+
+```text
+start_docker_server.bat
+```
+
+启动成功后：
+
+- Windows 本机访问：`http://localhost:8000`
+- 手机访问：`http://电脑局域网IP:8000`
+
+脚本会自动打印可用的局域网访问地址。手机需要和运行 Docker 的电脑处于同一个 Wi-Fi/局域网；如果 Windows 防火墙弹窗，请允许专用网络访问。
+
+默认端口是 `8000`。如需调整，修改 `.env` 中的 `OFFICE_SUPPLIES_PORT`。
+
+服务器、NAS 或云主机部署步骤见 [`docs/shared-web-service.md`](./docs/shared-web-service.md)。
+
+### 1.2 Web 模式（开发/局域网）
 
 ```bash
 ./start.sh
@@ -20,7 +41,7 @@ Windows PowerShell 可使用：
 
 启动时会自动执行数据库迁移（`alembic upgrade head`），用于版本平滑升级。
 
-### 1.1.1 手机访问
+### 1.2.1 手机访问
 
 如果希望手机直接访问且不依赖电脑开机，请使用云端部署，见 [`docs/cloud-deployment.md`](./docs/cloud-deployment.md)。
 
@@ -49,14 +70,14 @@ http://电脑局域网 IP:8000
 
 手机窄屏会自动切换为移动端布局：顶部导航横向滚动，台账记录以卡片展示，便于送货时快速搜索物品、部门、状态和到货/分发日期。
 
-### 1.2 桌面模式（本机）
+### 1.3 桌面模式（本机）
 
 ```bash
 source venv/bin/activate
 python desktop.py
 ```
 
-### 1.3 Windows 一键启动
+### 1.4 Windows 一键启动
 
 双击项目根目录：`start_windows.bat`
 
@@ -214,22 +235,14 @@ python desktop.py
 
 入口：左侧导航 `系统设置`
 
-### 10.1 AI 视觉解析引擎
+### 10.1 视觉解析引擎
 
-- `local`：本地基础 OCR（离线）
-- `cloud`：云端视觉大模型（多协议）
+当前系统默认使用 PaddleOCR 本地离线解析：
 
-`cloud` 协议支持：
-
-- `OpenAI 兼容`
-- `Anthropic`
-- `Google 直连`
-
-可配置参数：
-
-- API Key
-- 模型名称（可留空使用默认模型）
-- Base URL（可选，用于中转站）
+- 无需配置 API Key
+- 单据文件不会上传到云端解析服务
+- PDF 优先使用文本/表格解析，必要时使用 PaddleOCR 兜底
+- 图片文件直接使用 PaddleOCR 解析
 
 ## 11. WebDAV 云同步
 
@@ -281,11 +294,11 @@ python desktop.py
 - 安装包和便携版在离线环境下也可以正常打开前端界面
 - 如果出现白屏，优先检查是否为本地静态文件缺失、缓存未更新，或桌面端打包产物未包含最新 `static` 目录
 
-### 12.5 版本与模型配置
+### 12.5 版本与 OCR 配置
 
 - 界面右下角显示的版本号来自根目录 `VERSION` 文件
 - 前端启动时会读取 `/api/app/metadata`
-- Google 协议下如果没有手动填写模型名，系统会自动使用后端统一的 Gemini 默认模型
+- OCR 默认使用本地 PaddleOCR，无需 API Key
 
 ## 14. 数据落盘位置
 
@@ -294,7 +307,6 @@ python desktop.py
 - `data/office_supplies.db`
 - `uploads/`
 - `.webdav_config.json`（密码加密存储）
-- `.gemini_config.json`
 
 WebDAV 密码使用 `itsdangerous` 加密，不再明文落盘。Cookie Secret 文件 `.auth_cookie_secret` 自动生成于状态目录。
 

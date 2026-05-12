@@ -1,5 +1,7 @@
 # 云端部署与手机直接访问
 
+如果是在 Windows 电脑上用 Docker 同时服务 Windows 和手机，优先看 [`shared-web-service.md`](./shared-web-service.md)，可以直接使用根目录的 `start_docker_server.bat`。本文更偏向服务器、NAS 或云主机上的长期部署。
+
 这个部署方式适合“手机直接打开，不依赖办公室电脑开机”的场景。系统运行在一台长期在线的服务器、NAS 或云主机上，手机和电脑都通过浏览器访问同一个地址、同一份数据。
 
 云端版与本地版使用同一套后端接口和前端页面，台账、导入、编辑、报表、备份、WebDAV、回收站、数据质检和审计日志功能保持一致。差别是导出和备份文件由浏览器下载，而 Windows 桌面版会使用原生“另存为”窗口。
@@ -36,12 +38,9 @@ cp .env.example .env
 ```bash
 OFFICE_SUPPLIES_PORT=8000
 OFFICE_AUTH_COOKIE_SECURE=auto
-GEMINI_API_KEY=your_gemini_api_key_here
-GEMINI_MODEL_NAME=gemini-3.0-flash
-GEMINI_REQUEST_TIMEOUT_SECONDS=90
 ```
 
-如果暂时不用 AI 解析，可以先不填 `GEMINI_API_KEY`。
+默认使用内置 PaddleOCR 本地解析，不需要 API Key。
 
 ## 3. 启动服务
 

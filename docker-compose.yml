@@ -9,9 +9,6 @@ services:
     environment:
       OFFICE_SUPPLIES_DATA_DIR: /app/state/data
       OFFICE_AUTH_COOKIE_SECURE: ${OFFICE_AUTH_COOKIE_SECURE:-auto}
-      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
-      GEMINI_MODEL_NAME: ${GEMINI_MODEL_NAME:-gemini-3.0-flash}
-      GEMINI_REQUEST_TIMEOUT_SECONDS: ${GEMINI_REQUEST_TIMEOUT_SECONDS:-90}
     volumes:
       - ./office-supplies-state:/app/state
     healthcheck:

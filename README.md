@@ -6,21 +6,38 @@
 
 详细页面操作、字段说明和常见问题见 [`USAGE.md`](./USAGE.md)。
 
+Windows 电脑和手机共用同一套数据时，推荐使用 Docker Web 服务模式，见 [`docs/shared-web-service.md`](./docs/shared-web-service.md)。
+
 云端部署、手机直接访问见 [`docs/cloud-deployment.md`](./docs/cloud-deployment.md)。
 
 ## 核心能力
 
 - 上传 PDF 或图片后自动提取流水号、部门、经办人、日期和物品明细
-- 支持 `local` 与 `cloud` 两类 OCR/视觉解析模式
+- 支持 PaddleOCR 本地离线解析，无需 API Key
 - 台账支持筛选、分页、在线编辑、批量修改和批量删除
 - 台账支持手机浏览器卡片视图，便于送货途中查询和更新状态
 - 执行看板支持状态流转
 - 支持报表、审计日志、回收站、数据质检
 - 支持本地备份和 WebDAV 云备份/恢复
 - 支持 Windows 桌面版、便携版和安装包发布
-- 支持 Docker 云端部署，手机可直接访问服务器地址
+- 支持 Docker Web 服务部署，Windows 和手机可访问同一地址、同一份数据
 
 ## 快速开始
+
+### 推荐：Docker Web 服务（Windows + 手机共用）
+
+Windows 安装 Docker Desktop 后，在项目根目录双击：
+
+```text
+start_docker_server.bat
+```
+
+脚本会启动 Docker Compose，并打印访问地址：
+
+- Windows 本机：`http://localhost:8000`
+- 手机/其他电脑：`http://电脑局域网IP:8000`
+
+这种方式让 Windows 和手机都访问同一个 Web 服务、同一份数据。更多说明见 [`docs/shared-web-service.md`](./docs/shared-web-service.md)。
 
 ### 源码运行
 
@@ -47,6 +64,8 @@ pytest tests/ -v
 - 直接双击 `start_windows.bat`
 - 或运行 `python desktop.py`
 - 安装版需要手机访问时，从开始菜单打开 `OfficeSuppliesTracker Mobile Access`，手机访问 `http://电脑局域网IP:8000`
+
+桌面版更适合单台 Windows 本机使用；如果 Windows 和手机都要长期使用同一份数据，优先使用上面的 Docker Web 服务模式。
 
 ### 获取安装包
 
@@ -81,8 +100,7 @@ docker compose up -d --build
 - 前端第三方依赖已内置到 `static/vendor/`，不再依赖公网 CDN
 - Windows 安装包和便携版可以离线打开前端界面
 - 版本号统一从根目录 `VERSION` 读取
-- 新增 `/api/app/metadata`，前端启动时读取版本和 Gemini 运行元数据
-- Gemini 默认模型统一由 `gemini_config.py` 中的 `DEFAULT_GEMINI_MODEL_NAME` 定义
+- 新增 `/api/app/metadata`，前端启动时读取应用版本
 - README 精简，详细说明迁移到 `USAGE.md`
 
 ### v1.2.11
@@ -152,10 +170,10 @@ docker compose up -d --build
 - 后端通过 `app_metadata.py` 读取版本
 - 前端通过 `/api/app/metadata` 显示版本号
 
-### Gemini 默认配置
+### OCR 默认配置
 
-- 默认模型常量在 `gemini_config.py`
-- Google 协议下未手动填写模型名时，会使用后端统一默认值
+- 默认使用 PaddleOCR 本地离线解析
+- 不需要配置 API Key，单据文件不会上传到云端解析服务
 
 ### 离线运行
 
@@ -167,7 +185,7 @@ docker compose up -d --build
 | 方法 | 路径 | 路由器 | 说明 |
 |---|---|---|---|
 | GET | `/` | system | 主页 |
-| GET | `/api/app/metadata` | system | 应用版本与 Gemini 运行元数据 |
+| GET | `/api/app/metadata` | system | 应用版本 |
 | POST | `/api/auth/setup` | auth | 初始化管理员密码 |
 | POST | `/api/auth/login` | auth | 登录 |
 | GET | `/api/items` | items | 台账列表（筛选/分页） |
