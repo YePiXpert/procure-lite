@@ -7,14 +7,19 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
-COPY requirements.txt /app/requirements.txt
+COPY requirements-server.txt /app/requirements-server.txt
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         libglib2.0-0 \
         libgl1 \
         libgomp1 \
     && rm -rf /var/lib/apt/lists/*
-RUN pip install --no-cache-dir -r /app/requirements.txt
+ARG PIP_INDEX_URL
+ARG PIP_EXTRA_INDEX_URL
+ARG PIP_TRUSTED_HOST
+ENV PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    PIP_DEFAULT_TIMEOUT=120
+RUN python -m pip install --no-cache-dir --prefer-binary -r /app/requirements-server.txt
 
 COPY . /app
 

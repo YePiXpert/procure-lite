@@ -1,9 +1,14 @@
 param(
+  [switch]$Build,
   [switch]$NoBuild
 )
 
 $ErrorActionPreference = "Stop"
 Set-StrictMode -Version Latest
+
+if ($Build -and $NoBuild) {
+  throw "Use either -Build or -NoBuild, not both."
+}
 
 function Write-Step {
   param([string]$Message)
@@ -205,8 +210,12 @@ $port = Get-EnvPort -EnvPath $envPath
 Initialize-DockerStateFromLegacyWindowsData -ProjectRoot $projectRoot
 
 $composeArgs = @("compose", "up", "-d")
-if (-not $NoBuild) {
+if ($Build) {
   $composeArgs += "--build"
+}
+else {
+  Write-Step "Pulling the published Docker image..."
+  Invoke-Checked -Exe "docker" -CommandArgs @("compose", "pull", "office-supplies-tracker") -ErrorMessage "Docker Compose failed to pull the published image. Re-run with -Build to build locally."
 }
 
 Write-Step "Starting Office Supplies Tracker as a shared web service..."

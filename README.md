@@ -4,11 +4,11 @@
 
 当前版本：`1.2.46`
 
-推荐部署方式是 Docker Web 服务：Windows 电脑和手机都通过浏览器访问同一个地址、同一份数据。文档解析默认使用 PaddleOCR 本地离线处理，不需要 API Key，也不会把单据上传到云端解析服务。
+部署方式是 Docker Web 服务：Windows 电脑、手机和其他设备都通过浏览器访问同一个地址、同一份数据。文档解析默认使用 PaddleOCR 本地离线处理，不需要 API Key，也不会把单据上传到云端解析服务。
 
 ## 快速开始
 
-### 推荐：Windows + 手机共用
+### Windows + 手机共用
 
 先安装并启动 Docker Desktop，然后在项目根目录双击：
 
@@ -29,7 +29,8 @@ start_docker_server.bat
 
 ```bash
 cp .env.example .env
-docker compose up -d --build
+docker compose pull
+docker compose up -d
 ```
 
 访问：
@@ -40,22 +41,12 @@ http://服务器IP:8000
 
 长期部署、HTTPS 和排障见 [云端部署与手机直接访问](./docs/cloud-deployment.md)。
 
-### 单机桌面使用
-
-只在一台 Windows 电脑上离线使用时，可以双击：
-
-```text
-start_windows.bat
-```
-
-桌面版适合单机使用；如果手机也要长期访问，优先使用 Docker Web 服务。
-
 ### 开发运行
 
 ```bash
 python3 -m venv venv
 source venv/bin/activate
-pip install -r requirements.txt
+pip install -r requirements-dev.txt
 ./start.sh
 ```
 
@@ -73,7 +64,7 @@ Windows PowerShell 可使用：
 - 手机浏览器卡片视图，适合送货途中查询和更新状态
 - 执行看板、统计报表、审计日志、回收站、数据质检
 - 本地备份和 WebDAV 云备份/恢复
-- Docker Web 服务部署，以及可选 Windows 桌面版/安装包
+- Docker Web 服务部署
 
 ## 常用文档
 
@@ -87,7 +78,6 @@ Windows PowerShell 可使用：
 - 后端：FastAPI + SQLite + SQLAlchemy async + Alembic
 - 文档解析：pdfplumber + PaddleOCR + pypdfium2
 - 前端：Vue 3 + TailwindCSS + Axios
-- 桌面容器：pywebview
 - 测试：pytest + pytest-asyncio
 
 ## 测试
@@ -96,4 +86,4 @@ Windows PowerShell 可使用：
 pytest tests/ -v
 ```
 
-当前完整测试集共 98 个用例，覆盖认证、备份、导入、解析、WebDAV、运营事务和桌面网络配置。
+测试覆盖认证、备份、导入、解析、WebDAV 和运营事务等核心流程。

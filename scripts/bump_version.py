@@ -75,16 +75,6 @@ def sync_version(version: str) -> None:
         expected_count=None,
     )
     replace_pattern(
-        REPO_ROOT / "installer.iss",
-        r"^(AppVersion=).*$",
-        rf"\g<1>{version}",
-    )
-    replace_pattern(
-        REPO_ROOT / "installer" / "OfficeSuppliesTracker.iss",
-        r'^(  #define MyAppVersion ")[^"]+(")$',
-        rf'\g<1>{version}\g<2>',
-    )
-    replace_pattern(
         REPO_ROOT / "README.md",
         r"(当前版本：`)[^`]+(`)",
         rf"\g<1>{version}\g<2>",

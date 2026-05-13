@@ -4,7 +4,7 @@
 
 这个部署方式适合“手机直接打开，不依赖办公室电脑开机”的场景。系统运行在一台长期在线的服务器、NAS 或云主机上，手机和电脑都通过浏览器访问同一个地址、同一份数据。
 
-云端版与本地版使用同一套后端接口和前端页面，台账、导入、编辑、报表、备份、WebDAV、回收站、数据质检和审计日志功能保持一致。差别是导出和备份文件由浏览器下载，而 Windows 桌面版会使用原生“另存为”窗口。
+云端版与本地 Windows Docker 版使用同一套后端接口和前端页面，台账、导入、编辑、报表、备份、WebDAV、回收站、数据质检和审计日志功能保持一致。导出和备份文件都由浏览器下载。
 
 ## 1. 准备服务器
 
@@ -45,7 +45,8 @@ OFFICE_AUTH_COOKIE_SECURE=auto
 ## 3. 启动服务
 
 ```bash
-docker compose up -d --build
+docker compose pull
+docker compose up -d
 ```
 
 查看运行状态：
@@ -100,8 +101,9 @@ office-supplies-state/
 ## 6. 更新版本
 
 ```bash
-git pull
-docker compose up -d --build
+git pull --ff-only
+docker compose pull
+docker compose up -d
 ```
 
 数据库迁移会在服务启动时自动执行。

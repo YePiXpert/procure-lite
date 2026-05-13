@@ -2563,21 +2563,6 @@
                     if (this.filterStatus) params.append('status', this.filterStatus);
                     if (this.filterDepartment) params.append('department', this.filterDepartment);
                     if (this.filterMonth) params.append('month', this.filterMonth);
-                    // 桌面模式：Python 侧内部 HTTP 请求 → 原生另存为对话框
-                    if (window.pywebview?.api?.download_export) {
-                        try {
-                            const result = await window.pywebview.api.download_export(params.toString());
-                            if (result?.ok) {
-                                this.showToast(result?.message || 'Excel 已保存', 'success');
-                            } else if (result?.message) {
-                                this.showToast(`导出 Excel 失败: ${result.message}`, 'error');
-                            }
-                        } catch (error) {
-                            this.showToast('导出 Excel 失败', 'error');
-                        }
-                        return;
-                    }
-                    // 浏览器模式：axios blob 下载
                     const query = params.toString();
                     const url = query ? `/api/export?${query}` : '/api/export';
                     try {
@@ -2612,21 +2597,6 @@
                         params.append('year', this.supplierReportYear);
                     }
                     params.append('mode', normalizedMode);
-                    // 桌面模式：Python 侧内部 HTTP 请求 → 原生另存为对话框
-                    if (window.pywebview?.api?.download_supplier_report) {
-                        try {
-                            const result = await window.pywebview.api.download_supplier_report(params.toString());
-                            if (result?.ok) {
-                                this.showToast(result?.message || '供应商报表已保存', 'success');
-                            } else if (result?.message) {
-                                this.showToast(`导出供应商报表失败: ${result.message}`, 'error');
-                            }
-                        } catch (error) {
-                            this.showToast('导出供应商报表失败', 'error');
-                        }
-                        return;
-                    }
-                    // 浏览器模式：axios blob 下载
                     try {
                         const response = await axios.get(`/api/reports/suppliers/export?${params.toString()}`, {
                             responseType: 'blob',
@@ -2763,23 +2733,6 @@
                 async backupData() {
                     if (this.backupLoading) return;
                     this.backupLoading = true;
-                    // 桌面模式：Python 侧内部 HTTP 请求 → 原生另存为对话框
-                    if (window.pywebview?.api?.download_backup) {
-                        try {
-                            const result = await window.pywebview.api.download_backup();
-                            if (result?.ok) {
-                                this.showToast(result?.message || '备份文件已保存', 'success');
-                            } else if (result?.message) {
-                                this.showToast(`下载备份失败: ${result.message}`, 'error');
-                            }
-                        } catch (error) {
-                            this.showToast('下载备份失败', 'error');
-                        } finally {
-                            this.backupLoading = false;
-                        }
-                        return;
-                    }
-                    // 浏览器模式：axios blob 下载
                     try {
                         const response = await axios.get('/api/backup', { responseType: 'blob' });
                         const filename = this.parseDownloadFilename(

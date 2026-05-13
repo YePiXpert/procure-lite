@@ -14,7 +14,6 @@ EXCLUDED_PARTS = {
     "venv",
     "build",
     "dist",
-    "dist-installer",
 }
 
 

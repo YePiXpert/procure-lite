@@ -19,7 +19,6 @@ ignore_missing_imports = true
 exclude = [
     "static/",
     "alembic/",
-    "installer/",
     "data/",
     "uploads/",
     "outputs/",

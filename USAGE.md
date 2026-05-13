@@ -4,7 +4,7 @@
 
 ## 1. 启动
 
-### 1.1 推荐：Docker Web 服务
+### 1.1 Docker Web 服务
 
 适用于 Windows 电脑和手机共用同一套台账。
 
@@ -17,17 +17,7 @@
 
 更多步骤见 [Windows 与手机共用的 Docker Web 服务](./docs/shared-web-service.md)。
 
-### 1.2 单机桌面模式
-
-只在一台 Windows 电脑上使用时，双击：
-
-```text
-start_windows.bat
-```
-
-桌面版更适合单机使用。需要手机长期访问时，优先使用 Docker Web 服务。
-
-### 1.3 开发模式
+### 1.2 开发模式
 
 ```bash
 ./start.sh
@@ -122,7 +112,7 @@ WebDAV 云同步支持：
 
 ## 9. 数据落盘位置
 
-源码/桌面模式默认位于运行目录：
+源码开发模式默认位于运行目录：
 
 - `data/office_supplies.db`
 - `uploads/`
@@ -135,12 +125,12 @@ Docker 模式默认位于：
 office-supplies-state/
 ```
 
-首次运行 `start_docker_server.bat` 时，如果 `office-supplies-state/data/office_supplies.db` 不存在，脚本会自动查找旧 Windows 数据：
+首次运行 `start_docker_server.bat` 时，如果 `office-supplies-state/data/office_supplies.db` 不存在，脚本会自动查找旧 Windows 本地数据：
 
 - 项目目录下的 `data/office_supplies.db` 和 `uploads/`
 - `%APPDATA%\OfficeSuppliesTracker\data\office_supplies.db` 和对应的 `uploads/`
 
-迁移前先关闭旧桌面版窗口。找到旧数据后，脚本会复制到 `office-supplies-state/`。已有 Docker 数据不会被覆盖。
+找到旧数据后，脚本会复制到 `office-supplies-state/`。已有 Docker 数据不会被覆盖。
 
 迁移或备份 Docker 服务时，优先备份整个 `office-supplies-state/` 目录。
 
@@ -159,21 +149,11 @@ office-supplies-state/
 - Docker 服务是否正在运行
 - Windows 防火墙、服务器防火墙或云服务器安全组是否开放 `8000`
 
-### Windows 打包报错
-
-建议顺序：
-
-```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\setup_windows_env.ps1
-powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\build_windows.ps1
-powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\build_windows_installer.ps1
-```
-
 ## 11. 开发与测试
 
 ```bash
-pip install pytest pytest-asyncio
+pip install -r requirements-dev.txt
 pytest tests/ -v
 ```
 
-当前完整测试集共 98 个用例。
+测试覆盖认证、备份、导入、解析、WebDAV 和运营事务等核心流程。

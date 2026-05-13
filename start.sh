@@ -12,7 +12,7 @@ echo ""
 
 if [ ! -f "venv/bin/activate" ]; then
   echo "未检测到虚拟环境，请先执行："
-  echo "python3 -m venv venv && source venv/bin/activate && pip install -r requirements.txt"
+  echo "python3 -m venv venv && source venv/bin/activate && pip install -r requirements-dev.txt"
   exit 1
 fi
 

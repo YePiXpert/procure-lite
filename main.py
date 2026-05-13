@@ -140,7 +140,7 @@ _FALLBACK_STREAM = None
 
 
 def _ensure_standard_streams(fallback_log_path: Optional[Path] = None) -> None:
-    """兼容 --noconsole 打包：确保 stdout/stderr 可用。"""
+    """确保 stdout/stderr 可用。"""
     global _FALLBACK_STREAM
     if sys.stdout is not None and sys.stderr is not None:
         return
