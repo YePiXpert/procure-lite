@@ -23,6 +23,7 @@ start_docker_server.bat
 
 - 检查 Docker 和 Docker Compose 是否可用
 - 如果没有 `.env`，从 `.env.example` 创建
+- 首次启动时兼容导入旧 Windows 版本地数据
 - 执行 `docker compose up -d --build`
 - 打印 Windows 浏览器和手机浏览器应该访问的地址
 
@@ -75,7 +76,27 @@ office-supplies-state/
 
 这个目录包含数据库、上传文件、日志、登录会话密钥和 WebDAV 配置。迁移服务器或备份系统时，优先备份整个 `office-supplies-state/` 目录。
 
-## 4. 更新和停止
+## 4. 旧 Windows 数据兼容
+
+从旧 Windows 桌面版切换到 Docker Web 服务时，推荐直接运行：
+
+```text
+start_docker_server.bat
+```
+
+运行前先关闭旧桌面版窗口，避免复制正在写入的数据库文件。
+
+如果 `office-supplies-state/data/office_supplies.db` 还不存在，脚本会自动查找旧数据并复制：
+
+- 项目目录：`data/office_supplies.db`、`uploads/`
+- Windows 应用数据目录：`%APPDATA%\OfficeSuppliesTracker\data\office_supplies.db`、`uploads/`
+- 同目录下的 `.webdav_config.json` 和 `.auth_cookie_secret`
+
+这一步只在 Docker 状态目录没有数据库时执行；如果 `office-supplies-state/data/office_supplies.db` 已存在，脚本会直接使用现有 Docker 数据，不会覆盖。
+
+复制后，应用启动时会自动补齐数据库表和字段，并兼容历史状态命名。旧版数据进入新版后可以继续使用；新版数据再回到旧版不建议直接覆盖。
+
+## 5. 更新和停止
 
 更新到最新代码并重建服务：
 
@@ -97,7 +118,7 @@ docker compose ps
 docker compose logs -f office-supplies-tracker
 ```
 
-## 5. 手机打不开时检查
+## 6. 手机打不开时检查
 
 - 手机和部署机器是否在同一个局域网
 - 手机访问的是部署机器的局域网 IP，不是 `127.0.0.1` 或 `localhost`
@@ -105,7 +126,7 @@ docker compose logs -f office-supplies-tracker
 - Windows 防火墙、服务器防火墙或云服务器安全组是否开放 `8000`
 - 如果在公司外访问，是否已经配置公网 IP、域名、VPN、内网穿透或反向代理
 
-## 6. 这个模式和桌面版的区别
+## 7. 这个模式和桌面版的区别
 
 Docker Web 服务只有一个后台服务和一份数据。所有设备都用浏览器访问它，适合多设备共享。
 

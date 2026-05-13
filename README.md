@@ -21,6 +21,8 @@ start_docker_server.bat
 - Windows 本机：`http://localhost:8000`
 - 手机/其他电脑：`http://电脑局域网IP:8000`
 
+如果检测到旧 Windows 版数据，并且 Docker 状态目录还没有数据库，脚本会自动把旧的 `office_supplies.db`、`uploads/`、WebDAV 配置和登录密钥复制到 `office-supplies-state/`，不会覆盖已有 Docker 数据。
+
 详细说明见 [Windows 与手机共用的 Docker Web 服务](./docs/shared-web-service.md)。
 
 ### 服务器、NAS 或云主机

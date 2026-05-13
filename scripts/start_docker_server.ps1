@@ -91,6 +91,95 @@ function Get-LanIPv4Addresses {
   return @($addresses)
 }
 
+function Test-DirectoryHasUserFiles {
+  param([string]$Path)
+
+  if (-not (Test-Path -LiteralPath $Path -PathType Container)) {
+    return $false
+  }
+
+  $entry = Get-ChildItem -LiteralPath $Path -Force -ErrorAction SilentlyContinue |
+    Where-Object { $_.Name -ne ".gitkeep" } |
+    Select-Object -First 1
+
+  return $null -ne $entry
+}
+
+function Copy-DirectoryContents {
+  param(
+    [string]$Source,
+    [string]$Destination
+  )
+
+  if (-not (Test-Path -LiteralPath $Source -PathType Container)) {
+    return
+  }
+
+  New-Item -ItemType Directory -Force -Path $Destination | Out-Null
+  Get-ChildItem -LiteralPath $Source -Force | ForEach-Object {
+    Copy-Item -LiteralPath $_.FullName -Destination $Destination -Recurse -Force
+  }
+}
+
+function Initialize-DockerStateFromLegacyWindowsData {
+  param([string]$ProjectRoot)
+
+  $stateDir = Join-Path $ProjectRoot "office-supplies-state"
+  $stateDataDir = Join-Path $stateDir "data"
+  $targetDb = Join-Path $stateDataDir "office_supplies.db"
+
+  if (Test-Path -LiteralPath $targetDb -PathType Leaf) {
+    return
+  }
+
+  $legacyRoots = @($ProjectRoot)
+  if (-not [string]::IsNullOrWhiteSpace($env:APPDATA)) {
+    $legacyRoots += Join-Path $env:APPDATA "OfficeSuppliesTracker"
+  }
+
+  $legacy = $legacyRoots |
+    Where-Object { -not [string]::IsNullOrWhiteSpace($_) } |
+    ForEach-Object {
+      $dbPath = Join-Path (Join-Path $_ "data") "office_supplies.db"
+      if (Test-Path -LiteralPath $dbPath -PathType Leaf) {
+        [pscustomobject]@{
+          StateDir = $_
+          DbPath = $dbPath
+          LastWriteTimeUtc = (Get-Item -LiteralPath $dbPath).LastWriteTimeUtc
+        }
+      }
+    } |
+    Sort-Object -Property LastWriteTimeUtc -Descending |
+    Select-Object -First 1
+
+  if ($null -eq $legacy) {
+    return
+  }
+
+  Write-Step "Importing existing Windows data into Docker state..."
+  Write-Host "  Source: $($legacy.StateDir)"
+  Write-Host "  Target: $stateDir"
+
+  New-Item -ItemType Directory -Force -Path $stateDataDir | Out-Null
+  Copy-Item -LiteralPath $legacy.DbPath -Destination $targetDb
+
+  $legacyUploads = Join-Path $legacy.StateDir "uploads"
+  $targetUploads = Join-Path $stateDir "uploads"
+  if ((Test-Path -LiteralPath $legacyUploads -PathType Container) -and -not (Test-DirectoryHasUserFiles -Path $targetUploads)) {
+    Copy-DirectoryContents -Source $legacyUploads -Destination $targetUploads
+  }
+
+  foreach ($fileName in @(".webdav_config.json", ".auth_cookie_secret")) {
+    $source = Join-Path $legacy.StateDir $fileName
+    $destination = Join-Path $stateDir $fileName
+    if ((Test-Path -LiteralPath $source -PathType Leaf) -and -not (Test-Path -LiteralPath $destination)) {
+      Copy-Item -LiteralPath $source -Destination $destination
+    }
+  }
+
+  Write-Host "  Legacy data was copied once. Existing Docker data will not be overwritten." -ForegroundColor Green
+}
+
 $projectRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 Set-Location $projectRoot
 
@@ -113,6 +202,8 @@ if (-not (Test-Path $envPath)) {
 }
 
 $port = Get-EnvPort -EnvPath $envPath
+Initialize-DockerStateFromLegacyWindowsData -ProjectRoot $projectRoot
+
 $composeArgs = @("compose", "up", "-d")
 if (-not $NoBuild) {
   $composeArgs += "--build"

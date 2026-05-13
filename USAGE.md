@@ -135,6 +135,13 @@ Docker 模式默认位于：
 office-supplies-state/
 ```
 
+首次运行 `start_docker_server.bat` 时，如果 `office-supplies-state/data/office_supplies.db` 不存在，脚本会自动查找旧 Windows 数据：
+
+- 项目目录下的 `data/office_supplies.db` 和 `uploads/`
+- `%APPDATA%\OfficeSuppliesTracker\data\office_supplies.db` 和对应的 `uploads/`
+
+迁移前先关闭旧桌面版窗口。找到旧数据后，脚本会复制到 `office-supplies-state/`。已有 Docker 数据不会被覆盖。
+
 迁移或备份 Docker 服务时，优先备份整个 `office-supplies-state/` 目录。
 
 ## 10. 常见问题
