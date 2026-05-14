@@ -42,6 +42,17 @@ http://VPS公网IP:8000
 
 ## 常用命令
 
+已有部署更新：
+
+```bash
+cd /opt/office-supplies-tracker
+git pull --ff-only
+docker compose pull
+docker compose up -d
+```
+
+如果项目安装在其他目录，请把 `cd` 路径换成实际路径。首次部署才需要执行 `git clone`。
+
 ```bash
 docker compose ps
 docker compose logs -f office-supplies-tracker

@@ -198,7 +198,7 @@ docker compose up -d
 
 ## 8. 更新版本
 
-更新项目文件和 Docker 镜像：
+如果 VPS 上已经部署过项目，不要重新执行 `git clone`。进入已有项目目录，拉取最新代码和镜像：
 
 ```bash
 cd /opt/office-supplies-tracker
@@ -206,6 +206,10 @@ git pull --ff-only
 docker compose pull
 docker compose up -d
 ```
+
+如果你的项目不在 `/opt/office-supplies-tracker`，把第一行改成实际目录即可。
+
+如果刚刚向 GitHub 推送了新代码，建议先等待镜像发布完成，再执行 `docker compose pull`。否则可能仍然拉到旧的 `latest` 镜像。
 
 查看更新后的状态：
 
@@ -215,6 +219,16 @@ docker compose logs -f office-supplies-tracker
 ```
 
 数据库结构会在服务启动时自动迁移。
+
+首次部署才需要执行完整克隆流程：
+
+```bash
+git clone https://github.com/YePiXpert/office-supplies-tracker.git
+cd office-supplies-tracker
+cp .env.example .env
+docker compose pull
+docker compose up -d
+```
 
 ## 9. 停止、重启和日志
 
