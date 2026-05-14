@@ -1,11 +1,5 @@
 services:
   office-supplies-tracker:
-    build:
-      context: .
-      args:
-        PIP_INDEX_URL: ${PIP_INDEX_URL:-}
-        PIP_EXTRA_INDEX_URL: ${PIP_EXTRA_INDEX_URL:-}
-        PIP_TRUSTED_HOST: ${PIP_TRUSTED_HOST:-}
     image: ghcr.io/yepixpert/office-supplies-tracker:latest
     container_name: office-supplies-tracker
     restart: unless-stopped

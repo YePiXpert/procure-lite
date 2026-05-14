@@ -1,14 +1,5 @@
-param(
-  [switch]$Build,
-  [switch]$NoBuild
-)
-
 $ErrorActionPreference = "Stop"
 Set-StrictMode -Version Latest
-
-if ($Build -and $NoBuild) {
-  throw "Use either -Build or -NoBuild, not both."
-}
 
 function Write-Step {
   param([string]$Message)
@@ -209,17 +200,11 @@ if (-not (Test-Path $envPath)) {
 $port = Get-EnvPort -EnvPath $envPath
 Initialize-DockerStateFromLegacyWindowsData -ProjectRoot $projectRoot
 
-$composeArgs = @("compose", "up", "-d")
-if ($Build) {
-  $composeArgs += "--build"
-}
-else {
-  Write-Step "Pulling the published Docker image..."
-  Invoke-Checked -Exe "docker" -CommandArgs @("compose", "pull", "office-supplies-tracker") -ErrorMessage "Docker Compose failed to pull the published image. Re-run with -Build to build locally."
-}
+Write-Step "Pulling the published Docker image..."
+Invoke-Checked -Exe "docker" -CommandArgs @("compose", "pull", "office-supplies-tracker") -ErrorMessage "Docker Compose failed to pull the published image."
 
 Write-Step "Starting Office Supplies Tracker as a shared web service..."
-Invoke-Checked -Exe "docker" -CommandArgs $composeArgs -ErrorMessage "Docker Compose failed to start the service."
+Invoke-Checked -Exe "docker" -CommandArgs @("compose", "up", "-d") -ErrorMessage "Docker Compose failed to start the service."
 
 $healthUrl = "http://127.0.0.1:$port/api/app/metadata"
 Write-Step "Waiting for the service to become ready..."

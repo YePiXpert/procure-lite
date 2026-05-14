@@ -1,6 +1,6 @@
-# Windows 与手机共用的 Docker Web 服务
+# Docker 部署与运维
 
-这个模式把系统运行成一个长期在线的 Web 服务。Windows 电脑、手机、平板或其他电脑都通过浏览器访问同一个地址，因此看到的是同一套页面、同一份数据。
+系统只按 Docker Web 服务部署。Windows 电脑、手机、平板、NAS、Linux 服务器或云主机都通过浏览器访问同一个地址，因此看到的是同一套页面、同一份数据。
 
 适合场景：
 
@@ -41,7 +41,7 @@ http://192.168.1.23:8000
 
 如果 Windows 防火墙弹窗，请允许 Docker 或该端口在专用网络中访问。
 
-## 2. 在服务器或 NAS 上启动
+## 2. 在 Linux、NAS 或云主机上启动
 
 在服务器上进入项目目录：
 
@@ -124,10 +124,15 @@ docker compose logs -f office-supplies-tracker
 - Windows 防火墙、服务器防火墙或云服务器安全组是否开放 `8000`
 - 如果在公司外访问，是否已经配置公网 IP、域名、VPN、内网穿透或反向代理
 
-## 7. 本地构建
+## 7. 公网访问建议
 
-默认推荐使用已发布镜像，避免在普通服务器上重复下载和安装 PaddleOCR/PaddlePaddle 依赖。需要从当前源码本地构建时，可以显式执行：
+如果要在公司外、路上或客户现场访问，建议使用域名和 HTTPS。可以使用 Nginx、Caddy、宝塔面板、群晖反向代理或云厂商负载均衡，把外部 `https://你的域名` 转发到本机 `127.0.0.1:8000`。
 
-```bash
-docker compose up -d --build
+反向代理需要保留：
+
+```text
+X-Forwarded-Proto: https
+Host: 你的域名
 ```
+
+系统会根据 `X-Forwarded-Proto` 自动决定是否设置 Secure Cookie。

@@ -4,11 +4,11 @@
 
 当前版本：`1.2.47`
 
-部署方式是 Docker Web 服务：Windows 电脑、手机和其他设备都通过浏览器访问同一个地址、同一份数据。文档解析默认使用 PaddleOCR 本地离线处理，不需要 API Key，也不会把单据上传到云端解析服务。
+本项目只按 Docker Web 服务部署。Windows 电脑、手机、NAS、服务器或云主机都通过浏览器访问同一个地址、同一份数据。文档解析默认使用 PaddleOCR 本地离线处理，不需要 API Key，也不会把单据上传到云端解析服务。
 
 ## 快速开始
 
-### Windows + 手机共用
+### Windows
 
 先安装并启动 Docker Desktop，然后在项目根目录双击：
 
@@ -16,16 +16,14 @@
 start_docker_server.bat
 ```
 
-脚本会启动 Docker Compose，并打印访问地址：
+脚本会创建 `.env`、拉取已发布镜像、启动 Docker Compose，并打印访问地址：
 
 - Windows 本机：`http://localhost:8000`
 - 手机/其他电脑：`http://电脑局域网IP:8000`
 
 如果检测到旧 Windows 版数据，并且 Docker 状态目录还没有数据库，脚本会自动把旧的 `office_supplies.db`、`uploads/`、WebDAV 配置和登录密钥复制到 `office-supplies-state/`，不会覆盖已有 Docker 数据。
 
-详细说明见 [Windows 与手机共用的 Docker Web 服务](./docs/shared-web-service.md)。
-
-### 服务器、NAS 或云主机
+### Linux、NAS 或云主机
 
 ```bash
 cp .env.example .env
@@ -39,22 +37,27 @@ docker compose up -d
 http://服务器IP:8000
 ```
 
-长期部署、HTTPS 和排障见 [云端部署与手机直接访问](./docs/cloud-deployment.md)。
+如果在公网使用，建议通过反向代理配置 HTTPS，并把外部域名转发到容器端口 `8000`。
 
-### 开发运行
+## 常用命令
 
 ```bash
-python3 -m venv venv
-source venv/bin/activate
-pip install -r requirements-dev.txt
-./start.sh
+docker compose ps
+docker compose logs -f office-supplies-tracker
+docker compose pull
+docker compose up -d
+docker compose down
 ```
 
-Windows PowerShell 可使用：
+## 数据目录
 
-```powershell
-.\venv\Scripts\python.exe -m uvicorn main:app --host 0.0.0.0 --port 8000
+运行数据统一保存在：
+
+```text
+office-supplies-state/
 ```
+
+这个目录包含数据库、上传文件、日志、登录密钥和 WebDAV 配置。迁移或备份时，优先备份整个 `office-supplies-state/` 目录。
 
 ## 核心能力
 
@@ -64,26 +67,9 @@ Windows PowerShell 可使用：
 - 手机浏览器卡片视图，适合送货途中查询和更新状态
 - 执行看板、统计报表、审计日志、回收站、数据质检
 - 本地备份和 WebDAV 云备份/恢复
-- Docker Web 服务部署
 
-## 常用文档
+## 文档
 
 - [使用说明](./USAGE.md)
+- [Docker 部署与运维](./docs/shared-web-service.md)
 - [文档索引](./docs/README.md)
-- [Windows 与手机共用的 Docker Web 服务](./docs/shared-web-service.md)
-- [云端部署与手机直接访问](./docs/cloud-deployment.md)
-
-## 技术栈
-
-- 后端：FastAPI + SQLite + SQLAlchemy async + Alembic
-- 文档解析：pdfplumber + PaddleOCR + pypdfium2
-- 前端：Vue 3 + TailwindCSS + Axios
-- 测试：pytest + pytest-asyncio
-
-## 测试
-
-```bash
-pytest tests/ -v
-```
-
-测试覆盖认证、备份、导入、解析、WebDAV 和运营事务等核心流程。

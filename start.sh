@@ -1,20 +1,32 @@
 #!/bin/bash
-# 办公用品采购系统启动脚本
+# Office Supplies Tracker Docker launcher
 
 set -euo pipefail
 
 cd "$(dirname "$0")"
 
-echo "正在启动办公用品采购系统..."
-echo "系统地址: http://localhost:8000"
-echo "按 Ctrl+C 停止服务"
-echo ""
-
-if [ ! -f "venv/bin/activate" ]; then
-  echo "未检测到虚拟环境，请先执行："
-  echo "python3 -m venv venv && source venv/bin/activate && pip install -r requirements-dev.txt"
+if ! command -v docker >/dev/null 2>&1; then
+  echo "[ERROR] Docker is not installed or not in PATH."
   exit 1
 fi
 
-source venv/bin/activate
-exec uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+if [ ! -f ".env" ]; then
+  cp .env.example .env
+  echo "Created .env from .env.example"
+fi
+
+echo "Pulling the published Docker image..."
+docker compose pull office-supplies-tracker
+
+echo "Starting Office Supplies Tracker..."
+docker compose up -d
+
+port="$(grep -E '^[[:space:]]*OFFICE_SUPPLIES_PORT[[:space:]]*=' .env 2>/dev/null | tail -n 1 | cut -d '=' -f 2- | sed 's/[[:space:]]*#.*$//' | tr -d '[:space:]')"
+port="${port:-8000}"
+
+echo ""
+echo "Office Supplies Tracker is running:"
+echo "  http://localhost:${port}"
+echo ""
+echo "Stop service:"
+echo "  docker compose down"

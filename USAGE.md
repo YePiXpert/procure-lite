@@ -4,32 +4,30 @@
 
 ## 1. 启动
 
-### 1.1 Docker Web 服务
+系统只通过 Docker Web 服务运行，适用于 Windows 电脑、手机、NAS、服务器或云主机共用同一套台账。
 
-适用于 Windows 电脑和手机共用同一套台账。
+Windows 上先安装并启动 Docker Desktop，然后在项目根目录双击：
 
-1. 安装并启动 Docker Desktop。
-2. 在项目根目录双击 `start_docker_server.bat`。
-3. Windows 本机打开 `http://localhost:8000`。
-4. 手机打开脚本打印的局域网地址，例如 `http://192.168.1.23:8000`。
+```text
+start_docker_server.bat
+```
+
+脚本会启动服务并打印访问地址：
+
+- Windows 本机打开 `http://localhost:8000`
+- 手机打开脚本打印的局域网地址，例如 `http://192.168.1.23:8000`
 
 默认端口是 `8000`。如需调整，修改 `.env` 中的 `OFFICE_SUPPLIES_PORT`。
 
-更多步骤见 [Windows 与手机共用的 Docker Web 服务](./docs/shared-web-service.md)。
-
-### 1.2 开发模式
+服务器、NAS 或云主机可直接运行：
 
 ```bash
-./start.sh
+cp .env.example .env
+docker compose pull
+docker compose up -d
 ```
 
-Windows PowerShell 可使用：
-
-```powershell
-.\venv\Scripts\python.exe -m uvicorn main:app --host 0.0.0.0 --port 8000
-```
-
-打开 `http://localhost:8000`。
+更多步骤见 [Docker 部署与运维](./docs/shared-web-service.md)。
 
 ## 2. 首次使用
 
@@ -112,14 +110,7 @@ WebDAV 云同步支持：
 
 ## 9. 数据落盘位置
 
-源码开发模式默认位于运行目录：
-
-- `data/office_supplies.db`
-- `uploads/`
-- `.webdav_config.json`
-- `.auth_cookie_secret`
-
-Docker 模式默认位于：
+Docker 部署默认位于：
 
 ```text
 office-supplies-state/
@@ -149,11 +140,24 @@ office-supplies-state/
 - Docker 服务是否正在运行
 - Windows 防火墙、服务器防火墙或云服务器安全组是否开放 `8000`
 
-## 11. 开发与测试
+## 11. 更新、日志与停止
+
+更新到最新镜像：
 
 ```bash
-pip install -r requirements-dev.txt
-pytest tests/ -v
+docker compose pull
+docker compose up -d
 ```
 
-测试覆盖认证、备份、导入、解析、WebDAV 和运营事务等核心流程。
+查看状态和日志：
+
+```bash
+docker compose ps
+docker compose logs -f office-supplies-tracker
+```
+
+停止服务：
+
+```bash
+docker compose down
+```

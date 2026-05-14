@@ -3,8 +3,7 @@
 普通使用者优先阅读：
 
 - [使用说明](../USAGE.md)
-- [Windows 与手机共用的 Docker Web 服务](./shared-web-service.md)
-- [云端部署与手机直接访问](./cloud-deployment.md)
+- [Docker 部署与运维](./shared-web-service.md)
 
 维护者常用入口：
 
