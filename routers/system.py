@@ -1,6 +1,7 @@
 import json
 import asyncio
 import secrets
+import shutil
 from pathlib import Path
 from uuid import uuid4
 
@@ -14,14 +15,23 @@ from starlette.concurrency import run_in_threadpool
 from api_utils import safe_unlink, save_upload_file_with_limit
 from app_metadata import APP_VERSION
 from app_locks import DATA_MUTATION_LOCK, MAINTENANCE_MODE
-from app_runtime import APP_STATE_DIR, STATIC_DIR
+from app_runtime import APP_STATE_DIR, DATA_DIR, STATIC_DIR, UPLOAD_DIR
 from auth_security import _load_or_create_cookie_secret
+from auto_backup_service import (
+    get_auto_backup_status,
+    list_local_backups,
+    resolve_local_backup_path,
+    run_auto_backup,
+    save_auto_backup_config,
+)
 from backup_service import (
     MAX_BACKUP_TOTAL_SIZE,
     build_backup_archive_file,
     cleanup_temp_backup_archives,
+    estimate_backup_source_size,
     format_backup_error,
     inspect_backup_archive,
+    resolve_db_path,
     resolve_temp_backup_dir,
     restore_from_archive,
 )
@@ -29,7 +39,9 @@ from database import init_db
 from db.orm import async_engine
 from time_utils import beijing_filename_timestamp
 from schemas import (
+    AutoBackupConfigRequest,
     BackupHealthCheckResponse,
+    LocalBackupRestoreRequest,
     WebDAVConfigRequest,
     WebDAVRestoreRequest,
 )
@@ -198,6 +210,67 @@ def _handle_webdav_error(error: Exception) -> None:
     raise HTTPException(status_code=500, detail=f"WebDAV 操作失败: {str(error)}")
 
 
+def _directory_size(path: Path) -> tuple[int, int]:
+    total_size = 0
+    file_count = 0
+    if not path.exists():
+        return file_count, total_size
+    for item in path.rglob("*"):
+        if not item.is_file():
+            continue
+        try:
+            total_size += item.stat().st_size
+            file_count += 1
+        except OSError:
+            continue
+    return file_count, total_size
+
+
+def _build_system_status() -> dict:
+    db_path = resolve_db_path()
+    db_size = 0
+    if db_path.exists():
+        try:
+            db_size = db_path.stat().st_size
+        except OSError:
+            db_size = 0
+
+    upload_file_count, upload_total_size = _directory_size(UPLOAD_DIR)
+    storage = {"total": None, "used": None, "free": None}
+    try:
+        usage = shutil.disk_usage(APP_STATE_DIR)
+        storage = {
+            "total": usage.total,
+            "used": usage.used,
+            "free": usage.free,
+        }
+    except OSError:
+        pass
+
+    return {
+        "version": APP_VERSION,
+        "maintenance_mode": MAINTENANCE_MODE.is_set(),
+        "paths": {
+            "state_dir": str(APP_STATE_DIR),
+            "data_dir": str(DATA_DIR),
+            "upload_dir": str(UPLOAD_DIR),
+            "db_path": str(db_path),
+        },
+        "database": {
+            "exists": db_path.exists(),
+            "size": db_size,
+        },
+        "uploads": {
+            "file_count": upload_file_count,
+            "total_size": upload_total_size,
+        },
+        "storage": storage,
+        "backup_source_size": estimate_backup_source_size(),
+        "auto_backup": get_auto_backup_status(),
+        "webdav": _public_webdav_config(_load_webdav_config()),
+    }
+
+
 @router.get("/", response_class=HTMLResponse)
 async def root():
     """返回主页。"""
@@ -282,6 +355,74 @@ async def get_webdav_config():
 @router.get("/api/app/metadata")
 async def get_app_metadata():
     return {"version": APP_VERSION}
+
+
+@router.get("/api/system/status")
+async def get_system_status():
+    return await run_in_threadpool(_build_system_status)
+
+
+@router.get("/api/auto-backup/config")
+async def get_auto_backup_config():
+    return get_auto_backup_status()["config"]
+
+
+@router.put("/api/auto-backup/config")
+async def set_auto_backup_config(request: AutoBackupConfigRequest):
+    config = await run_in_threadpool(save_auto_backup_config, request.model_dump())
+    return {"message": "自动备份配置已保存", "config": config}
+
+
+@router.post("/api/auto-backup/run")
+async def run_auto_backup_now():
+    async with DATA_MUTATION_LOCK:
+        result = await run_in_threadpool(run_auto_backup, True)
+    if not result.get("ok"):
+        raise HTTPException(
+            status_code=507 if "空间" in str(result.get("error") or "") else 500,
+            detail=result.get("error") or "自动备份失败",
+        )
+    if result.get("skipped"):
+        return {"message": "自动备份正在执行，请稍后查看状态", **result}
+    return {
+        "message": f"本机自动备份已创建：{result.get('filename')}",
+        **result,
+    }
+
+
+@router.get("/api/local-backups")
+async def get_local_backups():
+    return {"items": await run_in_threadpool(list_local_backups, 50)}
+
+
+@router.post("/api/local-backups/restore")
+async def restore_from_local_backup(request: LocalBackupRestoreRequest):
+    filename = request.filename.strip()
+    if not filename:
+        raise HTTPException(status_code=400, detail="filename 不能为空")
+    result = {}
+    async with DATA_MUTATION_LOCK:
+        MAINTENANCE_MODE.set()
+        try:
+            archive_path = await run_in_threadpool(resolve_local_backup_path, filename)
+            await _release_db_handles_for_restore()
+            result = await run_in_threadpool(
+                restore_from_archive, archive_path, _run_init_db_sync
+            )
+        except FileNotFoundError as e:
+            raise HTTPException(status_code=404, detail=str(e))
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"恢复失败: {str(e)}")
+        finally:
+            MAINTENANCE_MODE.clear()
+
+    return {
+        "message": f"已从本机备份恢复：{filename}（已自动通过健康检查），并恢复 {result['restored_upload_files']} 个上传文件",
+        "restored_upload_files": result["restored_upload_files"],
+        "filename": filename,
+    }
 
 
 @router.put("/api/webdav/config")

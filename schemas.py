@@ -87,6 +87,16 @@ class WebDAVRestoreRequest(BaseModel):
     filename: str = Field(min_length=1, max_length=300)
 
 
+class AutoBackupConfigRequest(BaseModel):
+    enabled: bool = True
+    interval_hours: int = Field(default=24, ge=1, le=168)
+    keep_backups: int = Field(default=7, ge=1, le=60)
+
+
+class LocalBackupRestoreRequest(BaseModel):
+    filename: str = Field(min_length=1, max_length=300)
+
+
 class SupplierCreateRequest(BaseModel):
     name: str = Field(min_length=1, max_length=200)
     contact_name: Optional[str] = Field(default=None, max_length=200)

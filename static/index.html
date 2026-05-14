@@ -49,6 +49,12 @@
     <div id="app" class="app-shell flex h-screen w-full overflow-hidden" style="display:none;">
         <input type="file" ref="fileInput" @change="handleFileSelect" accept=".pdf,.png,.jpg,.jpeg,.jfif" class="hidden">
         <input type="file" ref="restoreInput" @change="handleRestoreSelect" accept=".zip" class="hidden">
+        <datalist id="departmentOptions">
+            <option v-for="department in departments" :key="`department-option-${department}`" :value="department"></option>
+        </datalist>
+        <datalist id="handlerOptions">
+            <option v-for="handler in handlers" :key="`handler-option-${handler}`" :value="handler"></option>
+        </datalist>
 
         <template v-if="isAuthenticated">
         <aside class="app-sidebar w-64 shrink-0 bg-white border-r border-slate-200 flex flex-col">
@@ -1010,7 +1016,116 @@
 
                         <settings-ai-panel></settings-ai-panel>
 
-                        <settings-backup-panel></settings-backup-panel>
+                        <div class="backup-panel">
+                            <div class="backup-hero">
+                                <div class="min-w-0">
+                                    <div class="backup-eyebrow">Resilience</div>
+                                    <h3 class="backup-title">数据容灾与同步</h3>
+                                    <p class="backup-description">把本机自动备份、本地恢复和 WebDAV 云端副本集中到一个安全入口，减少误操作成本。</p>
+                                </div>
+                                <div class="backup-status-card">
+                                    <div class="text-[10px] font-bold uppercase tracking-[0.18em] text-blue-100">Auto Backup</div>
+                                    <div class="mt-2 text-2xl font-bold text-white">{{ autoBackupConfig.enabled ? '自动开启' : '仅手动' }}</div>
+                                    <div class="mt-1 text-xs text-blue-100">本机副本 {{ localBackups.length || 0 }} 个 · WebDAV {{ webdavConfig.configured ? '已配置' : '未配置' }}</div>
+                                </div>
+                            </div>
+                            <div class="backup-action-grid">
+                                <button @click="backupData()" :disabled="backupLoading" :class="{ 'opacity-60 cursor-wait': backupLoading }" class="backup-action-card backup-action-primary disabled:pointer-events-none">
+                                    <span class="backup-action-icon">
+                                        <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M12 3v10m0 0l-4-4m4 4l4-4M5 17.5A3.5 3.5 0 018.5 14h7a3.5 3.5 0 010 7h-7A3.5 3.5 0 015 17.5z"/></svg>
+                                    </span>
+                                    <span class="backup-action-copy">
+                                        <span class="backup-action-title">{{ backupLoading ? '正在备份...' : '立即备份' }}</span>
+                                        <span class="backup-action-desc">{{ backupLoading ? '正在生成压缩包，请勿重复点击' : '导出数据库与附件压缩包' }}</span>
+                                    </span>
+                                </button>
+                                <button @click="$refs.restoreInput && $refs.restoreInput.click()" class="backup-action-card">
+                                    <span class="backup-action-icon backup-action-icon-amber">
+                                        <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M4 4v6h6M20 20v-6h-6M5 14a7 7 0 0012.06 3.89M19 10A7 7 0 006.94 6.11"/></svg>
+                                    </span>
+                                    <span class="backup-action-copy">
+                                        <span class="backup-action-title">本地恢复</span>
+                                        <span class="backup-action-desc">选择备份包快速恢复系统</span>
+                                    </span>
+                                </button>
+                                <button @click="openWebdavModal()" class="backup-action-card">
+                                    <span class="backup-action-icon backup-action-icon-violet">
+                                        <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M7 18a4 4 0 01-.88-7.9A5.5 5.5 0 0116.8 8.2 4.5 4.5 0 1117.5 18H7z"/></svg>
+                                    </span>
+                                    <span class="backup-action-copy">
+                                        <span class="backup-action-title">WebDAV 云同步</span>
+                                        <span class="backup-action-desc">配置远程目录与保留策略</span>
+                                    </span>
+                                </button>
+                            </div>
+                            <div class="auto-backup-panel">
+                                <div class="auto-backup-config">
+                                    <div class="auto-backup-config-header">
+                                        <label class="auto-backup-toggle">
+                                            <input type="checkbox" :checked="autoBackupConfig.enabled" @change="setAutoBackupEnabled($event.target.checked)">
+                                            <span></span>
+                                            <strong>自动本机备份</strong>
+                                        </label>
+                                        <button @click="loadSystemStatus(true)" :disabled="systemStatusLoading" class="auto-backup-link-button">
+                                            {{ systemStatusLoading ? '刷新中...' : '刷新状态' }}
+                                        </button>
+                                    </div>
+                                    <div class="auto-backup-controls">
+                                        <label>
+                                            <span>间隔（小时）</span>
+                                            <input :value="autoBackupConfig.intervalHours" @input="setAutoBackupIntervalHours($event.target.value)" type="number" min="1" max="168">
+                                        </label>
+                                        <label>
+                                            <span>保留份数</span>
+                                            <input :value="autoBackupConfig.keepBackups" @input="setAutoBackupKeepBackups($event.target.value)" type="number" min="1" max="60">
+                                        </label>
+                                        <button @click="saveAutoBackupConfig()" :disabled="autoBackupLoading" class="auto-backup-primary">保存配置</button>
+                                        <button @click="runAutoBackupNow()" :disabled="autoBackupLoading" class="auto-backup-secondary">立即创建</button>
+                                    </div>
+                                    <div class="auto-backup-status-grid">
+                                        <div>
+                                            <span>上次成功</span>
+                                            <strong>{{ formatDateTime(autoBackupConfig.lastSuccessAt, '尚未成功') }}</strong>
+                                        </div>
+                                        <div>
+                                            <span>下次执行</span>
+                                            <strong>{{ autoBackupConfig.enabled ? formatDateTime(autoBackupConfig.nextRunAt, '即将执行') : '已关闭' }}</strong>
+                                        </div>
+                                        <div>
+                                            <span>最近文件</span>
+                                            <strong>{{ autoBackupConfig.lastFilename || '暂无' }}</strong>
+                                        </div>
+                                    </div>
+                                    <div v-if="autoBackupConfig.lastError" class="auto-backup-error">
+                                        {{ autoBackupConfig.lastError }}
+                                    </div>
+                                </div>
+                                <div class="local-backup-list">
+                                    <div class="local-backup-list-header">
+                                        <span>本机备份</span>
+                                        <strong>{{ formatFileSize(localBackupTotalSize()) }}</strong>
+                                    </div>
+                                    <div class="local-backup-items">
+                                        <div v-for="file in recentLocalBackups()" :key="file.name" class="local-backup-item">
+                                            <div class="min-w-0">
+                                                <div class="local-backup-name">{{ file.name }}</div>
+                                                <div class="local-backup-meta">{{ formatDateTime(file.modified_at, '-') }} · {{ formatFileSize(file.size) }}</div>
+                                            </div>
+                                            <button @click="restoreLocalBackup(file.name)" :disabled="restoring" type="button">恢复</button>
+                                        </div>
+                                        <div v-if="!localBackups.length" class="local-backup-empty">暂无本机自动备份</div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="backup-safety-strip">
+                                <span>建议流程</span>
+                                <strong>先本机备份</strong>
+                                <i></i>
+                                <strong>再上传云端</strong>
+                                <i></i>
+                                <strong>恢复前二次确认</strong>
+                            </div>
+                        </div>
 
                         <settings-maintenance-panel></settings-maintenance-panel>
                     </div>
@@ -1034,6 +1149,94 @@
             :visible="showAddModal"
             :item="newItem"
         ></ledger-add-modal>
+
+        <div
+            v-if="showMobileLedgerEditModal && mobileLedgerEditDraft"
+            class="mobile-ledger-edit-overlay modal-overlay"
+            @click.self="closeMobileLedgerEdit"
+        >
+            <section class="mobile-ledger-edit-panel">
+                <header class="mobile-ledger-edit-header">
+                    <div class="min-w-0">
+                        <div class="mobile-ledger-edit-eyebrow">{{ mobileLedgerEditDraft.serial_number || (mobileLedgerEditId ? `REC-${mobileLedgerEditId}` : '记录') }}</div>
+                        <h3 class="mobile-ledger-edit-title">编辑台账记录</h3>
+                    </div>
+                    <button @click="closeMobileLedgerEdit" type="button" class="mobile-ledger-edit-icon-button" title="关闭">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M6 18L18 6M6 6l12 12"/></svg>
+                    </button>
+                </header>
+                <div class="mobile-ledger-edit-body">
+                    <label class="mobile-ledger-edit-field mobile-ledger-edit-field-wide">
+                        <span>物品名称</span>
+                        <input v-model="mobileLedgerEditDraft.item_name" type="text" autocomplete="off">
+                    </label>
+                    <div class="mobile-ledger-edit-grid">
+                        <label class="mobile-ledger-edit-field">
+                            <span>流水号</span>
+                            <input v-model="mobileLedgerEditDraft.serial_number" type="text" autocomplete="off">
+                        </label>
+                        <label class="mobile-ledger-edit-field">
+                            <span>申领日期</span>
+                            <input v-model="mobileLedgerEditDraft.request_date" type="date">
+                        </label>
+                        <label class="mobile-ledger-edit-field">
+                            <span>申领部门</span>
+                            <input v-model="mobileLedgerEditDraft.department" type="text" list="departmentOptions" autocomplete="off">
+                        </label>
+                        <label class="mobile-ledger-edit-field">
+                            <span>经办人</span>
+                            <input v-model="mobileLedgerEditDraft.handler" type="text" list="handlerOptions" autocomplete="off">
+                        </label>
+                        <label class="mobile-ledger-edit-field">
+                            <span>数量</span>
+                            <input v-model.number="mobileLedgerEditDraft.quantity" type="number" inputmode="decimal">
+                        </label>
+                        <label class="mobile-ledger-edit-field">
+                            <span>单价</span>
+                            <input v-model="mobileLedgerEditDraft.unit_price" type="number" step="0.01" inputmode="decimal" placeholder="-">
+                        </label>
+                        <label class="mobile-ledger-edit-field">
+                            <span>状态</span>
+                            <select v-model="mobileLedgerEditDraft.status">
+                                <option v-for="s in statuses" :key="`mobile-edit-status-${s}`" :value="s">{{ s }}</option>
+                            </select>
+                        </label>
+                        <label class="mobile-ledger-edit-field">
+                            <span>付款状态</span>
+                            <select v-model="mobileLedgerEditDraft.payment_status">
+                                <option v-for="p in paymentStatuses" :key="`mobile-edit-payment-${p}`" :value="p">{{ p }}</option>
+                            </select>
+                        </label>
+                        <label class="mobile-ledger-edit-field">
+                            <span>到货日期</span>
+                            <input v-model="mobileLedgerEditDraft.arrival_date" type="date">
+                        </label>
+                        <label class="mobile-ledger-edit-field">
+                            <span>分发日期</span>
+                            <input v-model="mobileLedgerEditDraft.distribution_date" type="date">
+                        </label>
+                    </div>
+                    <label class="mobile-ledger-edit-toggle">
+                        <input v-model="mobileLedgerEditDraft.invoice_issued" type="checkbox">
+                        <span>发票已入账</span>
+                    </label>
+                    <label class="mobile-ledger-edit-field mobile-ledger-edit-field-wide">
+                        <span>采购链接</span>
+                        <input v-model="mobileLedgerEditDraft.purchase_link" type="url" autocomplete="off">
+                    </label>
+                    <label class="mobile-ledger-edit-field mobile-ledger-edit-field-wide">
+                        <span>签收备注</span>
+                        <textarea v-model="mobileLedgerEditDraft.signoff_note" rows="3"></textarea>
+                    </label>
+                </div>
+                <footer class="mobile-ledger-edit-footer">
+                    <button @click="closeMobileLedgerEdit" type="button" class="mobile-ledger-edit-secondary">取消</button>
+                    <button @click="saveMobileLedgerEdit" :disabled="mobileLedgerEditSaving" type="button" class="mobile-ledger-edit-primary">
+                        {{ mobileLedgerEditSaving ? '保存中...' : '保存' }}
+                    </button>
+                </footer>
+            </section>
+        </div>
 
         <webdav-modal
             :visible="showWebdavModal"
@@ -1433,64 +1636,39 @@
         </div>
     </template>
 
-    <template id="settings-backup-panel-template">
-        <div class="backup-panel">
-            <div class="backup-hero">
-                <div class="min-w-0">
-                    <div class="backup-eyebrow">Resilience</div>
-                    <h3 class="backup-title">数据容灾与同步</h3>
-                    <p class="backup-description">把本地备份、恢复和 WebDAV 云端副本集中到一个安全入口，减少误操作成本。</p>
-                </div>
-                <div class="backup-status-card">
-                    <div class="text-[10px] font-bold uppercase tracking-[0.18em] text-blue-100">Cloud Backup</div>
-                    <div class="mt-2 text-2xl font-bold text-white">{{ $root.webdavConfig.configured ? '已配置' : '未配置' }}</div>
-                    <div class="mt-1 text-xs text-blue-100">远端文件 {{ $root.webdavBackups.length || 0 }} 个</div>
-                </div>
-            </div>
-            <div class="backup-action-grid">
-                <button @click="$root.backupData()" :disabled="$root.backupLoading" :class="{ 'opacity-60 cursor-wait': $root.backupLoading }" class="backup-action-card backup-action-primary disabled:pointer-events-none">
-                    <span class="backup-action-icon">
-                        <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M12 3v10m0 0l-4-4m4 4l4-4M5 17.5A3.5 3.5 0 018.5 14h7a3.5 3.5 0 010 7h-7A3.5 3.5 0 015 17.5z"/></svg>
-                    </span>
-                    <span class="backup-action-copy">
-                        <span class="backup-action-title">{{ $root.backupLoading ? '正在备份...' : '立即备份' }}</span>
-                        <span class="backup-action-desc">{{ $root.backupLoading ? '正在生成压缩包，请勿重复点击' : '导出数据库与附件压缩包' }}</span>
-                    </span>
-                </button>
-                <button @click="$root.$refs.restoreInput && $root.$refs.restoreInput.click()" class="backup-action-card">
-                    <span class="backup-action-icon backup-action-icon-amber">
-                        <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M4 4v6h6M20 20v-6h-6M5 14a7 7 0 0012.06 3.89M19 10A7 7 0 006.94 6.11"/></svg>
-                    </span>
-                    <span class="backup-action-copy">
-                        <span class="backup-action-title">本地恢复</span>
-                        <span class="backup-action-desc">选择备份包快速恢复系统</span>
-                    </span>
-                </button>
-                <button @click="$root.openWebdavModal()" class="backup-action-card">
-                    <span class="backup-action-icon backup-action-icon-violet">
-                        <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M7 18a4 4 0 01-.88-7.9A5.5 5.5 0 0116.8 8.2 4.5 4.5 0 1117.5 18H7z"/></svg>
-                    </span>
-                    <span class="backup-action-copy">
-                        <span class="backup-action-title">WebDAV 云同步</span>
-                        <span class="backup-action-desc">配置远程目录与保留策略</span>
-                    </span>
-                </button>
-            </div>
-            <div class="backup-safety-strip">
-                <span>建议流程</span>
-                <strong>先本地备份</strong>
-                <i></i>
-                <strong>再上传云端</strong>
-                <i></i>
-                <strong>恢复前二次确认</strong>
-            </div>
-        </div>
-    </template>
     <template id="settings-maintenance-panel-template">
         <div class="space-y-4">
             <div>
                 <h3 class="text-xl font-semibold tracking-tight text-slate-900">🛠️ 系统维护</h3>
                 <p class="mt-1 text-sm text-slate-500">处理回收站、数据质量巡检与审计日志，维持长期稳定运行。</p>
+            </div>
+            <div class="system-status-grid">
+                <div class="system-status-card">
+                    <span>版本</span>
+                    <strong>v{{ $root.appVersion || $root.systemStatus.version || '-' }}</strong>
+                </div>
+                <div class="system-status-card">
+                    <span>数据库</span>
+                    <strong>{{ $root.systemStatus.database?.exists ? $root.formatFileSize($root.systemStatus.database?.size || 0) : '未就绪' }}</strong>
+                </div>
+                <div class="system-status-card">
+                    <span>上传附件</span>
+                    <strong>{{ $root.systemStatus.uploads?.file_count || 0 }} 个</strong>
+                </div>
+                <div class="system-status-card">
+                    <span>可用空间</span>
+                    <strong>{{ $root.formatFileSize($root.systemStatus.storage?.free || 0) }}</strong>
+                </div>
+            </div>
+            <div class="system-path-panel">
+                <div>
+                    <span>状态目录</span>
+                    <strong>{{ $root.systemStatus.paths?.state_dir || '-' }}</strong>
+                </div>
+                <div>
+                    <span>数据库文件</span>
+                    <strong>{{ $root.systemStatus.paths?.db_path || '-' }}</strong>
+                </div>
             </div>
             <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <button @click="$root.openRecycleBinModal()" class="bg-white border border-slate-200 rounded-lg p-4 text-left hover:shadow-md transition-all duration-200 ease-in-out">
@@ -2180,6 +2358,9 @@
                             <button @click="$root.openLedgerDetail(item)" class="ledger-mobile-icon-button" title="详情 / 审计轨迹">
                                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
                             </button>
+                            <button @click="$root.openMobileLedgerEdit(item)" class="ledger-mobile-icon-button ledger-mobile-edit-button" title="编辑">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.9" d="M16.862 4.487l1.65-1.65a1.875 1.875 0 112.652 2.652L9.75 16.903 6 18l1.097-3.75L16.862 4.487z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.9" d="M19 13.5V19a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h5.5"/></svg>
+                            </button>
                         </div>
 
                         <div class="ledger-mobile-status-row">
@@ -2205,6 +2386,25 @@
                             >
                                 <option v-for="p in paymentStatuses" :key="`mobile-payment-${item.id}-${p}`" :value="p">{{ p }}</option>
                             </select>
+                        </div>
+
+                        <div class="ledger-mobile-summary-grid">
+                            <div>
+                                <span>经办</span>
+                                <strong>{{ item.handler || '-' }}</strong>
+                            </div>
+                            <div>
+                                <span>数量</span>
+                                <strong>{{ item.quantity || '-' }}</strong>
+                            </div>
+                            <div>
+                                <span>单价</span>
+                                <strong>{{ item.unit_price === null || item.unit_price === undefined || item.unit_price === '' ? '-' : `¥${$root.formatCurrency(item.unit_price)}` }}</strong>
+                            </div>
+                            <div>
+                                <span>到货</span>
+                                <strong>{{ item.arrival_date || '-' }}</strong>
+                            </div>
                         </div>
 
                         <div class="ledger-mobile-field-grid">
@@ -2286,6 +2486,13 @@
 
                         <div class="ledger-mobile-card-actions">
                             <button
+                                @click="$root.openMobileLedgerEdit(item)"
+                                type="button"
+                                class="ledger-mobile-action-button ledger-mobile-action-primary"
+                            >
+                                编辑
+                            </button>
+                            <button
                                 v-if="item.purchase_link"
                                 @click="$root.copyPurchaseLink(item.purchase_link)"
                                 type="button"
@@ -2363,7 +2570,6 @@
     <script src="/static/ops-exceptions-panel.js?v=1.2.57"></script>
     <script src="/static/settings-operations-panel.js?v=1.2.57"></script>
     <script src="/static/settings-ai-panel.js?v=1.2.57"></script>
-    <script src="/static/settings-backup-panel.js?v=1.2.57"></script>
     <script src="/static/settings-maintenance-panel.js?v=1.2.57"></script>
     <script src="/static/webdav-modal.js?v=1.2.57"></script>
     <script src="/static/audit-log-panel.js?v=1.2.57"></script>

@@ -1,4 +1,5 @@
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
+import asyncio
 import os
 import sys
 from pathlib import Path
@@ -17,8 +18,13 @@ from auth_security import (
     verify_auth_cookie,
 )
 from app_metadata import APP_VERSION
-from app_locks import MAINTENANCE_MODE
+from app_locks import DATA_MUTATION_LOCK, MAINTENANCE_MODE
 from app_runtime import LOG_DIR, STATIC_DIR
+from auto_backup_service import (
+    is_auto_backup_due,
+    load_auto_backup_config,
+    run_auto_backup,
+)
 from database import init_db, is_system_initialized
 from db.audit_context import reset_current_operator_ip, set_current_operator_ip
 from db.migrations import upgrade_database_to_head
@@ -33,6 +39,38 @@ from routers.audit import router as audit_router
 from security_headers import security_headers_middleware
 
 
+def _auto_backup_worker_enabled() -> bool:
+    return os.environ.get("AUTO_BACKUP_WORKER", "1").strip().lower() not in {
+        "0",
+        "false",
+        "no",
+        "off",
+    }
+
+
+def _auto_backup_poll_seconds() -> int:
+    try:
+        value = int(os.environ.get("AUTO_BACKUP_POLL_SECONDS", "600"))
+    except ValueError:
+        value = 600
+    return min(3600, max(60, value))
+
+
+async def _auto_backup_loop() -> None:
+    await asyncio.sleep(30)
+    while True:
+        try:
+            config = load_auto_backup_config()
+            if is_auto_backup_due(config):
+                async with DATA_MUTATION_LOCK:
+                    await asyncio.to_thread(run_auto_backup, False)
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            pass
+        await asyncio.sleep(_auto_backup_poll_seconds())
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """启动时执行数据库迁移并初始化数据库。"""
@@ -40,9 +78,16 @@ async def lifespan(app: FastAPI):
         upgrade_database_to_head()
     await init_db()
     init_cookie_secret()
+    auto_backup_task = (
+        asyncio.create_task(_auto_backup_loop()) if _auto_backup_worker_enabled() else None
+    )
     try:
         yield
     finally:
+        if auto_backup_task is not None:
+            auto_backup_task.cancel()
+            with suppress(asyncio.CancelledError):
+                await auto_backup_task
         if _FALLBACK_STREAM is not None:
             try:
                 _FALLBACK_STREAM.close()

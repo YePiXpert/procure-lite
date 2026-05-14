@@ -169,13 +169,17 @@ office-supplies-state/
 
 - `data/office_supplies.db`：SQLite 数据库
 - `uploads/`：上传的单据和附件
+- `backups/`：系统自动创建的本机备份压缩包
 - `logs/`：运行日志
 - `.auth_cookie_secret`：登录会话密钥
+- `.auto_backup_config.json`：自动本机备份配置和最近执行状态
 - `.webdav_config.json`：WebDAV 备份配置
 
 不要删除这个目录。迁移、备份、恢复时优先处理整个 `office-supplies-state/`。
 
 ## 7. 备份和迁移
+
+系统设置页提供“自动本机备份”：默认开启，每 24 小时在 `office-supplies-state/backups/` 生成一个 zip，并默认保留最近 7 份。你可以在页面里修改间隔、保留份数、立即创建备份，也可以从本机备份列表直接恢复。
 
 创建本机压缩备份：
 

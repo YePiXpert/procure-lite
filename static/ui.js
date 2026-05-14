@@ -24,9 +24,6 @@
     if (global.SettingsAiPanel) {
         app.component('settings-ai-panel', global.SettingsAiPanel);
     }
-    if (global.SettingsBackupPanel) {
-        app.component('settings-backup-panel', global.SettingsBackupPanel);
-    }
     if (global.SettingsMaintenancePanel) {
         app.component('settings-maintenance-panel', global.SettingsMaintenancePanel);
     }

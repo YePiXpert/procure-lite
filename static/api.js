@@ -300,6 +300,140 @@
                     } catch (_) {
                     }
                 },
+                normalizeAutoBackupConfig(config = {}) {
+                    const intervalHours = Number(config.interval_hours ?? config.intervalHours ?? 24);
+                    const keepBackups = Number(config.keep_backups ?? config.keepBackups ?? 7);
+                    return {
+                        enabled: config.enabled !== false,
+                        intervalHours: Number.isFinite(intervalHours) ? Math.min(168, Math.max(1, Math.floor(intervalHours))) : 24,
+                        keepBackups: Number.isFinite(keepBackups) ? Math.min(60, Math.max(1, Math.floor(keepBackups))) : 7,
+                        lastRunAt: (config.last_run_at || config.lastRunAt || '').toString(),
+                        lastSuccessAt: (config.last_success_at || config.lastSuccessAt || '').toString(),
+                        lastError: (config.last_error || config.lastError || '').toString(),
+                        lastFilename: (config.last_filename || config.lastFilename || '').toString(),
+                        lastSize: Number(config.last_size ?? config.lastSize ?? 0) || 0,
+                        nextRunAt: (config.next_run_at || config.nextRunAt || '').toString(),
+                        running: !!config.running,
+                    };
+                },
+                applySystemStatus(data = {}) {
+                    this.systemStatus = {
+                        version: (data.version || '').toString(),
+                        maintenance_mode: !!data.maintenance_mode,
+                        paths: data.paths || {},
+                        database: data.database || {},
+                        uploads: data.uploads || {},
+                        storage: data.storage || {},
+                        backup_source_size: Number(data.backup_source_size) || 0,
+                        auto_backup: data.auto_backup || { config: {}, items: [] },
+                        webdav: data.webdav || {},
+                    };
+                    if (this.systemStatus.version) {
+                        this.appVersion = this.systemStatus.version;
+                    }
+                    const autoBackup = this.systemStatus.auto_backup || {};
+                    this.autoBackupConfig = this.normalizeAutoBackupConfig(autoBackup.config || {});
+                    this.localBackups = Array.isArray(autoBackup.items) ? autoBackup.items : [];
+                },
+                async loadSystemStatus(showError = false) {
+                    this.systemStatusLoading = true;
+                    try {
+                        const res = await axios.get('/api/system/status');
+                        this.applySystemStatus(res.data || {});
+                    } catch (e) {
+                        if (showError) {
+                            this.showApiError('加载系统状态失败', e);
+                        }
+                    } finally {
+                        this.systemStatusLoading = false;
+                    }
+                },
+                async loadLocalBackups(showError = false) {
+                    try {
+                        const res = await axios.get('/api/local-backups');
+                        this.localBackups = Array.isArray(res.data?.items) ? res.data.items : [];
+                    } catch (e) {
+                        if (showError) {
+                            this.showApiError('加载本机备份失败', e);
+                        }
+                    }
+                },
+                setAutoBackupEnabled(value) {
+                    this.autoBackupConfig.enabled = !!value;
+                },
+                setAutoBackupIntervalHours(value) {
+                    const nextValue = Number(value);
+                    this.autoBackupConfig.intervalHours = Number.isFinite(nextValue)
+                        ? Math.min(168, Math.max(1, Math.floor(nextValue)))
+                        : 24;
+                },
+                setAutoBackupKeepBackups(value) {
+                    const nextValue = Number(value);
+                    this.autoBackupConfig.keepBackups = Number.isFinite(nextValue)
+                        ? Math.min(60, Math.max(1, Math.floor(nextValue)))
+                        : 7;
+                },
+                recentLocalBackups() {
+                    return (Array.isArray(this.localBackups) ? this.localBackups : []).slice(0, 5);
+                },
+                localBackupTotalSize() {
+                    return Number(this.systemStatus?.auto_backup?.total_size) || 0;
+                },
+                async saveAutoBackupConfig() {
+                    if (this.autoBackupLoading) return;
+                    this.autoBackupLoading = true;
+                    try {
+                        const payload = {
+                            enabled: !!this.autoBackupConfig.enabled,
+                            interval_hours: this.normalizeAutoBackupConfig(this.autoBackupConfig).intervalHours,
+                            keep_backups: this.normalizeAutoBackupConfig(this.autoBackupConfig).keepBackups,
+                        };
+                        const res = await axios.put('/api/auto-backup/config', payload);
+                        this.autoBackupConfig = this.normalizeAutoBackupConfig(res.data?.config || payload);
+                        this.showToast(res.data?.message || '自动备份配置已保存', 'success');
+                        await this.loadSystemStatus();
+                    } catch (e) {
+                        this.showApiError('保存自动备份配置失败', e);
+                    } finally {
+                        this.autoBackupLoading = false;
+                    }
+                },
+                async runAutoBackupNow() {
+                    if (this.autoBackupLoading) return;
+                    this.autoBackupLoading = true;
+                    try {
+                        const res = await axios.post('/api/auto-backup/run');
+                        this.showToast(res.data?.message || '本机备份已创建', 'success');
+                        await this.loadSystemStatus();
+                    } catch (e) {
+                        this.showApiError('执行自动备份失败', e);
+                    } finally {
+                        this.autoBackupLoading = false;
+                    }
+                },
+                async restoreLocalBackup(filename) {
+                    const name = (filename || '').toString().trim();
+                    if (!name) return;
+                    const ok = await this.openConfirmDialog({
+                        title: '确认恢复本机备份',
+                        message: `将从 ${name} 恢复；恢复前会自动执行健康检查，通过后覆盖当前数据库和上传文件，是否继续？`,
+                        confirmText: '确认恢复',
+                        cancelText: '取消',
+                        danger: true,
+                    });
+                    if (!ok) return;
+                    this.restoring = true;
+                    try {
+                        const res = await axios.post('/api/local-backups/restore', { filename: name });
+                        this.showToast(res.data?.message || '恢复成功', 'success');
+                        await this.refreshDataViews({ autocomplete: true });
+                        await this.loadSystemStatus();
+                    } catch (e) {
+                        this.showApiError('从本机备份恢复失败', e);
+                    } finally {
+                        this.restoring = false;
+                    }
+                },
                 formatCurrency(value) {
                     const amount = Number(value);
                     if (!Number.isFinite(amount)) return '0.00';
@@ -414,6 +548,65 @@
                         this.showToast('采购链接已复制', 'success');
                     } catch (_) {
                         this.showToast('复制失败，请手动复制', 'error');
+                    }
+                },
+                buildMobileLedgerDraft(item = {}) {
+                    return {
+                        serial_number: item.serial_number || '',
+                        department: item.department || '',
+                        handler: item.handler || '',
+                        request_date: item.request_date || '',
+                        item_name: item.item_name || '',
+                        quantity: Number(item.quantity) || 1,
+                        unit_price: item.unit_price ?? '',
+                        supplier_id: this.normalizeSupplierIdValue(item.supplier_id) || '',
+                        purchase_link: item.purchase_link || '',
+                        status: this.normalizeProcurementStatus(item.status) || item.status || '',
+                        invoice_issued: !!item.invoice_issued,
+                        payment_status: item.payment_status || '',
+                        arrival_date: item.arrival_date || '',
+                        distribution_date: item.distribution_date || '',
+                        signoff_note: item.signoff_note || '',
+                    };
+                },
+                openMobileLedgerEdit(item) {
+                    if (!item?.id) return;
+                    this.mobileLedgerEditId = Number(item.id);
+                    this.mobileLedgerEditDraft = this.buildMobileLedgerDraft(item);
+                    this.showMobileLedgerEditModal = true;
+                },
+                closeMobileLedgerEdit() {
+                    if (this.mobileLedgerEditSaving) return;
+                    this.showMobileLedgerEditModal = false;
+                    this.mobileLedgerEditId = null;
+                    this.mobileLedgerEditDraft = null;
+                },
+                async saveMobileLedgerEdit() {
+                    if (this.mobileLedgerEditSaving || !this.mobileLedgerEditId || !this.mobileLedgerEditDraft) return;
+                    this.mobileLedgerEditSaving = true;
+                    try {
+                        const payload = this.normalizeItemUpdatePayload({
+                            ...this.mobileLedgerEditDraft,
+                            unit_price: this.mobileLedgerEditDraft.unit_price === '' ? null : this.mobileLedgerEditDraft.unit_price,
+                            supplier_id: this.mobileLedgerEditDraft.supplier_id || null,
+                        });
+                        await axios.put(`/api/items/${this.mobileLedgerEditId}`, payload);
+                        const current = this.items.find((entry) => Number(entry?.id) === Number(this.mobileLedgerEditId));
+                        if (current) {
+                            Object.assign(current, {
+                                ...payload,
+                                status: this.normalizeProcurementStatus(payload.status) || payload.status,
+                            });
+                        }
+                        await this.refreshDataViews({ items: false, execution: false });
+                        this.showToast('记录已保存', 'success');
+                        this.showMobileLedgerEditModal = false;
+                        this.mobileLedgerEditId = null;
+                        this.mobileLedgerEditDraft = null;
+                    } catch (e) {
+                        this.showApiError('保存记录失败', e);
+                    } finally {
+                        this.mobileLedgerEditSaving = false;
                     }
                 },
                 isValidView(view) {
@@ -541,6 +734,10 @@
                         if (forceReload || !this.operationsCenterInitialized) {
                             this.loadOperationsCenter();
                         }
+                        return;
+                    }
+                    if (normalized === 'settings') {
+                        this.loadSystemStatus(forceReload);
                     }
                 },
                 switchView(view, forceReload = false, syncHash = true, subview = null) {
