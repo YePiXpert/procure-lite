@@ -2,7 +2,7 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
     <meta http-equiv="Pragma" content="no-cache">
     <meta http-equiv="Expires" content="0">
@@ -45,13 +45,13 @@
             }
         </style>
 </head>
-    <body class="flex h-screen w-full bg-slate-50 overflow-hidden text-slate-900">
-    <div id="app" class="flex h-screen w-full overflow-hidden" style="display:none;">
+    <body class="app-body flex h-screen w-full bg-slate-50 overflow-hidden text-slate-900">
+    <div id="app" class="app-shell flex h-screen w-full overflow-hidden" style="display:none;">
         <input type="file" ref="fileInput" @change="handleFileSelect" accept=".pdf,.png,.jpg,.jpeg,.jfif" class="hidden">
         <input type="file" ref="restoreInput" @change="handleRestoreSelect" accept=".zip" class="hidden">
 
         <template v-if="isAuthenticated">
-        <aside class="w-64 shrink-0 bg-white border-r border-slate-200 flex flex-col">
+        <aside class="app-sidebar w-64 shrink-0 bg-white border-r border-slate-200 flex flex-col">
             <div class="h-16 px-5 border-b border-slate-200 flex items-center gap-3">
                 <div class="w-9 h-9 rounded-lg bg-blue-600 flex items-center justify-center text-white shadow-sm">
                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2"/></svg>
@@ -121,8 +121,8 @@
             </div>
         </aside>
 
-        <div class="flex-1 min-w-0 flex flex-col">
-            <header class="bg-white border-b border-slate-200">
+        <div class="app-content flex-1 min-w-0 flex flex-col">
+            <header class="app-header bg-white border-b border-slate-200">
                 <div class="px-6 py-4">
                     <div class="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
                         <div class="min-w-0">
@@ -164,7 +164,7 @@
                 </div>
             </header>
 
-            <main class="flex-1 min-h-0 p-6 overflow-hidden">
+            <main class="app-main flex-1 min-h-0 p-6 overflow-hidden">
                 <section v-if="currentView === 'dashboard'" class="dashboard-pane view-pane h-full overflow-y-auto space-y-6 pr-1">
                     <div class="dashboard-hero">
                         <div class="dashboard-hero-copy">
@@ -365,7 +365,7 @@
                         <button @click="clearExecutionFilter" :disabled="executionLoading || !executionBoardFilterActive" class="execution-filter-button">清除筛选</button>
                     </div>
 
-                    <div class="flex-1 min-h-0 overflow-auto pr-1">
+                    <div class="execution-board-scroll flex-1 min-h-0 overflow-auto pr-1">
                         <div v-if="executionLoading" class="h-full min-h-[360px] flex flex-col items-center justify-center text-slate-500">
                             <svg class="w-6 h-6 animate-spin text-blue-600" viewBox="0 0 24 24" fill="none">
                                 <circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="3" class="opacity-25"></circle>
@@ -373,7 +373,7 @@
                             </svg>
                             <p class="mt-3 text-sm font-medium">执行看板加载中...</p>
                         </div>
-                        <div v-else class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 min-h-full">
+                        <div v-else class="execution-board-grid grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 min-h-full">
                             <div
                                 v-for="(column, columnIdx) in executionBoardColumns"
                                 :key="column.key"
@@ -411,7 +411,7 @@
                                     </div>
                                 </div>
                                 <div
-                                    class="flex-1 overflow-y-auto p-3 space-y-3"
+                                    class="execution-card-list flex-1 overflow-y-auto p-3 space-y-3"
                                     @dragover.prevent="onExecutionDragOver($event, column)"
                                     @dragenter.prevent="onExecutionDragEnter(column)"
                                     @dragleave="onExecutionDragLeave($event, column)"

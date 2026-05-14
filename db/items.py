@@ -532,11 +532,11 @@ async def get_execution_board(
         "SELECT status, COUNT(*) FROM items"
         " WHERE " + " AND ".join(base_conditions) + " GROUP BY status"
     )
-    count_named: dict = {f"p{i}": v for i, v in enumerate(count_params)}
+    count_text_query, count_named = _build_text_query(count_query, count_params)
     count_named.update({f"sv{i}": v for i, v in enumerate(status_values)})
 
     async with AsyncSessionLocal() as session:
-        count_result = await session.execute(text(count_query), count_named)
+        count_result = await session.execute(count_text_query, count_named)
         counts_by_status = {row[0]: int(row[1]) for row in count_result.fetchall()}
 
         for key, status in EXECUTION_BOARD_COLUMNS:
@@ -546,8 +546,6 @@ async def get_execution_board(
                 month=month,
                 keyword=keyword,
             )
-            named = {f"p{i}": v for i, v in enumerate(params)}
-            named["limit"] = limit_per_status
 
             list_query = (
                 "SELECT id, serial_number, department, handler, request_date,"
@@ -559,7 +557,9 @@ async def get_execution_board(
             if conditions:
                 list_query += " WHERE " + " AND ".join(conditions)
             list_query += " ORDER BY created_at DESC, id DESC LIMIT :limit"
-            list_result = await session.execute(text(list_query), named)
+            list_text_query, named = _build_text_query(list_query, params)
+            named["limit"] = limit_per_status
+            list_result = await session.execute(list_text_query, named)
             items = [dict(row) for row in list_result.mappings().all()]
 
             count = counts_by_status.get(status, 0)
