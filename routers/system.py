@@ -26,6 +26,7 @@ from backup_service import (
     restore_from_archive,
 )
 from database import init_db
+from db.orm import async_engine
 from time_utils import beijing_filename_timestamp
 from schemas import (
     BackupHealthCheckResponse,
@@ -107,6 +108,11 @@ def _run_init_db_sync() -> None:
         loop.run_until_complete(init_db())
     finally:
         loop.close()
+
+
+async def _release_db_handles_for_restore() -> None:
+    """Release pooled SQLite handles before replacing the database file."""
+    await async_engine.dispose()
 
 
 def _load_webdav_config() -> dict:
@@ -249,6 +255,7 @@ async def restore_data(file: UploadFile = File(...)):
     async with DATA_MUTATION_LOCK:
         MAINTENANCE_MODE.set()
         try:
+            await _release_db_handles_for_restore()
             result = await run_in_threadpool(
                 restore_from_archive, archive_path, _run_init_db_sync
             )
@@ -365,6 +372,7 @@ async def restore_from_webdav(request: WebDAVRestoreRequest):
             await run_in_threadpool(
                 download_backup_to_file, config, filename, archive_path
             )
+            await _release_db_handles_for_restore()
             result = await run_in_threadpool(
                 restore_from_archive, archive_path, _run_init_db_sync
             )

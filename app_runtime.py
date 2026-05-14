@@ -3,25 +3,17 @@ from pathlib import Path
 
 
 def resolve_runtime_dir() -> Path:
-    """运行目录。"""
+    """Return the application source directory."""
     return Path(__file__).resolve().parent
 
 
 def resolve_static_dir() -> Path:
-    """静态资源目录。"""
-    candidates = [
-        Path(__file__).resolve().parent / "static",
-        Path.cwd() / "static",
-    ]
-
-    for path in candidates:
-        if path.exists():
-            return path
-    return candidates[0]
+    """Return the bundled static asset directory."""
+    return resolve_runtime_dir() / "static"
 
 
 def _ensure_writable_dir(path: Path) -> None:
-    """创建目录并通过临时文件验证可写权限。"""
+    """Create a directory and verify it can be written."""
     path.mkdir(parents=True, exist_ok=True)
     probe_file = path / ".test_write"
     try:
@@ -33,7 +25,7 @@ def _ensure_writable_dir(path: Path) -> None:
             pass
 
 
-def _resolve_override_dir(env_var_name: str) -> Path | None:
+def _resolve_env_dir(env_var_name: str) -> Path | None:
     raw_value = os.environ.get(env_var_name, "").strip()
     if not raw_value:
         return None
@@ -43,31 +35,40 @@ def _resolve_override_dir(env_var_name: str) -> Path | None:
     return override_path
 
 
-def resolve_data_dir() -> Path:
-    """优先使用程序目录下 data/，不可写时回退到 APPDATA。"""
-    override_dir = _resolve_override_dir("OFFICE_SUPPLIES_DATA_DIR")
-    if override_dir is not None:
-        _ensure_writable_dir(override_dir)
-        return override_dir
+def resolve_state_dir() -> Path:
+    """Return the Docker-mounted state directory.
 
-    runtime_data_dir = resolve_runtime_dir() / "data"
-    try:
-        _ensure_writable_dir(runtime_data_dir)
-        return runtime_data_dir
-    except (PermissionError, OSError):
-        fallback_data_dir = (
-            Path(os.environ.get("APPDATA", "~")).expanduser()
-            / "OfficeSuppliesTracker"
-            / "data"
-        )
-        _ensure_writable_dir(fallback_data_dir)
-        return fallback_data_dir
+    VPS deployments should mount this directory as a persistent Docker volume.
+    ``OFFICE_SUPPLIES_DATA_DIR`` remains supported for existing compose files.
+    """
+    state_dir = _resolve_env_dir("OFFICE_SUPPLIES_STATE_DIR")
+    if state_dir is not None:
+        _ensure_writable_dir(state_dir)
+        return state_dir
+
+    data_dir = _resolve_env_dir("OFFICE_SUPPLIES_DATA_DIR")
+    if data_dir is not None:
+        _ensure_writable_dir(data_dir)
+        return data_dir.parent
+
+    default_state_dir = resolve_runtime_dir() / "state"
+    _ensure_writable_dir(default_state_dir)
+    return default_state_dir
+
+
+def resolve_data_dir() -> Path:
+    """Return the SQLite data directory inside the state directory."""
+    data_dir = _resolve_env_dir("OFFICE_SUPPLIES_DATA_DIR")
+    if data_dir is None:
+        data_dir = resolve_state_dir() / "data"
+    _ensure_writable_dir(data_dir)
+    return data_dir
 
 
 RUNTIME_DIR = resolve_runtime_dir()
 STATIC_DIR = resolve_static_dir()
 DATA_DIR = resolve_data_dir()
-APP_STATE_DIR = DATA_DIR.parent
+APP_STATE_DIR = resolve_state_dir()
 LOG_DIR = APP_STATE_DIR / "logs"
 LOG_DIR.mkdir(parents=True, exist_ok=True)
 UPLOAD_DIR = APP_STATE_DIR / "uploads"

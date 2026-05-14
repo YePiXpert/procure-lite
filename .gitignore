@@ -11,7 +11,7 @@ venv/
 .env.*
 !.env.example
 .pytest_cache/
-.tmp-pytest-temp/
+.tmp-pytest-*/
 outputs/
 *.db
 *.db-wal
@@ -23,6 +23,7 @@ outputs/
 .restore_uploads_snapshot_*
 data/*
 !data/.gitkeep
+state/
 office-supplies-state/
 samples/regression/last_report.json
 samples/regression/pdf_text/*

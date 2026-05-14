@@ -1,7 +1,7 @@
 from enum import Enum
 from app_runtime import DATA_DIR
 
-# 使用可写数据目录（安装到 Program Files 时自动回退到 APPDATA）。
+# SQLite database stored in the Docker-mounted state directory.
 DB_PATH = str((DATA_DIR / "office_supplies.db").resolve())
 
 ALLOWED_COLUMNS = frozenset({

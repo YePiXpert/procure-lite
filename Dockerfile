@@ -2,7 +2,7 @@ FROM python:3.11-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    OFFICE_SUPPLIES_DATA_DIR=/app/state/data \
+    OFFICE_SUPPLIES_STATE_DIR=/app/state \
     OFFICE_AUTH_COOKIE_SECURE=auto
 
 WORKDIR /app
@@ -21,7 +21,14 @@ ENV PIP_DISABLE_PIP_VERSION_CHECK=1 \
     PIP_DEFAULT_TIMEOUT=120
 RUN python -m pip install --no-cache-dir --prefer-binary -r /app/requirements-server.txt
 
-COPY . /app
+COPY VERSION /app/VERSION
+COPY alembic.ini /app/alembic.ini
+COPY *.py /app/
+COPY alembic /app/alembic
+COPY db /app/db
+COPY parser /app/parser
+COPY routers /app/routers
+COPY static /app/static
 
 RUN mkdir -p /app/state/data /app/state/uploads /app/state/logs
 

@@ -6,7 +6,7 @@ services:
     ports:
       - "${OFFICE_SUPPLIES_PORT:-8000}:8000"
     environment:
-      OFFICE_SUPPLIES_DATA_DIR: /app/state/data
+      OFFICE_SUPPLIES_STATE_DIR: /app/state
       OFFICE_AUTH_COOKIE_SECURE: ${OFFICE_AUTH_COOKIE_SECURE:-auto}
     volumes:
       - ./office-supplies-state:/app/state
