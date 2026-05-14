@@ -2230,4 +2230,154 @@ body {
     text-shadow: 0 0 20px rgba(59, 130, 246, 0.15);
 }
 
+@media (max-width: 1023px) {
+    html,
+    body {
+        height: auto;
+        min-height: 100%;
+        overflow-x: hidden;
+        overflow-y: auto;
+    }
+
+    body.app-body,
+    #app.app-shell,
+    .app-body,
+    .app-shell {
+        height: auto;
+        min-height: 100dvh;
+    }
+
+    body.app-body,
+    .app-body {
+        position: static;
+        inset: auto;
+        overscroll-behavior-y: auto;
+        overflow-x: hidden;
+        overflow-y: auto;
+    }
+
+    #app.app-shell,
+    #app {
+        height: auto;
+        min-height: 100dvh;
+        overflow: visible;
+    }
+
+    #app > .flex-1,
+    #app .app-content,
+    #app .app-main {
+        overflow: visible;
+    }
+
+    #app main {
+        flex: 0 0 auto;
+    }
+
+    #app .view-pane {
+        height: auto !important;
+        overflow: visible !important;
+    }
+
+    #app > aside > div:first-child {
+        height: 3rem;
+    }
+
+    #app > aside > div:first-child .text-\[11px\] {
+        display: none;
+    }
+
+    #app > aside nav,
+    #app > aside > div:last-child > .border-t {
+        padding: 0.35rem 0.5rem;
+        scrollbar-width: none;
+    }
+
+    #app > aside nav::-webkit-scrollbar,
+    #app > aside > div:last-child > .border-t::-webkit-scrollbar {
+        display: none;
+    }
+
+    #app > aside nav > .space-y-1,
+    #app > aside > div:last-child > .border-t {
+        gap: 0.4rem;
+    }
+
+    #app > aside nav button,
+    #app > aside > div:last-child > .border-t button {
+        height: 2rem;
+        border-radius: 0.5rem;
+        padding-left: 0.6rem;
+        padding-right: 0.6rem;
+        font-size: 0.78rem;
+        line-height: 1;
+    }
+
+    #app header > div {
+        padding: 0.55rem 0.75rem;
+    }
+
+    #app header .text-lg {
+        margin-top: 0.1rem;
+        font-size: 1rem;
+        line-height: 1.35;
+    }
+}
+
+@media (max-width: 767px) {
+    #app main {
+        padding: 0.65rem;
+        padding-bottom: calc(1rem + env(safe-area-inset-bottom));
+    }
+
+    #app .ledger-table-shell,
+    #app .ledger-table-scroll {
+        flex: 0 0 auto;
+        min-height: auto;
+        overflow: visible !important;
+    }
+
+    .ledger-filter-card {
+        padding: 0.65rem;
+    }
+
+    .ledger-filter-header {
+        gap: 0.55rem;
+    }
+
+    .ledger-filter-title {
+        font-size: 1rem;
+        line-height: 1.25;
+    }
+
+    .ledger-filter-actions,
+    .ledger-filter-row {
+        gap: 0.5rem;
+    }
+
+    .ledger-filter-actions button,
+    .ledger-filter-control,
+    .ledger-filter-row > button {
+        height: 2.2rem;
+        border-radius: 0.45rem;
+        font-size: 0.74rem;
+    }
+
+    .ledger-mobile-list {
+        padding: 0.65rem 0;
+    }
+
+    .ledger-table-footer {
+        margin-top: 0.25rem;
+        border-radius: 0.75rem;
+    }
+
+    .ledger-pagination {
+        scrollbar-width: none;
+    }
+
+    .ledger-pagination::-webkit-scrollbar {
+        display: none;
+    }
+}
+
 /* ───────────────────────────────────────────────────────────────────────── */
