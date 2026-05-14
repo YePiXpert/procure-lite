@@ -2766,13 +2766,37 @@ body {
         padding-right: 0.35rem;
     }
 
-    .ledger-mobile-field-grid,
+    .ledger-mobile-field-grid {
+        gap: 0.42rem;
+        padding: 0.58rem 0.65rem 0;
+    }
+
+    .ledger-mobile-field {
+        gap: 0.18rem;
+    }
+
     .ledger-mobile-field-wide {
-        display: none;
+        padding: 0.5rem 0.65rem 0;
+    }
+
+    .ledger-mobile-field span {
+        font-size: 0.6rem;
+        line-height: 1.15;
+    }
+
+    .ledger-mobile-field input {
+        height: 1.9rem;
+        border-radius: 0.45rem;
+        padding: 0 0.48rem;
+        font-size: 0.72rem;
+    }
+
+    .ledger-mobile-field-wide + .ledger-mobile-field-wide {
+        padding-top: 0.42rem;
     }
 
     .ledger-mobile-card-actions {
-        padding: 0 0.65rem 0.65rem;
+        padding: 0.55rem 0.65rem 0.65rem;
     }
 
     .ledger-mobile-action-button {
