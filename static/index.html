@@ -1085,11 +1085,11 @@
                                     <div class="auto-backup-status-grid">
                                         <div>
                                             <span>上次成功</span>
-                                            <strong>{{ formatDateTime(autoBackupConfig.lastSuccessAt, '尚未成功') }}</strong>
+                                            <strong>{{ formatBeijingDateTime(autoBackupConfig.lastSuccessAt, '尚未成功') }}</strong>
                                         </div>
                                         <div>
                                             <span>下次执行</span>
-                                            <strong>{{ autoBackupConfig.enabled ? formatDateTime(autoBackupConfig.nextRunAt, '即将执行') : '已关闭' }}</strong>
+                                            <strong>{{ autoBackupConfig.enabled ? formatBeijingDateTime(autoBackupConfig.nextRunAt, '即将执行') : '已关闭' }}</strong>
                                         </div>
                                         <div>
                                             <span>最近文件</span>
@@ -1109,7 +1109,7 @@
                                         <div v-for="file in recentLocalBackups()" :key="file.name" class="local-backup-item">
                                             <div class="min-w-0">
                                                 <div class="local-backup-name">{{ file.name }}</div>
-                                                <div class="local-backup-meta">{{ formatDateTime(file.modified_at, '-') }} · {{ formatFileSize(file.size) }}</div>
+                                                <div class="local-backup-meta">{{ formatBeijingDateTime(file.modified_at, '-') }} · {{ formatFileSize(file.size) }}</div>
                                             </div>
                                             <button @click="restoreLocalBackup(file.name)" :disabled="restoring" type="button">恢复</button>
                                         </div>

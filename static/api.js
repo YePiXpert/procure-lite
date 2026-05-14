@@ -996,6 +996,9 @@
                     }
                     return value ? String(value) : fallback;
                 },
+                formatDateTime(value, fallback = '-') {
+                    return this.formatBeijingDateTime(value, fallback);
+                },
                 daysSinceDateText(value) {
                     const normalized = this.normalizeDateText(value);
                     if (!/^\d{4}-\d{2}-\d{2}$/.test(normalized)) {
