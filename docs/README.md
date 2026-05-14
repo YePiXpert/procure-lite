@@ -3,12 +3,12 @@
 普通使用者优先阅读：
 
 - [使用说明](../USAGE.md)
-- [Docker 部署与运维](./shared-web-service.md)
+- [VPS 部署教程](./vps-deployment.md)
 
 维护者常用入口：
 
 - [回归样例说明](../samples/regression/README.md)
-- 构建脚本：`../scripts/`
+- 维护脚本：`../scripts/`
 - 测试目录：`../tests/`
 
 历史规划和需求记录已经归档到：

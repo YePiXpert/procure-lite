@@ -1,33 +1,38 @@
 # 使用说明
 
-本文档对应当前版本 `1.2.48`，面向日常使用和运维操作。
+本文档对应当前版本 `1.2.48`，面向日常使用和 VPS 运维操作。
 
 ## 1. 启动
 
-系统只通过 Docker Web 服务运行，适用于 Windows 电脑、手机、NAS、服务器或云主机共用同一套台账。
-
-Windows 上先安装并启动 Docker Desktop，然后在项目根目录双击：
-
-```text
-start_docker_server.bat
-```
-
-脚本会启动服务并打印访问地址：
-
-- Windows 本机打开 `http://localhost:8000`
-- 手机打开脚本打印的局域网地址，例如 `http://192.168.1.23:8000`
-
-默认端口是 `8000`。如需调整，修改 `.env` 中的 `OFFICE_SUPPLIES_PORT`。
-
-服务器、NAS 或云主机可直接运行：
+系统只通过 VPS Docker 服务运行。先在 VPS 上进入项目目录：
 
 ```bash
+cd office-supplies-tracker
 cp .env.example .env
 docker compose pull
 docker compose up -d
 ```
 
-更多步骤见 [Docker 部署与运维](./docs/shared-web-service.md)。
+默认端口是 `8000`。如需调整，修改 `.env` 中的 `OFFICE_SUPPLIES_PORT`：
+
+```bash
+OFFICE_SUPPLIES_PORT=8000
+OFFICE_AUTH_COOKIE_SECURE=auto
+```
+
+启动后访问：
+
+```text
+http://VPS公网IP:8000
+```
+
+如果已经配置域名和 HTTPS，则访问：
+
+```text
+https://你的域名
+```
+
+更多步骤见 [VPS 部署教程](./docs/vps-deployment.md)。
 
 ## 2. 首次使用
 
@@ -116,16 +121,16 @@ Docker 部署默认位于：
 office-supplies-state/
 ```
 
-首次运行 `start_docker_server.bat` 时，如果 `office-supplies-state/data/office_supplies.db` 不存在，脚本会自动查找旧 Windows 本地数据：
-
-- 项目目录下的 `data/office_supplies.db` 和 `uploads/`
-- `%APPDATA%\OfficeSuppliesTracker\data\office_supplies.db` 和对应的 `uploads/`
-
-找到旧数据后，脚本会复制到 `office-supplies-state/`。已有 Docker 数据不会被覆盖。
-
-迁移或备份 Docker 服务时，优先备份整个 `office-supplies-state/` 目录。
+迁移或备份 VPS 时，优先备份整个 `office-supplies-state/` 目录。
 
 ## 10. 常见问题
+
+### 页面打不开
+
+- VPS 安全组是否开放 `8000`，或域名反向代理是否已经生效
+- VPS 防火墙是否允许访问该端口
+- Docker 服务是否正在运行：`docker compose ps`
+- 访问的是 VPS 公网 IP 或域名，不是 `127.0.0.1` 或 `localhost`
 
 ### 解析效果不稳定
 
@@ -133,18 +138,12 @@ office-supplies-state/
 - 图片尽量保持清晰，裁掉无关区域
 - 导入前在预览页校正关键字段
 
-### 手机打不开
-
-- 手机和部署机器是否在同一个局域网
-- 手机访问的是局域网 IP，不是 `127.0.0.1` 或 `localhost`
-- Docker 服务是否正在运行
-- Windows 防火墙、服务器防火墙或云服务器安全组是否开放 `8000`
-
 ## 11. 更新、日志与停止
 
-更新到最新镜像：
+更新到最新代码和镜像：
 
 ```bash
+git pull --ff-only
 docker compose pull
 docker compose up -d
 ```

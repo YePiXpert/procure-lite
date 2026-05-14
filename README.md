@@ -4,28 +4,29 @@
 
 当前版本：`1.2.48`
 
-本项目只按 Docker Web 服务部署。Windows 电脑、手机、NAS、服务器或云主机都通过浏览器访问同一个地址、同一份数据。文档解析默认使用 PaddleOCR 本地离线处理，不需要 API Key，也不会把单据上传到云端解析服务。
+本项目只面向 VPS Docker 部署。服务运行在一台 Linux VPS 上，电脑和手机都通过浏览器访问同一个公网地址、同一份数据。文档解析默认使用 PaddleOCR 本地离线处理，不需要 API Key，也不会把单据上传到云端解析服务。
 
 ## 快速开始
 
-### Windows
+### 1. 准备 VPS
 
-先安装并启动 Docker Desktop，然后在项目根目录双击：
+需要一台已安装 Docker 和 Docker Compose 的 Linux VPS，并在云厂商安全组或防火墙开放访问端口，默认是 `8000`。
 
-```text
-start_docker_server.bat
-```
-
-脚本会创建 `.env`、拉取已发布镜像、启动 Docker Compose，并打印访问地址：
-
-- Windows 本机：`http://localhost:8000`
-- 手机/其他电脑：`http://电脑局域网IP:8000`
-
-如果检测到旧 Windows 版数据，并且 Docker 状态目录还没有数据库，脚本会自动把旧的 `office_supplies.db`、`uploads/`、WebDAV 配置和登录密钥复制到 `office-supplies-state/`，不会覆盖已有 Docker 数据。
-
-### Linux、NAS 或云主机
+Ubuntu/Debian 可参考：
 
 ```bash
+sudo apt update
+sudo apt install -y ca-certificates curl git
+curl -fsSL https://get.docker.com | sudo sh
+sudo usermod -aG docker $USER
+newgrp docker
+```
+
+### 2. 部署服务
+
+```bash
+git clone https://github.com/YePiXpert/office-supplies-tracker.git
+cd office-supplies-tracker
 cp .env.example .env
 docker compose pull
 docker compose up -d
@@ -34,10 +35,10 @@ docker compose up -d
 访问：
 
 ```text
-http://服务器IP:8000
+http://VPS公网IP:8000
 ```
 
-如果在公网使用，建议通过反向代理配置 HTTPS，并把外部域名转发到容器端口 `8000`。
+如果绑定域名，建议用 Caddy、Nginx 或宝塔面板配置 HTTPS，并把域名反向代理到 `127.0.0.1:8000`。
 
 ## 常用命令
 
@@ -49,6 +50,12 @@ docker compose up -d
 docker compose down
 ```
 
+也可以在 VPS 上运行：
+
+```bash
+./start.sh
+```
+
 ## 数据目录
 
 运行数据统一保存在：
@@ -57,7 +64,7 @@ docker compose down
 office-supplies-state/
 ```
 
-这个目录包含数据库、上传文件、日志、登录密钥和 WebDAV 配置。迁移或备份时，优先备份整个 `office-supplies-state/` 目录。
+这个目录包含数据库、上传文件、日志、登录密钥和 WebDAV 配置。迁移或备份 VPS 时，优先备份整个 `office-supplies-state/` 目录。
 
 ## 核心能力
 
@@ -71,5 +78,5 @@ office-supplies-state/
 ## 文档
 
 - [使用说明](./USAGE.md)
-- [Docker 部署与运维](./docs/shared-web-service.md)
+- [VPS 部署教程](./docs/vps-deployment.md)
 - [文档索引](./docs/README.md)
