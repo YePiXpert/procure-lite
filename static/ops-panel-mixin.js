@@ -23,8 +23,11 @@
         'Import task failed': '导入任务失败',
         'Reimbursement pending': '报销待跟进',
         'Purchase overdue': '采购超期',
+        'Purchase follow-up': '待下单跟进',
         'Arrival overdue': '到货超期',
+        'Receipt follow-up': '待收货跟进',
         'Distribution overdue': '分发超期',
+        'Import task running': '导入任务处理中',
     };
 
     const NOTIFICATION_CATEGORY_LABELS = {
@@ -32,6 +35,8 @@
         import: '导入',
         invoice: '发票',
         overdue: '执行超期',
+        purchase: '采购',
+        receipt: '收货',
     };
 
     const IMPORT_STATUS_ORDER = {
@@ -185,6 +190,29 @@
                         + this.pendingInvoices.length
                         + this.failedImportTasks.length
                     );
+            },
+            todayActionRows() {
+                const primaryRows = Array.isArray(this.actionQueues.all) ? this.actionQueues.all : [];
+                const fallbackRows = this.actionQueueBuckets.flatMap((bucket) => (
+                    Array.isArray(bucket.rows) ? bucket.rows : []
+                ));
+                return (primaryRows.length ? primaryRows : fallbackRows)
+                    .filter((row) => this.matchesQuery([
+                        row?.title,
+                        row?.detail,
+                        row?.item_name,
+                        row?.serial_number,
+                        row?.department,
+                        row?.handler,
+                        row?.file_name,
+                    ]))
+                    .slice(0, 8);
+            },
+            todayCriticalCount() {
+                return this.todayActionRows.filter((row) => row?.severity === 'critical').length;
+            },
+            todayWarningCount() {
+                return this.todayActionRows.filter((row) => row?.severity === 'warning').length;
             },
             activeSubview() {
                 return typeof this.$root.currentSubViewFor === 'function'
@@ -365,6 +393,76 @@
                 if (!Number.isFinite(value) || value < 0) return '--';
                 return `${this.formatCount(value)} 天`;
             },
+            todayDateText() {
+                return global.AppTime ? global.AppTime.todayDateText() : new Date().toISOString().slice(0, 10);
+            },
+            dateAfterDays(days) {
+                const offset = Number(days);
+                if (!Number.isFinite(offset) || offset < 0) return '';
+                const [year, month, day] = this.todayDateText().split('-').map((part) => Number(part));
+                if (!year || !month || !day) return '';
+                const date = new Date(year, month - 1, day);
+                date.setDate(date.getDate() + Math.round(offset));
+                const nextYear = date.getFullYear();
+                const nextMonth = String(date.getMonth() + 1).padStart(2, '0');
+                const nextDay = String(date.getDate()).padStart(2, '0');
+                return `${nextYear}-${nextMonth}-${nextDay}`;
+            },
+            priceMemoryForItem(item) {
+                const itemName = (item?.item_name || '').toString().trim().toLowerCase();
+                if (!itemName) return [];
+                return this.priceRecords
+                    .filter((record) => (record?.item_name || '').toString().trim().toLowerCase() === itemName)
+                    .slice(0, 3);
+            },
+            priceMemorySavingKey(item) {
+                const itemId = Number(item?.item_id || item?.id || 0);
+                const itemName = (item?.item_name || '').toString().trim();
+                return itemId ? `item-${itemId}` : `name-${itemName}`;
+            },
+            isPriceMemorySaving(item) {
+                return this.$root.priceMemorySavingKey === this.priceMemorySavingKey(item);
+            },
+            hasRecommendedSourcing(item) {
+                const leadTime = item?.recommended_lead_time_days;
+                return !!(
+                    item?.recommended_supplier_id
+                    || item?.recommended_supplier_name
+                    || item?.recommended_unit_price
+                    || item?.recommended_purchase_link
+                    || (leadTime !== null && leadTime !== undefined && leadTime !== '')
+                );
+            },
+            async applyRecommendedSourcing(item) {
+                if (!item) return;
+                const draft = this.ensurePurchaseOrderDraft(item);
+                const supplierId = item.recommended_supplier_id || item.supplier_id || item.item_supplier_id || '';
+                const updates = {};
+                if (supplierId) {
+                    draft.supplier_id = String(supplierId);
+                    updates.supplier_id = Number(supplierId);
+                }
+                if (item.recommended_unit_price !== null && item.recommended_unit_price !== undefined && item.recommended_unit_price !== '') {
+                    item.unit_price = Number(item.recommended_unit_price);
+                    updates.unit_price = item.unit_price;
+                }
+                if (item.recommended_purchase_link && !item.purchase_link) {
+                    item.purchase_link = item.recommended_purchase_link;
+                    updates.purchase_link = item.purchase_link;
+                }
+                if (!draft.expected_arrival_date && item.recommended_lead_time_days !== null && item.recommended_lead_time_days !== undefined) {
+                    draft.expected_arrival_date = this.dateAfterDays(item.recommended_lead_time_days);
+                }
+                if (!draft.ordered_date) {
+                    draft.ordered_date = this.todayDateText();
+                }
+                const itemId = Number(item.item_id || 0);
+                if (itemId && Object.keys(updates).length) {
+                    const ok = await this.$root.updateItem(itemId, updates);
+                    if (!ok) return;
+                }
+                this.$root.showToast('已填入推荐供应商、价格和交期', 'success');
+            },
             importStatusLabel(status) {
                 return IMPORT_STATUS_LABELS[status] || (status || '未知');
             },
@@ -437,6 +535,173 @@
                     return '该条目已到货但分发超期，建议尽快安排发放或补签收。';
                 }
                 return (notification?.detail || '').toString().trim() || '请尽快处理该提醒。';
+            },
+            actionRowDetailText(row) {
+                const title = row?.title || '';
+                const itemName = (row?.item_name || row?.file_name || '').toString().trim();
+                if (title === 'Low stock warning') {
+                    return `${itemName || '库存条目'} 低于安全线，建议补货 ${this.formatCount(row?.recommended_quantity)}。`;
+                }
+                if (title === 'Purchase overdue' || title === 'Purchase follow-up') {
+                    return `${itemName || '采购条目'} 已等待 ${this.formatCount(row?.age_days)} 天，建议确认供应商并完成下单。`;
+                }
+                if (title === 'Arrival overdue' || title === 'Receipt follow-up') {
+                    const overdue = Number(row?.overdue_days || 0);
+                    if (overdue > 0) {
+                        return `${itemName || '采购条目'} 到货已超期 ${this.formatCount(overdue)} 天，建议催货并同步到货日期。`;
+                    }
+                    return `${itemName || '采购条目'} 已下单 ${this.formatCount(row?.age_days)} 天，建议跟进收货。`;
+                }
+                if (title === 'Reimbursement pending') {
+                    return `${itemName || '报销条目'} 已等待 ${this.formatCount(row?.age_days)} 天，建议补发票号、附件或报销状态。`;
+                }
+                if (title === 'Import task failed' || title === 'Import task running') {
+                    return (row?.note || row?.detail || itemName || '导入任务需要跟进').toString();
+                }
+                return this.notificationDetailText(row);
+            },
+            actionMetaText(row) {
+                const meta = [
+                    this.notificationCategoryText(row?.category || row?.bucket),
+                    row?.serial_number,
+                    row?.department,
+                    row?.supplier_name,
+                    row?.due_date ? `目标 ${this.formatDate(row.due_date)}` : '',
+                ].filter(Boolean);
+                return meta.join(' · ');
+            },
+            actionButtonText(row) {
+                if (row?.related_item_id) return '定位台账';
+                if (row?.category === 'import') return '查看导入';
+                if (row?.category === 'inventory') return '查看补货';
+                return '处理';
+            },
+            actionCardClass(row) {
+                return {
+                    critical: 'ops-action-card-critical',
+                    warning: 'ops-action-card-warning',
+                    notice: 'ops-action-card-notice',
+                }[row?.severity] || 'ops-action-card-notice';
+            },
+            actionRowCategory(row) {
+                return (row?.category || row?.bucket || '').toString();
+            },
+            actionSourceItem(row) {
+                const category = this.actionRowCategory(row);
+                const itemId = Number(row?.item_id || row?.related_item_id || 0);
+                const orderId = Number(row?.purchase_order_id || 0);
+                if (category === 'purchase') {
+                    return this.purchaseQueue.find((item) => Number(item?.item_id || 0) === itemId)
+                        || { ...row, item_id: itemId };
+                }
+                if (category === 'receipt') {
+                    return this.receiptQueue.find((item) => (
+                        (orderId && Number(item?.purchase_order_id || 0) === orderId)
+                        || (itemId && Number(item?.item_id || 0) === itemId)
+                    )) || { ...row, item_id: itemId, purchase_order_id: orderId };
+                }
+                if (category === 'invoice') {
+                    return this.invoiceQueue.find((item) => Number(item?.item_id || 0) === itemId)
+                        || { ...row, item_id: itemId };
+                }
+                return row;
+            },
+            quickActionsForRow(row) {
+                const category = this.actionRowCategory(row);
+                if (category === 'purchase' && Number(row?.related_item_id || row?.item_id || 0)) {
+                    return [{ key: 'order', label: '快速下单', className: 'ops-action-quick-primary' }];
+                }
+                if (category === 'receipt' && Number(row?.purchase_order_id || 0)) {
+                    return [{ key: 'receipt', label: '确认收货', className: 'ops-action-quick-dark' }];
+                }
+                if (category === 'invoice' && (row?.queue_status || 'pending') === 'pending') {
+                    return [{ key: 'invoice-submitted', label: '标记报销提交', className: 'ops-action-quick-blue' }];
+                }
+                return [];
+            },
+            isQuickActionSaving(row, actionKey) {
+                const source = this.actionSourceItem(row);
+                if (actionKey === 'order') {
+                    return Number(this.$root.purchaseOrderSavingItemId || 0) === Number(source?.item_id || 0);
+                }
+                if (actionKey === 'receipt') {
+                    return Number(this.$root.purchaseReceiptSavingOrderId || 0) === Number(source?.purchase_order_id || 0);
+                }
+                if (actionKey === 'invoice-submitted') {
+                    return Number(this.$root.invoiceSavingItemId || 0) === Number(source?.item_id || 0);
+                }
+                return false;
+            },
+            async runQuickAction(row, actionKey) {
+                if (this.isQuickActionSaving(row, actionKey)) return;
+                if (actionKey === 'order') {
+                    await this.quickOrderAction(row);
+                } else if (actionKey === 'receipt') {
+                    await this.quickReceiptAction(row);
+                } else if (actionKey === 'invoice-submitted') {
+                    await this.quickInvoiceSubmittedAction(row);
+                }
+            },
+            async quickOrderAction(row) {
+                const source = this.actionSourceItem(row);
+                const itemId = Number(source?.item_id || 0);
+                if (!itemId) return;
+                const draft = this.ensurePurchaseOrderDraft(source);
+                const supplierId = draft.supplier_id
+                    || source?.supplier_id
+                    || source?.recommended_supplier_id
+                    || source?.item_supplier_id
+                    || '';
+                draft.supplier_id = supplierId ? String(supplierId) : '';
+                draft.status = 'ordered';
+                if (!draft.ordered_date) {
+                    draft.ordered_date = this.todayDateText();
+                }
+                if (!draft.expected_arrival_date && source?.recommended_lead_time_days !== null && source?.recommended_lead_time_days !== undefined) {
+                    draft.expected_arrival_date = this.dateAfterDays(source.recommended_lead_time_days);
+                }
+                await this.$root.savePurchaseOrder(source);
+            },
+            async quickReceiptAction(row) {
+                const source = this.actionSourceItem(row);
+                const orderId = Number(source?.purchase_order_id || 0);
+                if (!orderId) return;
+                const draft = this.ensureReceiptDraft(source);
+                if (!draft.received_date) {
+                    draft.received_date = this.todayDateText();
+                }
+                if (draft.received_quantity === '' || draft.received_quantity === null || draft.received_quantity === undefined) {
+                    draft.received_quantity = source?.quantity || source?.received_quantity || '';
+                }
+                await this.$root.savePurchaseReceipt(source);
+            },
+            async quickInvoiceSubmittedAction(row) {
+                const source = this.actionSourceItem(row);
+                const itemId = Number(source?.item_id || 0);
+                if (!itemId) return;
+                const draft = this.ensureInvoiceDraft(source);
+                draft.reimbursement_status = 'submitted';
+                if (!draft.reimbursement_date) {
+                    draft.reimbursement_date = this.todayDateText();
+                }
+                await this.$root.saveInvoiceRecord(source);
+            },
+            openActionRow(row) {
+                if (row?.related_item_id) {
+                    this.locateQueueItem(row);
+                    return;
+                }
+                if (row?.category === 'import') {
+                    this.$root.switchSubView('exceptions');
+                    this.openFullFollowup('ops-section-full-imports');
+                    return;
+                }
+                if (row?.category === 'invoice') {
+                    this.$root.switchSubView('exceptions');
+                    this.openFullFollowup('ops-section-full-invoices');
+                    return;
+                }
+                this.$root.switchSubView('procurement');
             },
             ensureInvoiceDraft(item) {
                 return this.$root.getInvoiceDraft(item);

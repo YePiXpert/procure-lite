@@ -97,6 +97,37 @@ async def _create_operations_schema(
                 """
             )
         )
+        await conn.execute(
+            text(
+                """
+                CREATE TABLE invoice_records (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    item_id INTEGER NOT NULL UNIQUE,
+                    reimbursement_status TEXT NOT NULL DEFAULT 'pending',
+                    reimbursement_date TEXT,
+                    invoice_number TEXT,
+                    note TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+                """
+            )
+        )
+        await conn.execute(
+            text(
+                """
+                CREATE TABLE invoice_attachments (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    invoice_record_id INTEGER NOT NULL,
+                    file_name TEXT NOT NULL,
+                    stored_name TEXT NOT NULL,
+                    mime_type TEXT,
+                    file_size INTEGER,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+                """
+            )
+        )
         await conn.execute(text("INSERT INTO suppliers (id, name) VALUES (1, '京东')"))
         await conn.execute(
             text(
@@ -200,3 +231,57 @@ async def test_upsert_purchase_receipt_rolls_back_when_order_update_fails(operat
     assert await _scalar(session_factory, "SELECT COUNT(1) FROM purchase_receipts") == 0
     assert await _scalar(session_factory, "SELECT status FROM purchase_orders WHERE id = 1") == "ordered"
     assert await _scalar(session_factory, "SELECT status FROM items WHERE id = 1") == ItemStatus.PENDING.value
+
+
+@pytest.mark.asyncio
+async def test_get_item_workflow_detail_loads_procurement_lifecycle(operations_db):
+    engine, _ = operations_db
+    await _create_operations_schema(engine)
+    async with engine.begin() as conn:
+        await conn.execute(
+            text(
+                """
+                INSERT INTO purchase_orders (
+                    id, item_id, supplier_id, ordered_date, expected_arrival_date, status, note
+                )
+                VALUES (1, 1, 1, '2024-01-02', '2024-01-05', 'received', 'urgent')
+                """
+            )
+        )
+        await conn.execute(
+            text(
+                """
+                INSERT INTO purchase_receipts (
+                    id, purchase_order_id, received_date, received_quantity, note
+                )
+                VALUES (1, 1, '2024-01-03', 10, 'ok')
+                """
+            )
+        )
+        await conn.execute(
+            text(
+                """
+                INSERT INTO invoice_records (
+                    id, item_id, reimbursement_status, reimbursement_date, invoice_number, note
+                )
+                VALUES (1, 1, 'submitted', '2024-01-08', 'INV-001', 'finance')
+                """
+            )
+        )
+        await conn.execute(
+            text(
+                """
+                INSERT INTO invoice_attachments (
+                    id, invoice_record_id, file_name, stored_name, mime_type, file_size
+                )
+                VALUES (1, 1, 'invoice.pdf', 'stored.pdf', 'application/pdf', 128)
+                """
+            )
+        )
+
+    detail = await operations.get_item_workflow_detail(1)
+
+    assert detail["purchase_order"]["supplier_name"] == "京东"
+    assert detail["purchase_receipt"]["received_quantity"] == 10
+    assert detail["invoice_record"]["invoice_number"] == "INV-001"
+    assert detail["invoice_attachments"][0]["download_url"] == "/api/ops/invoice-attachments/1/download"

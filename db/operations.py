@@ -727,6 +727,85 @@ async def upsert_purchase_receipt(purchase_order_id: int, payload: dict) -> int:
         return receipt_id
 
 
+async def get_item_workflow_detail(item_id: int) -> dict:
+    async with AsyncSessionLocal() as session:
+        order_result = await session.execute(
+            text(
+                """
+                SELECT po.id, po.item_id, po.supplier_id, s.name AS supplier_name,
+                       po.ordered_date, po.expected_arrival_date, po.status,
+                       po.note, po.created_at, po.updated_at
+                FROM purchase_orders po
+                LEFT JOIN suppliers s ON s.id = po.supplier_id
+                WHERE po.item_id = :item_id
+                LIMIT 1
+                """
+            ),
+            {"item_id": int(item_id)},
+        )
+        order_row = order_result.mappings().first()
+        purchase_order = dict(order_row) if order_row else None
+
+        purchase_receipt = None
+        if purchase_order:
+            receipt_result = await session.execute(
+                text(
+                    """
+                    SELECT id, purchase_order_id, received_date, received_quantity,
+                           note, created_at, updated_at
+                    FROM purchase_receipts
+                    WHERE purchase_order_id = :purchase_order_id
+                    LIMIT 1
+                    """
+                ),
+                {"purchase_order_id": int(purchase_order["id"])},
+            )
+            receipt_row = receipt_result.mappings().first()
+            purchase_receipt = dict(receipt_row) if receipt_row else None
+
+        invoice_result = await session.execute(
+            text(
+                """
+                SELECT id, item_id, reimbursement_status, reimbursement_date,
+                       invoice_number, note, created_at, updated_at
+                FROM invoice_records
+                WHERE item_id = :item_id
+                LIMIT 1
+                """
+            ),
+            {"item_id": int(item_id)},
+        )
+        invoice_row = invoice_result.mappings().first()
+        invoice_record = dict(invoice_row) if invoice_row else None
+
+        invoice_attachments: list[dict] = []
+        if invoice_record:
+            attachment_result = await session.execute(
+                text(
+                    """
+                    SELECT id, invoice_record_id, file_name, stored_name, mime_type,
+                           file_size, created_at
+                    FROM invoice_attachments
+                    WHERE invoice_record_id = :invoice_record_id
+                    ORDER BY created_at DESC, id DESC
+                    """
+                ),
+                {"invoice_record_id": int(invoice_record["id"])},
+            )
+            invoice_attachments = [dict(row) for row in attachment_result.mappings().all()]
+            for attachment in invoice_attachments:
+                attachment["download_url"] = (
+                    f"/api/ops/invoice-attachments/{attachment['id']}/download"
+                )
+
+    return {
+        "purchase_order": purchase_order,
+        "purchase_receipt": purchase_receipt,
+        "invoice_record": invoice_record,
+        "invoice_attachments": invoice_attachments,
+    }
+
+
 async def _fetch_price_memory(item_names: set[str]) -> dict[str, list[dict]]:
     if not item_names:
         return {}
@@ -792,11 +871,17 @@ def _pick_supplier_recommendation(
     selected_supplier_id = _safe_int(selected_row.get("supplier_id")) if selected_row else None
     return {
         "item_name": item_name,
+        "recommended_price_record_id": _safe_int(selected_row.get("id")) if selected_row else None,
         "recommended_supplier_id": selected_supplier_id or preferred_supplier_id,
         "recommended_supplier_name": (selected_row.get("supplier_name") if selected_row else None) or (inventory_profile.get("preferred_supplier_name") if inventory_profile else None),
         "recommended_unit_price": selected_price or None,
+        "recommended_purchase_link": selected_row.get("purchase_link") if selected_row else None,
         "recommended_lead_time_days": _safe_int(selected_row.get("lead_time_days")) if selected_row and selected_row.get("lead_time_days") is not None else None,
         "recommended_quantity": round(recommended_quantity, 2),
+        "latest_unit_price": latest_price or None,
+        "latest_supplier_name": latest_row.get("supplier_name") if latest_row else None,
+        "latest_purchase_date": latest_row.get("last_purchase_date") if latest_row else None,
+        "latest_purchase_link": latest_row.get("purchase_link") if latest_row else None,
         "shortage": round(shortage, 2),
         "recent_price_delta": round(selected_price - latest_price, 2) if selected_row and latest_row else 0.0,
         "price_record_count": len(price_rows),
@@ -959,6 +1044,10 @@ def _build_replenishment_actions(recommendations: list[dict]) -> list[dict]:
             "title": "Low stock warning",
             "detail": f"{row.get('item_name') or 'Unknown item'} stock {row.get('current_stock')} below threshold {row.get('low_stock_threshold')}; suggested {row.get('recommended_quantity')}",
             "related_item_id": None, "purchase_order_id": None, "due_date": None, "note": row.get("notes"),
+            "item_name": row.get("item_name"), "current_stock": row.get("current_stock"),
+            "low_stock_threshold": row.get("low_stock_threshold"),
+            "recommended_quantity": row.get("recommended_quantity"),
+            "supplier_name": row.get("recommended_supplier_name") or row.get("preferred_supplier_name"),
         })
     return actions
 
@@ -975,6 +1064,15 @@ def _build_purchase_actions(purchase_queue: list[dict]) -> list[dict]:
             "related_item_id": _safe_int(row.get("item_id")) or None,
             "purchase_order_id": _safe_int(row.get("purchase_order_id")) or None,
             "due_date": row.get("expected_arrival_date"), "note": row.get("purchase_note"),
+            "item_name": row.get("item_name"), "serial_number": row.get("serial_number"),
+            "department": row.get("department"), "handler": row.get("handler"),
+            "request_date": row.get("request_date"), "age_days": request_age_days,
+            "supplier_name": row.get("recommended_supplier_name") or row.get("supplier_name"),
+            "recommended_supplier_id": row.get("recommended_supplier_id"),
+            "recommended_unit_price": row.get("recommended_unit_price"),
+            "recommended_purchase_link": row.get("recommended_purchase_link"),
+            "recommended_lead_time_days": row.get("recommended_lead_time_days"),
+            "price_record_count": row.get("price_record_count"),
         })
     return actions
 
@@ -993,6 +1091,12 @@ def _build_receipt_actions(receipt_queue: list[dict]) -> list[dict]:
             "related_item_id": _safe_int(row.get("item_id")) or None,
             "purchase_order_id": _safe_int(row.get("purchase_order_id")) or None,
             "due_date": row.get("expected_arrival_date"), "note": row.get("purchase_note"),
+            "item_name": row.get("item_name"), "serial_number": row.get("serial_number"),
+            "department": row.get("department"), "handler": row.get("handler"),
+            "ordered_date": row.get("ordered_date"), "age_days": days_since_order,
+            "overdue_days": overdue_days, "supplier_name": row.get("supplier_name"),
+            "received_quantity": row.get("received_quantity"),
+            "quantity": row.get("quantity"),
         })
     return actions
 
@@ -1009,6 +1113,8 @@ def _build_import_actions(import_tasks: list[dict]) -> list[dict]:
             "title": "Import task failed" if status_val == "failed" else "Import task running",
             "detail": str(row.get("error_detail") or row.get("file_name") or "Unknown import task"),
             "related_item_id": None, "purchase_order_id": None, "due_date": None, "note": row.get("error_detail"),
+            "file_name": row.get("file_name"), "task_id": row.get("task_id"),
+            "updated_at": row.get("updated_at"), "engine": row.get("engine"),
         })
     return actions
 
@@ -1027,6 +1133,10 @@ def _build_invoice_actions(invoice_queue: list[dict]) -> list[dict]:
             "detail": f"{row.get('item_name') or 'Unknown item'} reimbursement is still {row.get('reimbursement_status') or 'pending'}",
             "related_item_id": _safe_int(row.get("item_id")) or None,
             "purchase_order_id": None, "due_date": row.get("reimbursement_date"), "note": row.get("note"),
+            "item_name": row.get("item_name"), "serial_number": row.get("serial_number"),
+            "department": row.get("department"), "handler": row.get("handler"),
+            "request_date": row.get("request_date"), "age_days": waiting_days,
+            "invoice_number": row.get("invoice_number"),
         })
     return actions
 

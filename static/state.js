@@ -324,6 +324,7 @@
                     purchaseOrderSavingItemId: null,
                     purchaseReceiptSavingOrderId: null,
                     invoiceSavingItemId: null,
+                    priceMemorySavingKey: '',
                     supplierSaving: false,
                     supplierEditSaving: false,
                     editingSupplier: null,

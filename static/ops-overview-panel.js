@@ -2,78 +2,129 @@
     global.OpsOverviewPanel = {
         mixins: [global.OpsPanelMixin],
         template: `
-            <div class="space-y-4">
-                <div class="grid grid-cols-1 xl:grid-cols-[1.6fr,1fr] gap-4">
-                    <div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-                        <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+            <div class="ops-overview space-y-4">
+                <section class="ops-command-hero">
+                    <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                        <div>
+                            <div class="ops-command-eyebrow">单用户采购运营台</div>
+                            <h3 class="ops-command-title">今天先处理 {{ formatCount(actionQueueCount) }} 项待办</h3>
+                            <p class="ops-command-copy">优先处理超期、待下单、待收货和报销闭环；供应商、价格和补货资料放在后面维护。</p>
+                        </div>
+                        <div class="ops-command-metrics">
+                            <span class="ops-command-metric ops-command-metric-danger">严重 {{ formatCount(todayCriticalCount) }}</span>
+                            <span class="ops-command-metric ops-command-metric-warning">提醒 {{ formatCount(todayWarningCount) }}</span>
+                            <span class="ops-command-metric">导入 {{ formatCount(importRecoveryTasks.length) }}</span>
+                            <span class="ops-command-metric">报销 {{ formatCount(pendingInvoices.length) }}</span>
+                        </div>
+                    </div>
+                    <div class="mt-5 flex flex-wrap gap-2">
+                        <button @click="$root.switchSubView('procurement')" class="btn-base btn-primary-lift !h-10 !px-4 !text-sm !font-semibold">
+                            进入采购跟进
+                        </button>
+                        <button @click="$root.switchSubView('exceptions')" class="btn-base !h-10 !px-4 !bg-white !border !border-slate-300 !text-slate-700 hover:!bg-slate-50 !text-sm !font-semibold">
+                            查看异常与报销
+                        </button>
+                        <button @click="$root.goToViewSubview('reports', 'suppliers')" class="btn-base !h-10 !px-4 !bg-white !border !border-slate-300 !text-slate-700 hover:!bg-slate-50 !text-sm !font-semibold">
+                            供应商报表
+                        </button>
+                    </div>
+                </section>
+
+                <div class="grid grid-cols-1 xl:grid-cols-[minmax(0,1.45fr),minmax(320px,0.75fr)] gap-4 items-start">
+                    <section class="ops-work-surface">
+                        <div class="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
                             <div>
-                                <div class="text-sm font-semibold text-slate-900">今天先做哪几步</div>
-                                <div class="mt-2 text-3xl font-semibold tracking-tight text-slate-900">{{ formatCount(actionQueueCount) }} 项待跟进</div>
-                                <div class="mt-2 text-sm text-slate-500">先处理执行超期、失败导入和待报销，再补供应商档案与价格基线；供应商走势统一去报表页查看和导出。</div>
+                                <h4 class="ops-section-title">今日行动队列</h4>
+                                <p class="ops-section-copy">按严重程度和到期时间排序，点击即可定位台账或进入对应处理区。</p>
                             </div>
-                            <div class="flex flex-wrap items-center gap-2 text-xs text-slate-500">
-                                <span class="inline-flex items-center rounded-full border border-rose-200 bg-rose-50 px-2.5 py-1">超期 {{ overdueNotifications.length }}</span>
-                                <span class="inline-flex items-center rounded-full border border-blue-200 bg-blue-50 px-2.5 py-1">导入恢复 {{ importRecoveryTasks.length }}</span>
-                                <span class="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1">待报销 {{ pendingInvoices.length }}</span>
-                                <span class="inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1">供应商 {{ activeSupplierCount }}</span>
-                            </div>
-                        </div>
-                        <div class="mt-4 flex flex-wrap gap-2">
-                            <button @click="$root.goToViewSubview('reports', 'suppliers')" class="h-10 px-4 rounded-lg bg-blue-600 text-white text-sm font-semibold hover:bg-blue-700 transition-all duration-200 ease-in-out">
-                                查看供应商报表
-                            </button>
-                            <button @click="$root.switchSubView('exceptions')" class="h-10 px-4 rounded-lg bg-white border border-slate-300 text-slate-700 text-sm font-medium hover:bg-slate-50 transition-all duration-200 ease-in-out">
-                                查看异常队列
-                            </button>
-                            <button @click="$root.switchSubView('exceptions')" class="h-10 px-4 rounded-lg bg-white border border-slate-300 text-slate-700 text-sm font-medium hover:bg-slate-50 transition-all duration-200 ease-in-out">
-                                跟进导入任务
-                            </button>
-                            <button @click="$root.switchSubView('master-data')" class="h-10 px-4 rounded-lg bg-white border border-slate-300 text-slate-700 text-sm font-medium hover:bg-slate-50 transition-all duration-200 ease-in-out">
-                                维护供应商资料
+                            <button @click="$root.loadOperationsCenter()" :disabled="$root.operationsCenterLoading" class="ops-secondary-button">
+                                {{ $root.operationsCenterLoading ? '同步中...' : '刷新待办' }}
                             </button>
                         </div>
-                    </div>
 
-                    <div class="rounded-2xl border border-slate-200 bg-slate-50 p-5 shadow-sm">
-                        <div class="text-sm font-semibold text-slate-900">这页现在做什么</div>
-                        <div class="mt-3 space-y-3 text-sm text-slate-600">
-                            <div class="rounded-xl border border-slate-200 bg-white px-4 py-3">
-                                <div class="font-semibold text-slate-900">做协同，不做大而全</div>
-                                <div class="mt-1 text-xs text-slate-500">保留供应商档案、价格记录、导入恢复和报销闭环，把库存和供应商评价类内容退出主流程。</div>
+                        <div class="mt-4 space-y-2">
+                            <div v-if="!todayActionRows.length" class="ops-empty-state">
+                                当前没有必须马上处理的待办。可以去采购跟进检查在途订单，或维护供应商和价格资料。
                             </div>
-                            <div class="rounded-xl border border-slate-200 bg-white px-4 py-3">
-                                <div class="font-semibold text-slate-900">把分析交回报表页</div>
-                                <div class="mt-1 text-xs text-slate-500">月度、年度采购额走势和供应商明细统一在"统计报表"里查看与导出，避免运营页继续膨胀。</div>
+                            <article
+                                v-for="row in todayActionRows"
+                                :key="'today-action-' + (row.bucket || row.category) + '-' + (row.related_item_id || row.purchase_order_id || row.task_id || row.item_name || row.title)"
+                                role="button"
+                                tabindex="0"
+                                @click="openActionRow(row)"
+                                @keydown.enter.prevent="openActionRow(row)"
+                                @keydown.space.prevent="openActionRow(row)"
+                                class="ops-action-card"
+                                :class="actionCardClass(row)"
+                            >
+                                <div class="ops-action-main">
+                                    <div class="flex flex-wrap items-center gap-2">
+                                        <span class="ops-action-tag">{{ notificationCategoryText(row.category || row.bucket) }}</span>
+                                        <span class="ops-action-severity">{{ notificationSeverityLabel(row.severity) }}</span>
+                                    </div>
+                                    <div class="mt-2 ops-action-title">{{ notificationTitleText(row) }}</div>
+                                    <div class="mt-1 ops-action-detail">{{ actionRowDetailText(row) }}</div>
+                                    <div v-if="actionMetaText(row)" class="mt-2 ops-action-meta">{{ actionMetaText(row) }}</div>
+                                </div>
+                                <div class="ops-action-side">
+                                    <div v-if="quickActionsForRow(row).length" class="ops-action-quick-list">
+                                        <button
+                                            v-for="action in quickActionsForRow(row)"
+                                            :key="'quick-action-' + action.key + '-' + (row.related_item_id || row.purchase_order_id || row.title)"
+                                            type="button"
+                                            @click.stop="runQuickAction(row, action.key)"
+                                            @keydown.enter.stop
+                                            @keydown.space.stop.prevent
+                                            :disabled="isQuickActionSaving(row, action.key)"
+                                            class="ops-action-quick"
+                                            :class="action.className"
+                                        >
+                                            {{ isQuickActionSaving(row, action.key) ? '处理中...' : action.label }}
+                                        </button>
+                                    </div>
+                                    <span class="ops-action-button">{{ actionButtonText(row) }}</span>
+                                </div>
+                            </article>
+                        </div>
+                    </section>
+
+                    <aside class="ops-work-surface">
+                        <h4 class="ops-section-title">闭环概览</h4>
+                        <p class="ops-section-copy">保持单用户模式，重点看流程是否卡住。</p>
+                        <div class="mt-4 grid grid-cols-2 gap-2">
+                            <button @click="$root.switchSubView('procurement')" class="ops-mini-stat ops-mini-stat-amber">
+                                <span>待下单</span>
+                                <strong>{{ formatCount(purchaseQueue.length) }}</strong>
+                            </button>
+                            <button @click="$root.switchSubView('procurement')" class="ops-mini-stat ops-mini-stat-blue">
+                                <span>待收货</span>
+                                <strong>{{ formatCount(receiptQueue.length) }}</strong>
+                            </button>
+                            <button @click="$root.switchSubView('exceptions')" class="ops-mini-stat ops-mini-stat-rose">
+                                <span>超期提醒</span>
+                                <strong>{{ formatCount(overdueNotifications.length) }}</strong>
+                            </button>
+                            <button @click="$root.switchSubView('exceptions')" class="ops-mini-stat ops-mini-stat-slate">
+                                <span>待报销</span>
+                                <strong>{{ formatCount(pendingInvoices.length) }}</strong>
+                            </button>
+                        </div>
+
+                        <div class="ops-guidance-list">
+                            <div class="ops-guidance-item">
+                                <span>1</span>
+                                <p>先把严重和超期项清空，避免真实阻塞沉到底部。</p>
                             </div>
-                            <div class="rounded-xl border border-slate-200 bg-white px-4 py-3">
-                                <div class="font-semibold text-slate-900">把真实待办放最前面</div>
-                                <div class="mt-1 text-xs text-slate-500">先处理超期、失败导入、待报销，再回头补供应商资料，不让配置型内容抢占注意力。</div>
+                            <div class="ops-guidance-item">
+                                <span>2</span>
+                                <p>下单和收货只维护必要字段，系统会自动推动台账状态。</p>
+                            </div>
+                            <div class="ops-guidance-item">
+                                <span>3</span>
+                                <p>供应商、价格、补货作为资料层沉淀，不引入多用户权限。</p>
                             </div>
                         </div>
-                    </div>
-                </div>
-
-                <div class="grid grid-cols-2 xl:grid-cols-4 gap-3">
-                    <button @click="$root.switchSubView('master-data')" class="text-left rounded-xl border border-emerald-200 bg-emerald-50 p-4 transition-all duration-200 ease-in-out hover:-translate-y-0.5 hover:shadow-sm">
-                        <div class="text-[11px] font-semibold uppercase tracking-wide text-emerald-700">供应商档案</div>
-                        <div class="mt-2 text-2xl font-semibold text-slate-900">{{ formatCount(suppliers.length) }}</div>
-                        <div class="mt-1 text-xs text-slate-600">当前可协同供应商数量</div>
-                    </button>
-                    <button @click="$root.switchSubView('master-data')" class="text-left rounded-xl border border-cyan-200 bg-cyan-50 p-4 transition-all duration-200 ease-in-out hover:-translate-y-0.5 hover:shadow-sm">
-                        <div class="text-[11px] font-semibold uppercase tracking-wide text-cyan-700">价格基线</div>
-                        <div class="mt-2 text-2xl font-semibold text-slate-900">{{ formatCount(priceRecords.length) }}</div>
-                        <div class="mt-1 text-xs text-slate-600">最近成交价与采购链接</div>
-                    </button>
-                    <button @click="$root.switchSubView('exceptions')" class="text-left rounded-xl border border-blue-200 bg-blue-50 p-4 transition-all duration-200 ease-in-out hover:-translate-y-0.5 hover:shadow-sm">
-                        <div class="text-[11px] font-semibold uppercase tracking-wide text-blue-700">导入恢复</div>
-                        <div class="mt-2 text-2xl font-semibold text-slate-900">{{ formatCount(importRecoveryTasks.length) }}</div>
-                        <div class="mt-1 text-xs text-slate-600">失败或处理中任务</div>
-                    </button>
-                    <button @click="$root.switchSubView('exceptions')" class="text-left rounded-xl border border-slate-200 bg-slate-50 p-4 transition-all duration-200 ease-in-out hover:-translate-y-0.5 hover:shadow-sm">
-                        <div class="text-[11px] font-semibold uppercase tracking-wide text-slate-600">发票报销</div>
-                        <div class="mt-2 text-2xl font-semibold text-slate-900">{{ formatCount(pendingInvoices.length) }}</div>
-                        <div class="mt-1 text-xs text-slate-600">待闭环条目</div>
-                    </button>
+                    </aside>
                 </div>
             </div>
         `,

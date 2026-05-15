@@ -26,6 +26,7 @@ from database import (
     list_suppliers,
     update_item,
 )
+from db.operations import get_item_workflow_detail
 from schemas import BatchUpdateRequest, ItemCreate, ItemRollbackRequest, ItemUpdate
 
 router = APIRouter(prefix="/api")
@@ -123,6 +124,7 @@ async def read_item(item_id: int):
     item = await get_item(item_id)
     if not item:
         raise HTTPException(status_code=404, detail="物品不存在")
+    item["workflow"] = await get_item_workflow_detail(item_id)
     return item
 
 

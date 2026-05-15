@@ -10,7 +10,7 @@
     <script src="/static/vendor/tailwindcss-cdn.js"></script>
     <script src="/static/vendor/vue.global.prod.js"></script>
     <script src="/static/vendor/axios.min.js"></script>
-    <link rel="stylesheet" href="/static/app.css?v=1.2.59">
+    <link rel="stylesheet" href="/static/app.css?v=1.2.61">
         <style>
             .toast-enter-active,
             .toast-leave-active {
@@ -1509,6 +1509,64 @@
                             </div>
                         </div>
 
+                        <div class="workflow-panel">
+                            <div class="workflow-panel-header">
+                                <div>
+                                    <div class="workflow-panel-eyebrow">Procurement lifecycle</div>
+                                    <h4 class="workflow-panel-title">采购闭环时间线</h4>
+                                </div>
+                                <div class="workflow-panel-note">
+                                    {{ invoiceAttachments.length }} 个发票附件
+                                </div>
+                            </div>
+                            <div class="workflow-steps">
+                                <div
+                                    v-for="step in workflowSteps"
+                                    :key="`workflow-step-${step.key}`"
+                                    class="workflow-step"
+                                    :class="workflowStepClass(step)"
+                                >
+                                    <div class="workflow-step-marker"></div>
+                                    <div class="workflow-step-body">
+                                        <div class="workflow-step-topline">
+                                            <span>{{ step.label }}</span>
+                                            <em>{{ workflowStateText(step) }}</em>
+                                        </div>
+                                        <div class="workflow-step-date">{{ formatDate(step.date) }}</div>
+                                        <div class="workflow-step-detail">{{ step.detail }}</div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="workflow-facts">
+                                <div>
+                                    <span>采购单</span>
+                                    <strong>{{ purchaseOrder ? purchaseStatusLabel(purchaseOrder.status) : '未创建' }}</strong>
+                                </div>
+                                <div>
+                                    <span>预计到货</span>
+                                    <strong>{{ formatDate(purchaseOrder && purchaseOrder.expected_arrival_date) }}</strong>
+                                </div>
+                                <div>
+                                    <span>发票号</span>
+                                    <strong>{{ invoiceRecord?.invoice_number || '未填写' }}</strong>
+                                </div>
+                                <div>
+                                    <span>报销备注</span>
+                                    <strong>{{ invoiceRecord?.note || '无' }}</strong>
+                                </div>
+                            </div>
+                            <div v-if="invoiceAttachments.length" class="workflow-attachments">
+                                <a
+                                    v-for="attachment in invoiceAttachments"
+                                    :key="`workflow-attachment-${attachment.id}`"
+                                    :href="attachment.download_url"
+                                    target="_blank"
+                                >
+                                    {{ attachment.file_name }}
+                                </a>
+                            </div>
+                        </div>
+
                         <div class="border border-slate-200 rounded-xl overflow-hidden">
                             <div class="px-4 py-3 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
                                 <div class="text-sm font-semibold text-slate-800">字段级审计时间轴</div>
@@ -2064,6 +2122,7 @@
                             <th class="px-4 py-3 text-center w-20">数量</th>
                             <th class="px-4 py-3 text-center w-24">单价(¥)</th>
                             <th class="px-4 py-3 text-center w-32">状态</th>
+                            <th class="px-4 py-3 min-w-[150px]">闭环阶段</th>
                             <th class="px-4 py-3 text-center min-w-[140px]">到货日期</th>
                             <th class="px-4 py-3 text-center min-w-[140px]">分发日期</th>
                             <th class="px-4 py-3 min-w-[180px]">签收备注</th>
@@ -2253,6 +2312,15 @@
                                     </div>
                                 </div>
                             </td>
+                            <td class="px-4 py-3 align-middle">
+                                <div class="ledger-workflow-stage" :class="$root.ledgerWorkflowStageClass(item)">
+                                    <span class="ledger-workflow-stage-dot"></span>
+                                    <div>
+                                        <strong>{{ $root.ledgerWorkflowStageLabel(item) }}</strong>
+                                        <em>{{ $root.ledgerWorkflowStageHint(item) }}</em>
+                                    </div>
+                                </div>
+                            </td>
                             <td class="px-4 py-3 text-center align-middle">
                                 <input
                                     type="date"
@@ -2386,6 +2454,16 @@
                             >
                                 <option v-for="p in paymentStatuses" :key="`mobile-payment-${item.id}-${p}`" :value="p">{{ p }}</option>
                             </select>
+                        </div>
+
+                        <div class="ledger-mobile-workflow-row">
+                            <div class="ledger-workflow-stage" :class="$root.ledgerWorkflowStageClass(item)">
+                                <span class="ledger-workflow-stage-dot"></span>
+                                <div>
+                                    <strong>{{ $root.ledgerWorkflowStageLabel(item) }}</strong>
+                                    <em>{{ $root.ledgerWorkflowStageHint(item) }}</em>
+                                </div>
+                            </div>
                         </div>
 
                         <div class="ledger-mobile-summary-grid">
@@ -2553,31 +2631,31 @@
         </div>
     </template>
     
-    <script src="/static/view-config.js?v=1.2.59"></script>
-    <script src="/static/time-utils.js?v=1.2.59"></script>
-    <script src="/static/state.js?v=1.2.59"></script>
-    <script src="/static/operations-center-api.js?v=1.2.59"></script>
-    <script src="/static/api.js?v=1.2.59"></script>
-    <script src="/static/ledger-filter-panel.js?v=1.2.59"></script>
-    <script src="/static/ledger-batch-toolbar.js?v=1.2.59"></script>
-    <script src="/static/ledger-table-panel.js?v=1.2.59"></script>
-    <script src="/static/ledger-detail-modal.js?v=1.2.59"></script>
-    <script src="/static/ledger-add-modal.js?v=1.2.59"></script>
-    <script src="/static/ops-panel-mixin.js?v=1.2.59"></script>
-    <script src="/static/ops-overview-panel.js?v=1.2.59"></script>
-    <script src="/static/ops-procurement-panel.js?v=1.2.59"></script>
-    <script src="/static/ops-master-data-panel.js?v=1.2.59"></script>
-    <script src="/static/ops-exceptions-panel.js?v=1.2.59"></script>
-    <script src="/static/settings-operations-panel.js?v=1.2.59"></script>
-    <script src="/static/settings-ai-panel.js?v=1.2.59"></script>
-    <script src="/static/settings-maintenance-panel.js?v=1.2.59"></script>
-    <script src="/static/webdav-modal.js?v=1.2.59"></script>
-    <script src="/static/audit-log-panel.js?v=1.2.59"></script>
-    <script src="/static/recycle-bin-modal.js?v=1.2.59"></script>
-    <script src="/static/data-quality-modal.js?v=1.2.59"></script>
-    <script src="/static/import-preview-modal.js?v=1.2.59"></script>
-    <script src="/static/duplicate-modal.js?v=1.2.59"></script>
-    <script src="/static/ui.js?v=1.2.59"></script>
+    <script src="/static/view-config.js?v=1.2.61"></script>
+    <script src="/static/time-utils.js?v=1.2.61"></script>
+    <script src="/static/state.js?v=1.2.61"></script>
+    <script src="/static/operations-center-api.js?v=1.2.61"></script>
+    <script src="/static/api.js?v=1.2.61"></script>
+    <script src="/static/ledger-filter-panel.js?v=1.2.61"></script>
+    <script src="/static/ledger-batch-toolbar.js?v=1.2.61"></script>
+    <script src="/static/ledger-table-panel.js?v=1.2.61"></script>
+    <script src="/static/ledger-detail-modal.js?v=1.2.61"></script>
+    <script src="/static/ledger-add-modal.js?v=1.2.61"></script>
+    <script src="/static/ops-panel-mixin.js?v=1.2.61"></script>
+    <script src="/static/ops-overview-panel.js?v=1.2.61"></script>
+    <script src="/static/ops-procurement-panel.js?v=1.2.61"></script>
+    <script src="/static/ops-master-data-panel.js?v=1.2.61"></script>
+    <script src="/static/ops-exceptions-panel.js?v=1.2.61"></script>
+    <script src="/static/settings-operations-panel.js?v=1.2.61"></script>
+    <script src="/static/settings-ai-panel.js?v=1.2.61"></script>
+    <script src="/static/settings-maintenance-panel.js?v=1.2.61"></script>
+    <script src="/static/webdav-modal.js?v=1.2.61"></script>
+    <script src="/static/audit-log-panel.js?v=1.2.61"></script>
+    <script src="/static/recycle-bin-modal.js?v=1.2.61"></script>
+    <script src="/static/data-quality-modal.js?v=1.2.61"></script>
+    <script src="/static/import-preview-modal.js?v=1.2.61"></script>
+    <script src="/static/duplicate-modal.js?v=1.2.61"></script>
+    <script src="/static/ui.js?v=1.2.61"></script>
     <script>
         window.addEventListener('load', () => {
             setTimeout(() => {

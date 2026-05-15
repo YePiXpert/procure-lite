@@ -498,6 +498,37 @@
                     }
                     return 'bg-slate-50 text-slate-700 border-slate-200 px-2';
                 },
+                ledgerWorkflowStage(item) {
+                    const status = this.normalizeProcurementStatus(item?.status);
+                    const paymentStatus = this.normalizeText(item?.payment_status);
+                    const invoiceIssued = item?.invoice_issued === true || item?.invoice_issued === 1;
+
+                    if (status === '待采购') {
+                        return { key: 'order', label: '待下单', hint: '确认供应商与采购单' };
+                    }
+                    if (status === '待到货') {
+                        return { key: 'receipt', label: '待收货', hint: '跟进预计到货' };
+                    }
+                    if (status === '待分发') {
+                        return { key: 'distribution', label: '待分发', hint: '到货后安排签收' };
+                    }
+                    if (status === '已分发' && paymentStatus === '已报销') {
+                        return { key: 'done', label: '已完成', hint: '采购闭环完成' };
+                    }
+                    if (status === '已分发' || invoiceIssued || paymentStatus === '已付款') {
+                        return { key: 'reimburse', label: '待报销', hint: '补发票/报销状态' };
+                    }
+                    return { key: 'order', label: '待下单', hint: '等待采购处理' };
+                },
+                ledgerWorkflowStageLabel(item) {
+                    return this.ledgerWorkflowStage(item).label;
+                },
+                ledgerWorkflowStageHint(item) {
+                    return this.ledgerWorkflowStage(item).hint;
+                },
+                ledgerWorkflowStageClass(item) {
+                    return `ledger-workflow-stage-${this.ledgerWorkflowStage(item).key}`;
+                },
                 async handleLedgerStatusChange(item, status) {
                     if (!item?.id) return;
                     const nextStatus = this.normalizeProcurementStatus(status);
@@ -1373,6 +1404,66 @@
                         this.showApiError('创建价格记录失败', e);
                     } finally {
                         this.priceSaving = false;
+                    }
+                },
+                async createPriceRecordFromPurchaseItem(item = {}) {
+                    const itemId = Number(item?.item_id || item?.id || 0);
+                    const itemName = (item?.item_name || '').toString().trim();
+                    const draft = this.getPurchaseOrderDraft({ ...item, item_id: itemId });
+                    const unitPriceCandidate = [
+                        item?.unit_price,
+                        item?.recommended_unit_price,
+                        item?.latest_unit_price,
+                    ].find((value) => value !== null && value !== undefined && `${value}`.trim() !== '');
+                    const unitPrice = Number(unitPriceCandidate);
+                    const leadTimeCandidate = [
+                        item?.recommended_lead_time_days,
+                        item?.latest_lead_time_days,
+                    ].find((value) => value !== null && value !== undefined && `${value}`.trim() !== '');
+                    const leadTimeDays = leadTimeCandidate === undefined ? null : Number(leadTimeCandidate);
+                    const supplierId = draft.supplier_id
+                        || item?.supplier_id
+                        || item?.recommended_supplier_id
+                        || item?.item_supplier_id
+                        || '';
+                    const purchaseLink = (
+                        item?.purchase_link
+                        || item?.recommended_purchase_link
+                        || item?.latest_purchase_link
+                        || ''
+                    ).toString().trim();
+
+                    if (!itemName) {
+                        this.showToast('未找到物品名称，无法沉淀价格记录', 'error');
+                        return;
+                    }
+                    if (!Number.isFinite(unitPrice) || unitPrice < 0) {
+                        this.showToast('请先录入本次单价，或选择带历史单价的推荐供应商', 'error');
+                        return;
+                    }
+                    if (leadTimeDays !== null && (!Number.isFinite(leadTimeDays) || leadTimeDays < 0)) {
+                        this.showToast('推荐交期无效，无法沉淀价格记录', 'error');
+                        return;
+                    }
+
+                    const savingKey = itemId ? `item-${itemId}` : `name-${itemName}`;
+                    this.priceMemorySavingKey = savingKey;
+                    try {
+                        await global.AppOperationsApi.createPriceRecord({
+                            item_name: itemName,
+                            supplier_id: supplierId ? Number(supplierId) : null,
+                            unit_price: unitPrice,
+                            purchase_link: purchaseLink || null,
+                            last_purchase_date: (draft.ordered_date || item?.ordered_date || (global.AppTime ? global.AppTime.todayDateText() : new Date().toISOString().slice(0, 10))).toString().trim() || null,
+                            last_serial_number: (item?.serial_number || '').toString().trim() || null,
+                            lead_time_days: leadTimeDays,
+                        });
+                        this.showToast('已沉淀为价格记忆', 'success');
+                        await this.loadOperationsCenter();
+                    } catch (e) {
+                        this.showApiError('沉淀价格记录失败', e);
+                    } finally {
+                        this.priceMemorySavingKey = '';
                     }
                 },
                 async saveInventoryProfile() {

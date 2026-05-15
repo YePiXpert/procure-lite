@@ -41,11 +41,56 @@
                                         定位台账
                                     </button>
                                 </div>
-                                <div class="mt-3 rounded-lg border border-cyan-200 bg-cyan-50/70 px-3 py-3 text-xs text-cyan-800">
-                                    推荐供应商：{{ item.recommended_supplier_name || '待补供应商' }}
-                                    <span v-if="item.recommended_unit_price"> · 推荐单价 ¥ {{ formatCurrencyValue(item.recommended_unit_price) }}</span>
-                                    <span v-if="item.recommended_lead_time_days !== null"> · 推荐交期 {{ formatLeadTime(item.recommended_lead_time_days) }}</span>
-                                    <span v-if="item.recommended_quantity"> · 建议下单 {{ formatCount(item.recommended_quantity) }}</span>
+                                <div class="mt-3 ops-sourcing-panel">
+                                    <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                                        <div>
+                                            <div class="ops-sourcing-title">推荐采购方案</div>
+                                            <div class="ops-sourcing-copy">
+                                                基于供应商偏好和最近成交价，先给出可直接套用的下单参数。
+                                            </div>
+                                        </div>
+                                        <button
+                                            v-if="hasRecommendedSourcing(item)"
+                                            type="button"
+                                            @click="applyRecommendedSourcing(item)"
+                                            class="ops-sourcing-apply"
+                                        >
+                                            套用推荐
+                                        </button>
+                                    </div>
+                                    <div class="ops-sourcing-grid">
+                                        <div>
+                                            <span>推荐供应商</span>
+                                            <strong>{{ item.recommended_supplier_name || item.item_supplier_name || '待补供应商' }}</strong>
+                                            <em>{{ item.price_record_count ? (formatCount(item.price_record_count) + ' 条价格记忆') : '暂无价格记忆' }}</em>
+                                        </div>
+                                        <div>
+                                            <span>历史单价</span>
+                                            <strong>{{ item.recommended_unit_price ? ('¥ ' + formatCurrencyValue(item.recommended_unit_price)) : '待录入' }}</strong>
+                                            <em v-if="item.latest_purchase_date">最近 {{ formatDate(item.latest_purchase_date) }}</em>
+                                            <em v-else>下单后可沉淀</em>
+                                        </div>
+                                        <div>
+                                            <span>参考交期</span>
+                                            <strong>{{ item.recommended_lead_time_days !== null && item.recommended_lead_time_days !== undefined ? formatLeadTime(item.recommended_lead_time_days) : '--' }}</strong>
+                                            <em v-if="item.recommended_quantity">建议下单 {{ formatCount(item.recommended_quantity) }}</em>
+                                            <em v-else>按本次申请数量</em>
+                                        </div>
+                                    </div>
+                                    <div v-if="priceMemoryForItem(item).length" class="ops-price-memory-list">
+                                        <div
+                                            v-for="record in priceMemoryForItem(item)"
+                                            :key="'purchase-price-memory-' + item.item_id + '-' + record.id"
+                                            class="ops-price-memory-row"
+                                        >
+                                            <span>{{ record.supplier_name || '未指定供应商' }}</span>
+                                            <strong>¥ {{ formatCurrencyValue(record.unit_price) }}</strong>
+                                            <em>{{ record.lead_time_days !== null && record.lead_time_days !== undefined ? formatLeadTime(record.lead_time_days) : '交期 --' }} · {{ formatDate(record.last_purchase_date || record.updated_at) }}</em>
+                                        </div>
+                                    </div>
+                                    <div v-else class="ops-price-memory-empty">
+                                        还没有该物品的历史价格。填写本次单价后，可一键沉淀为价格记忆。
+                                    </div>
                                 </div>
                                 <div class="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3">
                                     <select
@@ -84,6 +129,37 @@
                                         type="date"
                                         class="h-10 px-3 border border-slate-300 rounded-lg text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
                                     >
+                                </div>
+                                <div class="mt-3 grid grid-cols-1 lg:grid-cols-[minmax(0,0.7fr),minmax(0,1fr),auto] gap-3 items-end">
+                                    <label class="ops-procurement-field">
+                                        <span>本次单价</span>
+                                        <input
+                                            v-model="item.unit_price"
+                                            @blur="$root.updateItem(item.item_id, { unit_price: item.unit_price })"
+                                            type="number"
+                                            min="0"
+                                            step="0.01"
+                                            placeholder="用于价格记忆"
+                                        >
+                                    </label>
+                                    <label class="ops-procurement-field">
+                                        <span>采购链接</span>
+                                        <input
+                                            v-model.trim="item.purchase_link"
+                                            @blur="$root.updateItem(item.item_id, { purchase_link: item.purchase_link })"
+                                            type="url"
+                                            maxlength="2000"
+                                            placeholder="https://..."
+                                        >
+                                    </label>
+                                    <button
+                                        type="button"
+                                        @click="$root.createPriceRecordFromPurchaseItem(item)"
+                                        :disabled="isPriceMemorySaving(item)"
+                                        class="ops-price-memory-save"
+                                    >
+                                        {{ isPriceMemorySaving(item) ? '沉淀中...' : '沉淀价格记忆' }}
+                                    </button>
                                 </div>
                                 <div class="mt-3 flex items-end gap-3">
                                     <textarea
@@ -223,7 +299,7 @@
                                 <div class="mt-3 rounded-lg border border-emerald-200 bg-emerald-50/70 px-3 py-3 text-xs text-emerald-800">
                                     推荐供应商：{{ item.recommended_supplier_name || item.preferred_supplier_name || '待补供应商' }}
                                     <span v-if="item.recommended_unit_price"> · 参考单价 ¥ {{ formatCurrencyValue(item.recommended_unit_price) }}</span>
-                                    <span v-if="item.recommended_lead_time_days !== null"> · 参考交期 {{ formatLeadTime(item.recommended_lead_time_days) }}</span>
+                                    <span v-if="item.recommended_lead_time_days !== null && item.recommended_lead_time_days !== undefined"> · 参考交期 {{ formatLeadTime(item.recommended_lead_time_days) }}</span>
                                 </div>
                             </div>
                         </div>

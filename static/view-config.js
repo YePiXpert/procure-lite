@@ -31,7 +31,7 @@
             icon: '\uD83D\uDCE6',
             title: '\u91C7\u8D2D\u8FD0\u8425\u5DE5\u4F5C\u53F0',
             placement: 'primary',
-            defaultSubview: 'procurement',
+            defaultSubview: 'overview',
             subviews: createSubViews([
                 {
                     id: 'overview',
