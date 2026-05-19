@@ -399,6 +399,7 @@ body {
 }
 
 .ledger-table-shell {
+    min-height: 0;
     background:
         linear-gradient(180deg, rgba(248, 250, 252, 0.92) 0%, rgba(255, 255, 255, 1) 18%),
         linear-gradient(135deg, rgba(59, 130, 246, 0.04), rgba(30, 58, 138, 0.03));
@@ -410,11 +411,13 @@ body {
 }
 
 .ledger-table-card {
-    flex: 1 0 auto;
-    min-height: clamp(360px, 52vh, 620px);
+    flex: 1 1 auto;
+    min-height: clamp(420px, 58vh, 700px);
 }
 
 .ledger-table-scroll {
+    flex: 1 1 auto;
+    min-height: 320px;
     position: relative;
     overflow: auto;
     scrollbar-gutter: stable;
@@ -2436,10 +2439,133 @@ body {
 }
 
 @media (min-width: 1024px) {
+    .ledger-pane {
+        gap: 0.75rem;
+    }
+
+    .ledger-filter-card {
+        padding: 0.8rem 0.9rem;
+    }
+
     .ledger-filter-header {
         flex-direction: row;
-        align-items: flex-end;
+        align-items: center;
         justify-content: space-between;
+    }
+
+    .ledger-filter-title {
+        font-size: 1.25rem;
+        line-height: 1.25;
+        letter-spacing: 0;
+    }
+
+    .ledger-filter-description {
+        margin-top: 0.15rem;
+        font-size: 0.8rem;
+    }
+
+    .ledger-filter-row {
+        margin-top: 0.65rem;
+        gap: 0.5rem;
+    }
+
+    .ledger-filter-control {
+        height: 2.25rem;
+    }
+
+    .ledger-quick-filter-row {
+        margin-top: 0.65rem;
+        gap: 0.45rem;
+    }
+
+    .ledger-quick-filter-button,
+    .ledger-density-toggle {
+        min-height: 3.35rem;
+        gap: 0.12rem;
+        padding: 0.45rem 0.65rem;
+    }
+
+    .ledger-quick-filter-button strong,
+    .ledger-density-toggle strong {
+        font-size: 1rem;
+    }
+
+    .ledger-filter-summary-row {
+        margin-top: 0.55rem;
+    }
+
+    .ledger-table-card {
+        min-height: clamp(660px, calc(100dvh - 160px), 940px);
+    }
+
+    .ledger-table-scroll {
+        min-height: 560px;
+    }
+
+    .ledger-table thead th {
+        padding-top: 0.65rem !important;
+        padding-bottom: 0.65rem !important;
+    }
+
+    .ledger-table-body .ledger-row td {
+        padding-top: 0.5rem !important;
+        padding-bottom: 0.5rem !important;
+    }
+
+    .ledger-table-sticky-summary .space-y-2 > * + * {
+        margin-top: 0.28rem;
+    }
+
+    .ledger-table-sticky-summary input {
+        min-height: 1.6rem;
+        padding-top: 0.12rem !important;
+        padding-bottom: 0.12rem !important;
+    }
+
+    .ledger-row-meta-strip {
+        gap: 0.25rem;
+    }
+
+    .ledger-row-meta-strip span {
+        height: 1.18rem;
+        padding: 0 0.4rem;
+        font-size: 0.64rem;
+    }
+
+    .ledger-workflow-stage {
+        gap: 0.4rem;
+        padding: 0.35rem 0.5rem;
+    }
+
+    .ledger-table-toolbar {
+        padding: 0.55rem 0.85rem;
+    }
+
+    .ledger-table-toolbar-main span,
+    .ledger-table-toolbar-hints span {
+        height: 1.5rem;
+        padding: 0 0.55rem;
+        font-size: 0.7rem;
+    }
+
+    .ledger-table-footer {
+        padding: 0.65rem 0.85rem !important;
+        gap: 0.5rem 0.75rem;
+    }
+
+    .ledger-table-footer-copy {
+        padding: 0.3rem 0.65rem;
+    }
+
+    .ledger-pagination {
+        padding: 0.22rem;
+        border-radius: 0.65rem;
+    }
+
+    .ledger-pagination-control,
+    .ledger-pagination-button {
+        height: 2rem !important;
+        border-radius: 0.5rem !important;
     }
 }
 
