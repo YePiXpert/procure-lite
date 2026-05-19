@@ -959,9 +959,15 @@ async def _list_purchase_queue(
     month: str | None = None,
     keyword: str | None = None,
 ) -> list[dict]:
+    status_filter = str(status or "").strip()
+    if status_filter and status_filter != ItemStatus.PENDING.value:
+        return []
     where_clause, params = _make_where_clause(
-        status=status, department=department, month=month, keyword=keyword,
-        extra_conditions=["(po.id IS NULL OR po.status IN ('draft', 'cancelled') OR items.status = ?)"],
+        status=None, department=department, month=month, keyword=keyword,
+        extra_conditions=[
+            "items.status = ?",
+            "(po.id IS NULL OR po.status IN ('draft', 'cancelled'))",
+        ],
     )
     params.append(ItemStatus.PENDING.value)
     return await execute_sql(

@@ -5,6 +5,7 @@ from sqlalchemy.exc import OperationalError
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from db import operations
+from db import orm as db_orm
 from db.constants import ItemStatus
 
 
@@ -18,6 +19,7 @@ async def operations_db(tmp_path, monkeypatch):
         autoflush=False,
     )
     monkeypatch.setattr(operations, "AsyncSessionLocal", session_factory)
+    monkeypatch.setattr(db_orm, "AsyncSessionLocal", session_factory)
     try:
         yield engine, session_factory
     finally:
@@ -54,6 +56,8 @@ async def _create_operations_schema(
                     request_date TEXT NOT NULL,
                     item_name TEXT NOT NULL,
                     quantity REAL NOT NULL,
+                    purchase_link TEXT,
+                    unit_price REAL,
                     supplier_id INTEGER,
                     supplier_name_snapshot TEXT,
                     status TEXT NOT NULL,
@@ -371,3 +375,63 @@ async def test_get_item_workflow_detail_loads_procurement_lifecycle(operations_d
     assert detail["purchase_receipt"]["received_quantity"] == 10
     assert detail["invoice_record"]["invoice_number"] == "INV-001"
     assert detail["invoice_attachments"][0]["download_url"] == "/api/ops/invoice-attachments/1/download"
+
+
+@pytest.mark.asyncio
+async def test_purchase_queue_only_includes_pending_items_needing_order(operations_db):
+    engine, _ = operations_db
+    await _create_operations_schema(engine)
+    async with engine.begin() as conn:
+        await conn.execute(
+            text(
+                """
+                INSERT INTO items (
+                    id, serial_number, department, handler, request_date, item_name,
+                    quantity, status, deleted_at
+                )
+                VALUES
+                    (2, 'S002', '研发部', '张三', '2024-01-02', '草稿采购单', 2, :pending, NULL),
+                    (3, 'S003', '研发部', '张三', '2024-01-03', '取消采购单', 3, :pending, NULL),
+                    (4, 'S004', '研发部', '张三', '2024-01-04', '已分发旧数据', 4, :distributed, NULL),
+                    (5, 'S005', '研发部', '张三', '2024-01-05', '待分发旧数据', 5, :pending_distribution, NULL),
+                    (6, 'S006', '研发部', '张三', '2024-01-06', '已下单采购单', 6, :pending, NULL)
+                """
+            ),
+            {
+                "pending": ItemStatus.PENDING.value,
+                "distributed": ItemStatus.DISTRIBUTED.value,
+                "pending_distribution": ItemStatus.PENDING_DISTRIBUTION.value,
+            },
+        )
+        await conn.execute(
+            text(
+                """
+                INSERT INTO purchase_orders (item_id, status)
+                VALUES
+                    (2, 'draft'),
+                    (3, 'cancelled'),
+                    (6, 'ordered')
+                """
+            )
+        )
+
+    rows = await operations._list_purchase_queue(limit=20)
+    names = [row["item_name"] for row in rows]
+
+    assert names == ["签字笔", "草稿采购单", "取消采购单"]
+    assert "已分发旧数据" not in names
+    assert "待分发旧数据" not in names
+    assert "已下单采购单" not in names
+
+
+@pytest.mark.asyncio
+async def test_purchase_queue_respects_non_pending_status_filter(operations_db):
+    engine, _ = operations_db
+    await _create_operations_schema(engine)
+
+    rows = await operations._list_purchase_queue(
+        status=ItemStatus.PENDING_DISTRIBUTION.value,
+        limit=20,
+    )
+
+    assert rows == []

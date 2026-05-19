@@ -7,7 +7,7 @@
                     <div id="ops-section-purchase-queue" class="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
                         <div class="flex items-start justify-between gap-3">
                             <div>
-                                <h4 class="text-base font-semibold text-slate-900">待下单采购主线</h4>
+                                <h4 class="text-base font-semibold text-slate-900">待采购跟进</h4>
                                 <p class="mt-1 text-sm text-slate-500">把待采购条目转换成明确采购单，并顺手落下供应商和预计到货日期。</p>
                             </div>
                             <span class="inline-flex items-center rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-medium text-amber-700">
@@ -16,7 +16,7 @@
                         </div>
                         <div class="mt-4 space-y-3">
                             <div v-if="!visiblePurchaseQueue.length" class="rounded-lg border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-sm text-slate-500">
-                                当前没有待下单条目。
+                                当前没有待采购跟进条目。
                             </div>
                             <div v-for="item in visiblePurchaseQueue.slice(0, 6)" :key="'purchase-' + item.item_id" class="rounded-xl border border-slate-200 px-4 py-4">
                                 <div class="flex items-start justify-between gap-3">
@@ -108,7 +108,7 @@
                                         @change="updatePurchaseOrderDraft(item, 'status', $event.target.value)"
                                         class="h-10 px-3 border border-slate-300 rounded-lg bg-white text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
                                     >
-                                        <option value="draft">待下单</option>
+                                        <option value="draft">采购单草稿</option>
                                         <option value="ordered">已下单</option>
                                         <option value="cancelled">已取消</option>
                                     </select>

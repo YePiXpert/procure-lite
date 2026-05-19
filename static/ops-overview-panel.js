@@ -8,7 +8,7 @@
                         <div>
                             <div class="ops-command-eyebrow">单用户采购运营台</div>
                             <h3 class="ops-command-title">今天先处理 {{ formatCount(actionQueueCount) }} 项待办</h3>
-                            <p class="ops-command-copy">优先处理超期、待下单、待收货和报销闭环；供应商、价格和补货资料放在后面维护。</p>
+                            <p class="ops-command-copy">优先处理超期、待采购跟进、待收货和报销闭环；供应商、价格和补货资料放在后面维护。</p>
                         </div>
                         <div class="ops-command-metrics">
                             <span class="ops-command-metric ops-command-metric-danger">严重 {{ formatCount(todayCriticalCount) }}</span>
@@ -93,7 +93,7 @@
                         <p class="ops-section-copy">保持单用户模式，重点看流程是否卡住。</p>
                         <div class="mt-4 grid grid-cols-2 gap-2">
                             <button @click="$root.switchSubView('procurement')" class="ops-mini-stat ops-mini-stat-amber">
-                                <span>待下单</span>
+                                <span>待采购</span>
                                 <strong>{{ formatCount(purchaseQueue.length) }}</strong>
                             </button>
                             <button @click="$root.switchSubView('procurement')" class="ops-mini-stat ops-mini-stat-blue">

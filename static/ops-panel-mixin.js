@@ -23,7 +23,7 @@
         'Import task failed': '导入任务失败',
         'Reimbursement pending': '报销待跟进',
         'Purchase overdue': '采购超期',
-        'Purchase follow-up': '待下单跟进',
+        'Purchase follow-up': '待采购跟进',
         'Arrival overdue': '到货超期',
         'Receipt follow-up': '待收货跟进',
         'Distribution overdue': '分发超期',
@@ -98,7 +98,7 @@
                     },
                     {
                         key: 'purchase',
-                        label: '待下单',
+                        label: '待采购',
                         rows: Array.isArray(this.actionQueues.purchase) ? this.actionQueues.purchase : [],
                     },
                     {
@@ -486,7 +486,7 @@
             },
             purchaseStatusLabel(status) {
                 return {
-                    draft: '待下单',
+                    draft: '采购单草稿',
                     ordered: '已下单',
                     received: '已收货',
                     cancelled: '已取消',
@@ -543,7 +543,7 @@
                     return `${itemName || '库存条目'} 低于安全线，建议补货 ${this.formatCount(row?.recommended_quantity)}。`;
                 }
                 if (title === 'Purchase overdue' || title === 'Purchase follow-up') {
-                    return `${itemName || '采购条目'} 已等待 ${this.formatCount(row?.age_days)} 天，建议确认供应商并完成下单。`;
+                    return `${itemName || '采购条目'} 已等待 ${this.formatCount(row?.age_days)} 天，建议确认供应商并完成采购单。`;
                 }
                 if (title === 'Arrival overdue' || title === 'Receipt follow-up') {
                     const overdue = Number(row?.overdue_days || 0);

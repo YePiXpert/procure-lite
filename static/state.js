@@ -405,9 +405,9 @@
                     return [
                         {
                             key: 'purchase',
-                            label: '待下单',
+                            label: '待采购',
                             count: purchaseQueue.length || (Array.isArray(queues.purchase) ? queues.purchase.length : 0) || Number(statusCount['待采购']) || 0,
-                            description: '确认供应商和下单日期',
+                            description: '确认供应商和采购单',
                         },
                         {
                             key: 'receipt',

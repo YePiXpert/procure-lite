@@ -404,12 +404,25 @@ body {
         linear-gradient(135deg, rgba(59, 130, 246, 0.04), rgba(30, 58, 138, 0.03));
 }
 
+.ledger-pane {
+    overflow-y: auto;
+    padding-right: 0.25rem;
+}
+
+.ledger-table-card {
+    flex: 1 0 auto;
+    min-height: clamp(360px, 52vh, 620px);
+}
+
 .ledger-table-scroll {
     position: relative;
+    overflow: auto;
+    scrollbar-gutter: stable;
 }
 
 .ledger-table {
     position: relative;
+    min-width: 1480px;
 }
 
 .ledger-table thead th {
@@ -495,26 +508,32 @@ body {
 }
 
 .ledger-table-sticky-col,
+.ledger-table-sticky-summary,
 .ledger-table-sticky-action {
     backdrop-filter: blur(10px);
+    background: rgba(255, 255, 255, 0.98);
 }
 
 .ledger-table-body .ledger-row:nth-child(even) .ledger-table-sticky-col,
+.ledger-table-body .ledger-row:nth-child(even) .ledger-table-sticky-summary,
 .ledger-table-body .ledger-row:nth-child(even) .ledger-table-sticky-action {
     background: rgba(248, 250, 252, 0.9);
 }
 
 .ledger-table-body .ledger-row:hover .ledger-table-sticky-col,
+.ledger-table-body .ledger-row:hover .ledger-table-sticky-summary,
 .ledger-table-body .ledger-row:hover .ledger-table-sticky-action {
     background: rgba(239, 246, 255, 0.96);
 }
 
 .ledger-row-selected .ledger-table-sticky-col,
+.ledger-row-selected .ledger-table-sticky-summary,
 .ledger-row-selected .ledger-table-sticky-action {
     background: rgba(226, 232, 240, 0.96) !important;
 }
 
 .ledger-row-focused .ledger-table-sticky-col,
+.ledger-row-focused .ledger-table-sticky-summary,
 .ledger-row-focused .ledger-table-sticky-action {
     background: rgba(255, 251, 235, 0.98) !important;
 }
@@ -2567,6 +2586,10 @@ body {
         min-width: 0;
     }
 
+    .ledger-pane {
+        padding-right: 0;
+    }
+
     .ledger-pagination {
         width: 100%;
     }
@@ -3331,6 +3354,11 @@ body {
         flex: 0 0 auto;
         min-height: auto;
         overflow: visible !important;
+    }
+
+    #app .ledger-table-card {
+        flex: 0 0 auto;
+        min-height: auto;
     }
 
     .ledger-filter-card {

@@ -505,7 +505,7 @@
                     const invoiceIssued = item?.invoice_issued === true || item?.invoice_issued === 1;
 
                     if (status === '待采购') {
-                        return { key: 'order', label: '待下单', hint: '确认供应商与采购单' };
+                        return { key: 'order', label: '待采购', hint: '确认供应商与采购单' };
                     }
                     if (status === '待到货') {
                         return { key: 'receipt', label: '待收货', hint: '跟进预计到货' };
@@ -519,7 +519,7 @@
                     if (status === '已分发' || invoiceIssued || paymentStatus === '已付款') {
                         return { key: 'reimburse', label: '待报销', hint: '补发票/报销状态' };
                     }
-                    return { key: 'order', label: '待下单', hint: '等待采购处理' };
+                    return { key: 'order', label: '待采购', hint: '等待采购处理' };
                 },
                 ledgerWorkflowStageLabel(item) {
                     return this.ledgerWorkflowStage(item).label;

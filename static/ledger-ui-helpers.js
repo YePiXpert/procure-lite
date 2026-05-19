@@ -67,8 +67,8 @@
         return [
             {
                 key: 'pending-order',
-                label: '待下单',
-                description: '等待采购下单',
+                label: '待采购',
+                description: '等待采购跟进',
                 filters: { status: '待采购', paymentStatus: '', month: '' },
                 count: Number(statusCount['待采购']) || 0,
             },

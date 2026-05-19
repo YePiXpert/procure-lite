@@ -318,7 +318,7 @@
                     </div>
                 </section>
 
-                <section v-else-if="currentView === 'ledger'" class="view-pane h-full min-h-0 flex flex-col gap-3">
+                <section v-else-if="currentView === 'ledger'" class="ledger-pane view-pane h-full min-h-0 flex flex-col gap-3">
                     <ledger-filter-panel
                         :filter-keyword="filterKeyword"
                         :filter-status="filterStatus"
@@ -366,7 +366,7 @@
                         @batch-delete="batchDelete"
                     ></ledger-batch-toolbar>
 
-                    <div class="flex-1 min-h-0 bg-white shadow-sm ring-1 ring-slate-900/5 rounded-xl overflow-hidden flex flex-col">
+                    <div class="ledger-table-card flex-1 min-h-0 bg-white shadow-sm ring-1 ring-slate-900/5 rounded-xl overflow-hidden flex flex-col">
                         <ledger-table-panel
                             :items="items"
                             :selected-items="selectedItems"

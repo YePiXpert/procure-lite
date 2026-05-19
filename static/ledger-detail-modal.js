@@ -125,7 +125,7 @@
             },
             purchaseStatusLabel(status) {
                 return {
-                    draft: '待下单',
+                    draft: '采购单草稿',
                     ordered: '已下单',
                     received: '已收货',
                     cancelled: '已取消',
