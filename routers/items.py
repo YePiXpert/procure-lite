@@ -51,6 +51,7 @@ def _raise_integrity_error(
 @router.get("/items")
 async def list_items(
     status: Optional[str] = None,
+    payment_status: Optional[str] = None,
     department: Optional[str] = None,
     month: Optional[str] = None,
     keyword: Optional[str] = None,
@@ -61,8 +62,12 @@ async def list_items(
     status, department, month, keyword = normalize_item_filters(
         status, department, month, keyword
     )
+    payment_status = normalize_text_filter(payment_status)
+    if payment_status and payment_status not in {item.value for item in PaymentStatus}:
+        raise HTTPException(status_code=400, detail="payment_status 参数不合法")
     items, total = await get_items_page(
         status=status,
+        payment_status=payment_status,
         department=department,
         month=month,
         keyword=keyword,

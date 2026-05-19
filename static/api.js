@@ -156,6 +156,7 @@
                         this.loadAutocomplete();
                         this.loadItems();
                         this.loadStats();
+                        this.loadOperationsCenter();
                         this.initViewRouting();
                         return;
                     }
@@ -581,6 +582,79 @@
                         this.showToast('复制失败，请手动复制', 'error');
                     }
                 },
+                mobileLedgerActionKey(item, actionKey = '') {
+                    return `${Number(item?.id) || 0}:${actionKey || ''}`;
+                },
+                mobileLedgerPrimaryAction(item) {
+                    return global.LedgerUiHelpers?.mobilePrimaryAction(item) || null;
+                },
+                isMobileLedgerActionSaving(item, actionKey) {
+                    return this.mobileLedgerActionSavingKey === this.mobileLedgerActionKey(item, actionKey);
+                },
+                isMobileLedgerActionSaved(item, actionKey) {
+                    return this.mobileLedgerActionSavedKey === this.mobileLedgerActionKey(item, actionKey);
+                },
+                mobileLedgerPrimaryActionText(item) {
+                    const action = this.mobileLedgerPrimaryAction(item);
+                    if (!action) return '';
+                    if (this.isMobileLedgerActionSaving(item, action.key)) return action.savingLabel || '处理中...';
+                    if (this.isMobileLedgerActionSaved(item, action.key)) return action.savedLabel || '已刷新';
+                    return action.label || '';
+                },
+                fillMobileLedgerDraftDate(field) {
+                    if (!this.mobileLedgerEditDraft) return;
+                    if (!['arrival_date', 'distribution_date'].includes(field)) return;
+                    const today = this.normalizeDateText(this.todayDateText());
+                    if (!/^\d{4}-\d{2}-\d{2}$/.test(today)) {
+                        this.showToast('无法获取今日日期，请手动填写', 'error');
+                        return;
+                    }
+                    this.mobileLedgerEditDraft[field] = today;
+                    const label = field === 'arrival_date' ? '到货日期' : '分发日期';
+                    this.showToast(`已填入今日${label}，保存后生效`, 'success', 1800);
+                },
+                async runMobileLedgerPrimaryAction(item) {
+                    if (!item?.id) return;
+                    const action = this.mobileLedgerPrimaryAction(item);
+                    if (!action || this.isMobileLedgerActionSaving(item, action.key)) return;
+                    const savingKey = this.mobileLedgerActionKey(item, action.key);
+                    const today = this.normalizeDateText(this.todayDateText());
+                    const needsToday = action.key === 'confirm-arrival' || action.key === 'complete-distribution';
+                    if (needsToday && !/^\d{4}-\d{2}-\d{2}$/.test(today)) {
+                        this.showToast('无法获取今日日期，请稍后重试', 'error');
+                        return;
+                    }
+                    const patch = global.LedgerUiHelpers?.mobileActionPatch(action.key, item, today);
+                    if (!patch) return;
+
+                    this.mobileLedgerActionSavingKey = savingKey;
+                    try {
+                        const payload = this.normalizeItemUpdatePayload(patch);
+                        await axios.put(`/api/items/${item.id}`, payload);
+                        Object.assign(item, {
+                            ...payload,
+                            status: Object.prototype.hasOwnProperty.call(payload, 'status')
+                                ? (this.normalizeProcurementStatus(payload.status) || payload.status)
+                                : item.status,
+                        });
+                        await this.refreshDataViews({ items: true, stats: true, execution: true });
+                        this.mobileLedgerActionSavedKey = savingKey;
+                        if (this.mobileLedgerActionSavedTimer) {
+                            clearTimeout(this.mobileLedgerActionSavedTimer);
+                        }
+                        this.mobileLedgerActionSavedTimer = setTimeout(() => {
+                            if (this.mobileLedgerActionSavedKey === savingKey) {
+                                this.mobileLedgerActionSavedKey = '';
+                            }
+                            this.mobileLedgerActionSavedTimer = null;
+                        }, 1800);
+                        this.showToast(action.successMessage || '操作已完成，台账已刷新', 'success');
+                    } catch (e) {
+                        this.showApiError(action.failurePrefix || '移动快捷动作失败', e);
+                    } finally {
+                        this.mobileLedgerActionSavingKey = '';
+                    }
+                },
                 buildMobileLedgerDraft(item = {}) {
                     return {
                         serial_number: item.serial_number || '',
@@ -629,8 +703,8 @@
                                 status: this.normalizeProcurementStatus(payload.status) || payload.status,
                             });
                         }
-                        await this.refreshDataViews({ items: false, execution: false });
-                        this.showToast('记录已保存', 'success');
+                        await this.refreshDataViews({ items: true, stats: true, execution: true });
+                        this.showToast('记录已保存，状态已同步', 'success');
                         this.showMobileLedgerEditModal = false;
                         this.mobileLedgerEditId = null;
                         this.mobileLedgerEditDraft = null;
@@ -1101,8 +1175,17 @@
                 isInlineEditing(id, field) {
                     return this.inlineEditId === id && this.inlineEditField === field;
                 },
+                inlineEditKey(id, field) {
+                    return `${id}:${field}`;
+                },
+                isInlineEditSaving(id, field) {
+                    return this.inlineEditSavingKey === this.inlineEditKey(id, field);
+                },
+                isInlineEditSaved(id, field) {
+                    return this.inlineEditSavedKey === this.inlineEditKey(id, field);
+                },
                 setInlineEditRef(id, field, el) {
-                    const key = `${id}:${field}`;
+                    const key = this.inlineEditKey(id, field);
                     if (el) {
                         this.inlineEditRefs[key] = el;
                     } else {
@@ -1113,8 +1196,9 @@
                     this.inlineEditId = id;
                     this.inlineEditField = field;
                     this.inlineEditCommitting = false;
+                    this.inlineEditSavedKey = '';
                     this.$nextTick(() => {
-                        const key = `${id}:${field}`;
+                        const key = this.inlineEditKey(id, field);
                         const input = this.inlineEditRefs[key];
                         if (input) {
                             input.focus();
@@ -1128,6 +1212,7 @@
                     this.inlineEditId = null;
                     this.inlineEditField = '';
                     this.inlineEditCommitting = false;
+                    this.inlineEditSavingKey = '';
                 },
                 showToast(message, type = 'success', duration = 2200, action = null) {
                     const text = (message || '').toString().trim();
@@ -1198,17 +1283,30 @@
                     if (!item || !this.isInlineEditing(item.id, field) || this.inlineEditCommitting) {
                         return;
                     }
+                    const savingKey = this.inlineEditKey(item.id, field);
                     this.inlineEditCommitting = true;
+                    this.inlineEditSavingKey = savingKey;
                     const ok = await this.updateItem(item.id, { [field]: item[field] });
                     this.inlineEditCommitting = false;
+                    this.inlineEditSavingKey = '';
                     this.inlineEditId = null;
                     this.inlineEditField = '';
                     if (ok) {
+                        this.inlineEditSavedKey = savingKey;
+                        if (this.inlineEditSavedTimer) {
+                            clearTimeout(this.inlineEditSavedTimer);
+                        }
+                        this.inlineEditSavedTimer = setTimeout(() => {
+                            if (this.inlineEditSavedKey === savingKey) {
+                                this.inlineEditSavedKey = '';
+                            }
+                            this.inlineEditSavedTimer = null;
+                        }, 1800);
                         const successMessage = {
-                            quantity: '数量已更新',
-                            unit_price: '单价已更新',
-                            purchase_link: '采购链接已更新',
-                        }[field] || '更新成功';
+                            quantity: '数量已保存',
+                            unit_price: '单价已保存',
+                            purchase_link: '采购链接已保存',
+                        }[field] || '已保存';
                         this.showSuccessToast(successMessage);
                     }
                 },
@@ -1545,9 +1643,9 @@
                             status: (draft.status || 'draft').toString().trim() || 'draft',
                             note: (draft.note || '').toString().trim() || null,
                         });
-                        this.showToast('采购单已保存', 'success');
                         await this.loadOperationsCenter();
                         await this.refreshDataViews({ items: false, stats: true, execution: true });
+                        this.showToast('采购单已保存，待办已刷新', 'success');
                     } catch (e) {
                         this.showApiError('保存采购单失败', e);
                     } finally {
@@ -1585,9 +1683,9 @@
                                 : Number(draft.received_quantity),
                             note: (draft.note || '').toString().trim() || null,
                         });
-                        this.showToast('收货记录已保存', 'success');
                         await this.loadOperationsCenter();
                         await this.refreshDataViews({ items: false, stats: true, execution: true });
+                        this.showToast('收货记录已保存，待办已刷新', 'success');
                     } catch (e) {
                         this.showApiError('保存收货记录失败', e);
                     } finally {
@@ -1632,8 +1730,9 @@
                             invoice_number: (draft.invoice_number || '').toString().trim() || null,
                             note: (draft.note || '').toString().trim() || null,
                         });
-                        this.showToast('报销记录已保存', 'success');
                         await this.loadOperationsCenter();
+                        await this.refreshDataViews({ items: false, stats: true, execution: false });
+                        this.showToast('报销记录已保存，待办已刷新', 'success');
                     } catch (e) {
                         this.showApiError('保存报销记录失败', e);
                     } finally {
@@ -1663,8 +1762,8 @@
                         const formData = new FormData();
                         formData.append('file', file);
                         await global.AppOperationsApi.uploadInvoiceAttachment(itemId, formData);
-                        this.showToast('发票附件已上传', 'success');
                         await this.loadOperationsCenter();
+                        this.showToast('发票附件已上传，报销队列已刷新', 'success');
                     } catch (err) {
                         this.showApiError('上传发票附件失败', err);
                     } finally {
@@ -1683,8 +1782,8 @@
                     if (!ok) return;
                     try {
                         await global.AppOperationsApi.deleteInvoiceAttachment(attachmentId);
-                        this.showToast('发票附件已删除', 'success');
                         await this.loadOperationsCenter();
+                        this.showToast('发票附件已删除，报销队列已刷新', 'success');
                     } catch (e) {
                         this.showApiError('删除发票附件失败', e);
                     }
@@ -1714,6 +1813,7 @@
                     );
 
                     this.filterStatus = '';
+                    this.filterPaymentStatus = '';
                     this.filterDepartment = '';
                     this.filterMonth = '';
                     this.filterKeyword = keyword;
@@ -2714,6 +2814,9 @@
                         if (Array.isArray(res.data.payment_statuses) && res.data.payment_statuses.length) {
                             this.paymentStatuses = res.data.payment_statuses;
                         }
+                        if (this.filterPaymentStatus && !this.paymentStatuses.includes(this.filterPaymentStatus)) {
+                            this.filterPaymentStatus = '';
+                        }
                     } catch(e) {
                         this.showApiError('加载筛选项失败', e);
                     }
@@ -2726,6 +2829,7 @@
                         };
                         if (this.filterKeyword) params.keyword = this.filterKeyword;
                         if (this.filterStatus) params.status = this.filterStatus;
+                        if (this.filterPaymentStatus) params.payment_status = this.filterPaymentStatus;
                         if (this.filterDepartment) params.department = this.filterDepartment;
                         if (this.filterMonth) params.month = this.filterMonth;
                         const res = await axios.get('/api/items', { params });
@@ -2762,9 +2866,76 @@
                     }
                     catch(e) { this.showApiError('加载统计失败', e); }
                 },
+                initializeLedgerUiPreferences() {
+                    const helpers = global.LedgerUiHelpers;
+                    if (!helpers) return;
+                    this.ledgerDensity = helpers.readDensity();
+                    this.ledgerRecentFilters = helpers.readRecentFilters();
+                },
+                persistLedgerRecentFilter() {
+                    const helpers = global.LedgerUiHelpers;
+                    if (!helpers) return;
+                    this.ledgerRecentFilters = helpers.saveRecentFilter(this.ledgerFilterSnapshot);
+                },
+                applyLedgerSnapshot(snapshot = {}) {
+                    const helpers = global.LedgerUiHelpers;
+                    const safe = helpers?.sanitizeSnapshot(snapshot) || snapshot;
+                    this.filterKeyword = safe.keyword || '';
+                    this.filterStatus = this.normalizeProcurementStatus(safe.status) || safe.status || '';
+                    this.filterPaymentStatus = safe.paymentStatus || '';
+                    this.filterDepartment = safe.department || '';
+                    this.filterMonth = safe.month || '';
+                    this.handleFilter();
+                },
+                applyLedgerQuickFilter(filter) {
+                    const helpers = global.LedgerUiHelpers;
+                    if (!helpers || !filter) return;
+                    this.applyLedgerSnapshot(helpers.applyQuickFilter(this.ledgerFilterSnapshot, filter));
+                },
+                applyLedgerRecentFilter(snapshot) {
+                    this.applyLedgerSnapshot(snapshot);
+                },
+                clearLedgerFilterChip(key) {
+                    if (key === 'keyword') this.filterKeyword = '';
+                    if (key === 'status') this.filterStatus = '';
+                    if (key === 'paymentStatus') this.filterPaymentStatus = '';
+                    if (key === 'department') this.filterDepartment = '';
+                    if (key === 'month') this.filterMonth = '';
+                    this.handleFilter();
+                },
+                toggleLedgerDensity() {
+                    const helpers = global.LedgerUiHelpers;
+                    const next = this.ledgerDensity === 'compact' ? 'comfortable' : 'compact';
+                    this.ledgerDensity = helpers?.writeDensity(next) || next;
+                    this.showToast(`台账密度已切换为${this.ledgerDensityLabel}`, 'success');
+                },
+                recentLedgerFilterLabel(snapshot) {
+                    return global.LedgerUiHelpers?.recentFilterLabel(snapshot) || '最近筛选';
+                },
+                openDashboardTodo(target) {
+                    const key = (target || '').toString();
+                    if (key === 'purchase' || key === 'receipt') {
+                        this.goToViewSubview('operations', 'procurement');
+                        return;
+                    }
+                    if (key === 'reimbursement' || key === 'imports') {
+                        this.goToViewSubview('operations', 'exceptions');
+                        return;
+                    }
+                    if (key === 'distribution') {
+                        this.switchView('ledger');
+                        this.applyLedgerSnapshot({
+                            ...this.ledgerFilterSnapshot,
+                            status: '待分发',
+                            paymentStatus: '',
+                            month: '',
+                        });
+                    }
+                },
                 handleFilter() {
                     this.currentPage = 1;
                     this.reportsInitialized = false;
+                    this.persistLedgerRecentFilter();
                     this.loadItems();
                     if (this.currentView === 'reports') {
                         this.loadAmountReport();
@@ -2790,6 +2961,7 @@
                 clearFilters() {
                     this.filterKeyword = '';
                     this.filterStatus = '';
+                    this.filterPaymentStatus = '';
                     this.filterDepartment = '';
                     this.filterMonth = '';
                     this.handleFilter();
@@ -2852,6 +3024,7 @@
                     const params = new URLSearchParams();
                     if (this.filterKeyword) params.append('keyword', this.filterKeyword);
                     if (this.filterStatus) params.append('status', this.filterStatus);
+                    if (this.filterPaymentStatus) params.append('payment_status', this.filterPaymentStatus);
                     if (this.filterDepartment) params.append('department', this.filterDepartment);
                     if (this.filterMonth) params.append('month', this.filterMonth);
                     const query = params.toString();
@@ -3247,6 +3420,17 @@
                     }
                     throw new Error('不支持的批量修改字段');
                 },
+                buildBatchUpdateSummary(updates) {
+                    const field = Object.keys(updates || {})[0] || this.batchEditField;
+                    const selectedRows = this.items.filter((item) => this.selectedItems.includes(item.id));
+                    return global.LedgerUiHelpers?.batchSummary({
+                        selectedCount: this.selectedItems.length,
+                        field,
+                        value: updates?.[field] ?? this.batchEditValue,
+                        supplierOptions: this.supplierOptions,
+                        selectedItems: selectedRows,
+                    }) || `确认批量修改 ${this.selectedItems.length} 条记录？`;
+                },
                 async batchUpdate() {
                     if (!this.selectedItems.length) return;
                     try {
@@ -3258,7 +3442,7 @@
                             .map((item) => ({ id: item.id, value: item[updatedField] }));
                         const ok = await this.openConfirmDialog({
                             title: '确认批量修改',
-                            message: `确认批量修改 ${this.selectedItems.length} 条记录？`,
+                            message: this.buildBatchUpdateSummary(updates),
                             confirmText: '确认修改',
                             cancelText: '取消',
                             danger: false,
@@ -3269,7 +3453,7 @@
                             updates,
                         });
                         this.showToast(
-                            res.data?.message || '批量修改完成',
+                            res.data?.message || '批量修改已保存，台账已刷新',
                             'success',
                             8000,
                             {

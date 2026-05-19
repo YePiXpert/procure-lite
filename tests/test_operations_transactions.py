@@ -148,6 +148,12 @@ async def _scalar(session_factory, query: str):
         return (await session.execute(text(query))).scalar_one()
 
 
+async def _row(session_factory, query: str) -> dict:
+    async with session_factory() as session:
+        result = await session.execute(text(query))
+        return dict(result.mappings().one())
+
+
 @pytest.mark.asyncio
 async def test_upsert_purchase_order_updates_order_and_item_in_one_transaction(operations_db):
     engine, session_factory = operations_db
@@ -180,6 +186,45 @@ async def test_upsert_purchase_order_rolls_back_when_item_update_fails(operation
 
     assert await _scalar(session_factory, "SELECT COUNT(1) FROM purchase_orders") == 0
     assert await _scalar(session_factory, "SELECT status FROM items WHERE id = 1") == ItemStatus.PENDING.value
+
+
+@pytest.mark.asyncio
+async def test_upsert_purchase_order_clears_item_supplier_when_removed(operations_db):
+    engine, session_factory = operations_db
+    await _create_operations_schema(engine)
+
+    await operations.upsert_purchase_order(
+        1,
+        {
+            "supplier_id": 1,
+            "status": "ordered",
+        },
+    )
+
+    assert await _scalar(session_factory, "SELECT supplier_id FROM items WHERE id = 1") == 1
+
+    await operations.upsert_purchase_order(
+        1,
+        {
+            "supplier_id": None,
+            "status": "draft",
+        },
+    )
+
+    item = await _row(
+        session_factory,
+        "SELECT supplier_id, supplier_name_snapshot, status FROM items WHERE id = 1",
+    )
+    assert item["supplier_id"] is None
+    assert item["supplier_name_snapshot"] is None
+    assert item["status"] == ItemStatus.PENDING.value
+    assert (
+        await _scalar(
+            session_factory,
+            "SELECT supplier_id FROM purchase_orders WHERE item_id = 1",
+        )
+        is None
+    )
 
 
 @pytest.mark.asyncio
@@ -231,6 +276,47 @@ async def test_upsert_purchase_receipt_rolls_back_when_order_update_fails(operat
     assert await _scalar(session_factory, "SELECT COUNT(1) FROM purchase_receipts") == 0
     assert await _scalar(session_factory, "SELECT status FROM purchase_orders WHERE id = 1") == "ordered"
     assert await _scalar(session_factory, "SELECT status FROM items WHERE id = 1") == ItemStatus.PENDING.value
+
+
+@pytest.mark.asyncio
+async def test_create_invoice_attachment_preserves_existing_invoice_record(operations_db):
+    engine, session_factory = operations_db
+    await _create_operations_schema(engine)
+    async with engine.begin() as conn:
+        await conn.execute(
+            text(
+                """
+                INSERT INTO invoice_records (
+                    id, item_id, reimbursement_status, reimbursement_date, invoice_number, note
+                )
+                VALUES (1, 1, 'submitted', '2024-01-08', 'INV-001', 'finance')
+                """
+            )
+        )
+
+    attachment_id = await operations.create_invoice_attachment(
+        item_id=1,
+        file_name="invoice.pdf",
+        stored_name="stored.pdf",
+        mime_type="application/pdf",
+        file_size=128,
+    )
+
+    invoice = await _row(
+        session_factory,
+        """
+        SELECT reimbursement_status, reimbursement_date, invoice_number, note
+        FROM invoice_records
+        WHERE id = 1
+        """,
+    )
+    assert attachment_id == 1
+    assert invoice == {
+        "reimbursement_status": "submitted",
+        "reimbursement_date": "2024-01-08",
+        "invoice_number": "INV-001",
+        "note": "finance",
+    }
 
 
 @pytest.mark.asyncio

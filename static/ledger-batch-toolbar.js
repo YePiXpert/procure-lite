@@ -21,6 +21,10 @@
                 type: Array,
                 default: () => [],
             },
+            selectedSummary: {
+                type: String,
+                default: '',
+            },
         },
         emits: [
             'update:batchEditField',

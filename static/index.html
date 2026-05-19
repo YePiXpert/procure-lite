@@ -187,6 +187,50 @@
                         </div>
                     </div>
 
+                    <section class="dashboard-todo-workbench">
+                        <div class="dashboard-todo-header">
+                            <div>
+                                <div class="dashboard-panel-title">今日待办</div>
+                                <div class="dashboard-panel-subtitle">先处理会阻塞采购闭环的事项，再看台账明细</div>
+                            </div>
+                            <button @click="loadOperationsCenter" :disabled="operationsCenterLoading" class="dashboard-todo-refresh">
+                                {{ operationsCenterLoading ? '同步中...' : '刷新待办' }}
+                            </button>
+                        </div>
+                        <div class="dashboard-todo-grid">
+                            <button
+                                v-for="card in dashboardTodoCards"
+                                :key="`dashboard-todo-${card.key}`"
+                                @click="openDashboardTodo(card.key)"
+                                class="dashboard-todo-card"
+                            >
+                                <span>{{ card.label }}</span>
+                                <strong>{{ card.count }}</strong>
+                                <em>{{ card.description }}</em>
+                            </button>
+                        </div>
+                        <div v-if="!dashboardTodoTotal" class="dashboard-todo-empty">
+                            <div>
+                                <strong>今日待办已清空</strong>
+                                <span>可以继续巡检台账，或进入运营中心查看采购闭环。</span>
+                            </div>
+                            <div class="dashboard-todo-empty-actions">
+                                <button @click="switchView('ledger')" type="button">进入台账</button>
+                                <button @click="goToViewSubview('operations', 'procurement')" type="button">运营中心</button>
+                            </div>
+                        </div>
+                        <div class="dashboard-todo-footer">
+                            <div class="dashboard-todo-total">
+                                今日可处理队列 <strong>{{ dashboardTodoTotal }}</strong> 项
+                            </div>
+                            <div v-if="dashboardActionRows.length" class="dashboard-todo-preview">
+                                <span v-for="row in dashboardActionRows" :key="`dashboard-action-preview-${row.category || row.bucket}-${row.related_item_id || row.purchase_order_id || row.task_id || row.title}`">
+                                    {{ row.item_name || row.file_name || row.title || '待办' }}
+                                </span>
+                            </div>
+                        </div>
+                    </section>
+
                     <div class="dashboard-grid">
                         <div class="dashboard-card dashboard-card-accent">
                             <div class="dashboard-card-label">待采购申请</div>
@@ -278,12 +322,22 @@
                     <ledger-filter-panel
                         :filter-keyword="filterKeyword"
                         :filter-status="filterStatus"
+                        :filter-payment-status="filterPaymentStatus"
                         :filter-department="filterDepartment"
                         :filter-month="filterMonth"
                         :statuses="statuses"
+                        :payment-statuses="paymentStatuses"
                         :departments="departments"
+                        :quick-filters="ledgerQuickFilters"
+                        :active-quick-filter-key="activeLedgerQuickFilterKey"
+                        :filter-summary="ledgerFilterSummary"
+                        :filter-chips="ledgerFilterChips"
+                        :ledger-density="ledgerDensity"
+                        :ledger-density-label="ledgerDensityLabel"
+                        :recent-filters="ledgerRecentFilters"
                         @update:filter-keyword="filterKeyword = $event"
                         @update:filter-status="filterStatus = $event"
+                        @update:filter-payment-status="filterPaymentStatus = $event"
                         @update:filter-department="filterDepartment = $event"
                         @update:filter-month="filterMonth = $event"
                         @import-docs="$refs.fileInput && $refs.fileInput.click()"
@@ -291,6 +345,10 @@
                         @export-excel="exportExcel"
                         @search="handleFilter"
                         @clear-filters="clearFilters"
+                        @apply-quick-filter="applyLedgerQuickFilter"
+                        @remove-filter-chip="clearLedgerFilterChip"
+                        @toggle-density="toggleLedgerDensity"
+                        @apply-recent-filter="applyLedgerRecentFilter"
                     ></ledger-filter-panel>
 
                     <ledger-batch-toolbar
@@ -300,6 +358,7 @@
                         :batch-edit-value="batchEditValue"
                         :statuses="statuses"
                         :payment-statuses="paymentStatuses"
+                        :selected-summary="`将处理 ${selectedItems.length} 条当前选中记录`"
                         @update:batch-edit-field="batchEditField = $event"
                         @update:batch-edit-value="batchEditValue = $event"
                         @field-change="onBatchFieldChange"
@@ -323,6 +382,7 @@
                             :current-page="currentPage"
                             :page-tokens="pageTokens"
                             :total-pages="totalPages"
+                            :ledger-density="ledgerDensity"
                             :jump-page="jumpPage"
                             @update:selected-items="selectedItems = $event"
                             @update:select-all="selectAll = $event"
@@ -1166,73 +1226,105 @@
                     </button>
                 </header>
                 <div class="mobile-ledger-edit-body">
-                    <label class="mobile-ledger-edit-field mobile-ledger-edit-field-wide">
-                        <span>物品名称</span>
-                        <input v-model="mobileLedgerEditDraft.item_name" type="text" autocomplete="off">
-                    </label>
-                    <div class="mobile-ledger-edit-grid">
-                        <label class="mobile-ledger-edit-field">
-                            <span>流水号</span>
-                            <input v-model="mobileLedgerEditDraft.serial_number" type="text" autocomplete="off">
+                    <section class="mobile-ledger-edit-section">
+                        <div class="mobile-ledger-edit-section-title">采购信息</div>
+                        <label class="mobile-ledger-edit-field mobile-ledger-edit-field-wide">
+                            <span>物品名称</span>
+                            <input v-model="mobileLedgerEditDraft.item_name" type="text" autocomplete="off">
                         </label>
-                        <label class="mobile-ledger-edit-field">
-                            <span>申领日期</span>
-                            <input v-model="mobileLedgerEditDraft.request_date" type="date">
-                        </label>
-                        <label class="mobile-ledger-edit-field">
-                            <span>申领部门</span>
-                            <input v-model="mobileLedgerEditDraft.department" type="text" list="departmentOptions" autocomplete="off">
-                        </label>
-                        <label class="mobile-ledger-edit-field">
-                            <span>经办人</span>
-                            <input v-model="mobileLedgerEditDraft.handler" type="text" list="handlerOptions" autocomplete="off">
-                        </label>
-                        <label class="mobile-ledger-edit-field">
-                            <span>数量</span>
-                            <input v-model.number="mobileLedgerEditDraft.quantity" type="number" inputmode="decimal">
-                        </label>
-                        <label class="mobile-ledger-edit-field">
-                            <span>单价</span>
-                            <input v-model="mobileLedgerEditDraft.unit_price" type="number" step="0.01" inputmode="decimal" placeholder="-">
-                        </label>
-                        <label class="mobile-ledger-edit-field">
-                            <span>状态</span>
-                            <select v-model="mobileLedgerEditDraft.status">
-                                <option v-for="s in statuses" :key="`mobile-edit-status-${s}`" :value="s">{{ s }}</option>
+                        <div class="mobile-ledger-edit-grid">
+                            <label class="mobile-ledger-edit-field">
+                                <span>流水号</span>
+                                <input v-model="mobileLedgerEditDraft.serial_number" type="text" autocomplete="off">
+                            </label>
+                            <label class="mobile-ledger-edit-field">
+                                <span>申领日期</span>
+                                <input v-model="mobileLedgerEditDraft.request_date" type="date">
+                            </label>
+                            <label class="mobile-ledger-edit-field">
+                                <span>申领部门</span>
+                                <input v-model="mobileLedgerEditDraft.department" type="text" list="departmentOptions" autocomplete="off">
+                            </label>
+                            <label class="mobile-ledger-edit-field">
+                                <span>经办人</span>
+                                <input v-model="mobileLedgerEditDraft.handler" type="text" list="handlerOptions" autocomplete="off">
+                            </label>
+                            <label class="mobile-ledger-edit-field">
+                                <span>数量</span>
+                                <input v-model.number="mobileLedgerEditDraft.quantity" type="number" inputmode="decimal">
+                            </label>
+                            <label class="mobile-ledger-edit-field">
+                                <span>单价</span>
+                                <input v-model="mobileLedgerEditDraft.unit_price" type="number" step="0.01" inputmode="decimal" placeholder="-">
+                            </label>
+                        </div>
+                        <label class="mobile-ledger-edit-field mobile-ledger-edit-field-wide">
+                            <span>供应商</span>
+                            <select v-model="mobileLedgerEditDraft.supplier_id">
+                                <option value="">未归属供应商</option>
+                                <option v-for="supplier in supplierOptions" :key="`mobile-edit-supplier-${supplier.id}`" :value="String(supplier.id)">{{ supplier.name }}</option>
                             </select>
                         </label>
-                        <label class="mobile-ledger-edit-field">
-                            <span>付款状态</span>
-                            <select v-model="mobileLedgerEditDraft.payment_status">
-                                <option v-for="p in paymentStatuses" :key="`mobile-edit-payment-${p}`" :value="p">{{ p }}</option>
-                            </select>
+                        <label class="mobile-ledger-edit-field mobile-ledger-edit-field-wide">
+                            <span>采购链接</span>
+                            <input v-model="mobileLedgerEditDraft.purchase_link" type="url" autocomplete="off">
                         </label>
-                        <label class="mobile-ledger-edit-field">
-                            <span>到货日期</span>
-                            <input v-model="mobileLedgerEditDraft.arrival_date" type="date">
+                    </section>
+
+                    <section class="mobile-ledger-edit-section">
+                        <div class="mobile-ledger-edit-section-title">收货分发</div>
+                        <div class="mobile-ledger-edit-grid">
+                            <label class="mobile-ledger-edit-field">
+                                <span>状态</span>
+                                <select v-model="mobileLedgerEditDraft.status">
+                                    <option v-for="s in statuses" :key="`mobile-edit-status-${s}`" :value="s">{{ s }}</option>
+                                </select>
+                            </label>
+                            <label class="mobile-ledger-edit-field">
+                                <span>到货日期</span>
+                                <input v-model="mobileLedgerEditDraft.arrival_date" type="date">
+                            </label>
+                            <label class="mobile-ledger-edit-field">
+                                <span>分发日期</span>
+                                <input v-model="mobileLedgerEditDraft.distribution_date" type="date">
+                            </label>
+                        </div>
+                        <div class="mobile-ledger-edit-inline-actions">
+                            <button @click="fillMobileLedgerDraftDate('arrival_date')" type="button">今日到货</button>
+                            <button @click="fillMobileLedgerDraftDate('distribution_date')" type="button">今日分发</button>
+                        </div>
+                    </section>
+
+                    <section class="mobile-ledger-edit-section">
+                        <div class="mobile-ledger-edit-section-title">报销备注</div>
+                        <div class="mobile-ledger-edit-status-strip">
+                            <span>付款：{{ mobileLedgerEditDraft.payment_status || '未付款' }}</span>
+                            <span :class="{ 'is-complete': mobileLedgerEditDraft.invoice_issued }">
+                                发票：{{ mobileLedgerEditDraft.invoice_issued ? '已入账' : '待报票' }}
+                            </span>
+                        </div>
+                        <div class="mobile-ledger-edit-grid">
+                            <label class="mobile-ledger-edit-field">
+                                <span>付款状态</span>
+                                <select v-model="mobileLedgerEditDraft.payment_status">
+                                    <option v-for="p in paymentStatuses" :key="`mobile-edit-payment-${p}`" :value="p">{{ p }}</option>
+                                </select>
+                            </label>
+                            <label class="mobile-ledger-edit-toggle">
+                                <input v-model="mobileLedgerEditDraft.invoice_issued" type="checkbox">
+                                <span>发票已入账</span>
+                            </label>
+                        </div>
+                        <label class="mobile-ledger-edit-field mobile-ledger-edit-field-wide">
+                            <span>签收备注</span>
+                            <textarea v-model="mobileLedgerEditDraft.signoff_note" rows="3"></textarea>
                         </label>
-                        <label class="mobile-ledger-edit-field">
-                            <span>分发日期</span>
-                            <input v-model="mobileLedgerEditDraft.distribution_date" type="date">
-                        </label>
-                    </div>
-                    <label class="mobile-ledger-edit-toggle">
-                        <input v-model="mobileLedgerEditDraft.invoice_issued" type="checkbox">
-                        <span>发票已入账</span>
-                    </label>
-                    <label class="mobile-ledger-edit-field mobile-ledger-edit-field-wide">
-                        <span>采购链接</span>
-                        <input v-model="mobileLedgerEditDraft.purchase_link" type="url" autocomplete="off">
-                    </label>
-                    <label class="mobile-ledger-edit-field mobile-ledger-edit-field-wide">
-                        <span>签收备注</span>
-                        <textarea v-model="mobileLedgerEditDraft.signoff_note" rows="3"></textarea>
-                    </label>
+                    </section>
                 </div>
                 <footer class="mobile-ledger-edit-footer">
                     <button @click="closeMobileLedgerEdit" type="button" class="mobile-ledger-edit-secondary">取消</button>
                     <button @click="saveMobileLedgerEdit" :disabled="mobileLedgerEditSaving" type="button" class="mobile-ledger-edit-primary">
-                        {{ mobileLedgerEditSaving ? '保存中...' : '保存' }}
+                        {{ mobileLedgerEditSaving ? '处理中...' : '保存' }}
                     </button>
                 </footer>
             </section>
@@ -1257,7 +1349,7 @@
             <div class="w-full max-w-md bg-white rounded-xl shadow-xl ring-1 ring-slate-900/10 overflow-hidden confirm-panel">
                 <div class="px-5 py-4 border-b border-slate-200">
                     <h3 class="text-base font-semibold text-slate-900">{{ confirmModalTitle }}</h3>
-                    <p class="mt-2 text-sm text-slate-600 leading-relaxed">{{ confirmModalMessage }}</p>
+                    <p class="mt-2 text-sm text-slate-600 leading-relaxed whitespace-pre-line">{{ confirmModalMessage }}</p>
                 </div>
                 <div class="px-5 py-4 bg-slate-50 flex justify-end gap-2">
                     <button
@@ -1391,6 +1483,30 @@
                 </div>
             </div>
 
+            <div class="ledger-quick-filter-row">
+                <button
+                    v-for="filter in quickFilters"
+                    :key="`ledger-quick-${filter.key}`"
+                    type="button"
+                    @click="$emit('apply-quick-filter', filter)"
+                    :class="activeQuickFilterKey === filter.key ? 'ledger-quick-filter-active' : ''"
+                    class="ledger-quick-filter-button"
+                >
+                    <span>{{ filter.label }}</span>
+                    <strong v-if="filter.count !== null && filter.count !== undefined">{{ filter.count }}</strong>
+                    <em>{{ filter.description }}</em>
+                </button>
+                <button
+                    type="button"
+                    @click="$emit('toggle-density')"
+                    class="ledger-density-toggle"
+                    :title="`当前 ${ledgerDensityLabel}，点击切换`"
+                >
+                    <span>密度</span>
+                    <strong>{{ ledgerDensityLabel }}</strong>
+                </button>
+            </div>
+
             <div class="ledger-filter-row">
                 <label class="ledger-filter-search">
                     <svg class="ledger-filter-search-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
@@ -1411,6 +1527,14 @@
                     <option v-for="s in statuses" :key="s" :value="s">{{ s }}</option>
                 </select>
                 <select
+                    :value="filterPaymentStatus"
+                    @change="$emit('update:filterPaymentStatus', $event.target.value); $emit('search')"
+                    class="ledger-filter-control"
+                >
+                    <option value="">付款状态</option>
+                    <option v-for="p in paymentStatuses" :key="p" :value="p">{{ p }}</option>
+                </select>
+                <select
                     :value="filterDepartment"
                     @change="$emit('update:filterDepartment', $event.target.value); $emit('search')"
                     class="ledger-filter-control"
@@ -1428,12 +1552,44 @@
                 <button @click="$emit('search')" class="h-10 px-5 rounded-lg bg-blue-600 text-white text-sm font-semibold hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition-all duration-200 ease-in-out">搜索</button>
                 <button @click="$emit('clear-filters')" class="h-10 px-4 rounded-lg bg-white border border-slate-300 text-slate-700 text-sm font-medium hover:bg-slate-50 transition-all duration-200 ease-in-out">清空</button>
             </div>
+
+            <div class="ledger-filter-summary-row">
+                <div class="ledger-filter-summary">{{ filterSummary }}</div>
+                <div v-if="filterChips.length" class="ledger-filter-chip-list">
+                    <button
+                        v-for="chip in filterChips"
+                        :key="`ledger-chip-${chip.key}`"
+                        type="button"
+                        @click="$emit('remove-filter-chip', chip.key)"
+                        class="ledger-filter-chip"
+                        :title="`移除${chip.label}`"
+                    >
+                        <span>{{ chip.label }} · {{ chip.value }}</span>
+                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                    </button>
+                </div>
+                <div v-if="recentFilters.length" class="ledger-recent-filter-list">
+                    <span>最近</span>
+                    <button
+                        v-for="(recent, index) in recentFilters"
+                        :key="`ledger-recent-${index}-${recent.month}-${recent.status}-${recent.department}`"
+                        type="button"
+                        @click="$emit('apply-recent-filter', recent)"
+                        class="ledger-recent-filter-button"
+                    >
+                        {{ $root.recentLedgerFilterLabel(recent) }}
+                    </button>
+                </div>
+            </div>
         </div>
     </template>
 
     <template id="ledger-batch-toolbar-template">
         <div class="ledger-batch-toolbar">
-            <span class="ledger-batch-toolbar-count">已选 {{ selectedCount }} 条</span>
+            <div class="ledger-batch-toolbar-copy">
+                <span class="ledger-batch-toolbar-count">已选 {{ selectedCount }} 条</span>
+                <span v-if="selectedSummary" class="ledger-batch-toolbar-summary">{{ selectedSummary }}</span>
+            </div>
             <select
                 :value="batchEditField"
                 @change="$emit('update:batchEditField', $event.target.value); $emit('field-change')"
@@ -1442,6 +1598,7 @@
                 <option value="">批量修改字段...</option>
                 <option value="status">采购状态</option>
                 <option value="payment_status">付款状态</option>
+                <option value="invoice_issued">发票状态</option>
                 <option value="supplier_id">供应商</option>
             </select>
             <select
@@ -1461,6 +1618,16 @@
             >
                 <option value="">选择付款状态...</option>
                 <option v-for="p in paymentStatuses" :key="`batch-p-${p}`" :value="p">{{ p }}</option>
+            </select>
+            <select
+                v-if="batchEditField === 'invoice_issued'"
+                :value="batchEditValue"
+                @change="$emit('update:batchEditValue', $event.target.value)"
+                class="ledger-batch-toolbar-control"
+            >
+                <option value="">选择发票状态...</option>
+                <option value="1">已入账</option>
+                <option value="0">待报</option>
             </select>
             <select
                 v-if="batchEditField === 'supplier_id'"
@@ -2098,7 +2265,7 @@
     </template>
 
     <template id="ledger-table-panel-template">
-        <div class="ledger-table-shell flex-1 min-h-0 flex flex-col">
+        <div class="ledger-table-shell flex-1 min-h-0 flex flex-col" :class="`ledger-density-${ledgerDensity}`">
             <div class="ledger-table-toolbar">
                 <div class="ledger-table-toolbar-main">
                     <span>本页 {{ items.length }} 条</span>
@@ -2252,6 +2419,8 @@
                                     >
                                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
                                     </a>
+                                    <span v-if="$root.isInlineEditSaving(item.id, 'purchase_link')" class="ledger-inline-save-state ledger-inline-save-state-saving">保存中</span>
+                                    <span v-else-if="$root.isInlineEditSaved(item.id, 'purchase_link')" class="ledger-inline-save-state ledger-inline-save-state-saved">已保存</span>
                                 </div>
                             </td>
                             <td class="px-4 py-3 text-center align-middle">
@@ -2273,6 +2442,8 @@
                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536M9 13l6.232-6.232a2.5 2.5 0 013.536 3.536L12.536 16.536a4 4 0 01-1.789 1.05L8 18l.414-2.747A4 4 0 019.464 13.464z"/>
                                         </svg>
                                     </button>
+                                    <span v-if="$root.isInlineEditSaving(item.id, 'quantity')" class="ledger-inline-save-state ledger-inline-save-state-saving">保存中</span>
+                                    <span v-else-if="$root.isInlineEditSaved(item.id, 'quantity')" class="ledger-inline-save-state ledger-inline-save-state-saved">已保存</span>
                                 </div>
                             </td>
                             <td class="px-4 py-3 text-center align-middle">
@@ -2295,6 +2466,8 @@
                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536M9 13l6.232-6.232a2.5 2.5 0 013.536 3.536L12.536 16.536a4 4 0 01-1.789 1.05L8 18l.414-2.747A4 4 0 019.464 13.464z"/>
                                         </svg>
                                     </button>
+                                    <span v-if="$root.isInlineEditSaving(item.id, 'unit_price')" class="ledger-inline-save-state ledger-inline-save-state-saving">保存中</span>
+                                    <span v-else-if="$root.isInlineEditSaved(item.id, 'unit_price')" class="ledger-inline-save-state ledger-inline-save-state-saved">已保存</span>
                                 </div>
                             </td>
                             <td class="px-4 py-3 text-center align-middle">
@@ -2485,84 +2658,22 @@
                             </div>
                         </div>
 
-                        <div class="ledger-mobile-field-grid">
-                            <label class="ledger-mobile-field">
-                                <span>部门</span>
-                                <input
-                                    type="text"
-                                    v-model="item.department"
-                                    @blur="$root.updateItem(item.id, { department: item.department })"
-                                    placeholder="部门"
-                                >
-                            </label>
-                            <label class="ledger-mobile-field">
-                                <span>经办人</span>
-                                <input
-                                    type="text"
-                                    v-model="item.handler"
-                                    @blur="$root.updateItem(item.id, { handler: item.handler })"
-                                    placeholder="经办人"
-                                >
-                            </label>
-                            <label class="ledger-mobile-field">
-                                <span>数量</span>
-                                <input
-                                    type="number"
-                                    v-model.number="item.quantity"
-                                    @blur="$root.updateItem(item.id, { quantity: item.quantity })"
-                                    inputmode="decimal"
-                                >
-                            </label>
-                            <label class="ledger-mobile-field">
-                                <span>单价</span>
-                                <input
-                                    type="number"
-                                    step="0.01"
-                                    v-model.number="item.unit_price"
-                                    @blur="$root.updateItem(item.id, { unit_price: item.unit_price })"
-                                    inputmode="decimal"
-                                    placeholder="-"
-                                >
-                            </label>
-                            <label class="ledger-mobile-field">
-                                <span>到货</span>
-                                <input
-                                    type="date"
-                                    v-model="item.arrival_date"
-                                    @change="$root.updateItem(item.id, { arrival_date: item.arrival_date })"
-                                >
-                            </label>
-                            <label class="ledger-mobile-field">
-                                <span>分发</span>
-                                <input
-                                    type="date"
-                                    v-model="item.distribution_date"
-                                    @change="$root.updateItem(item.id, { distribution_date: item.distribution_date })"
-                                >
-                            </label>
+                        <div v-if="item.signoff_note || item.purchase_link || item.distribution_date" class="ledger-mobile-meta-strip">
+                            <span v-if="item.distribution_date">分发 {{ item.distribution_date }}</span>
+                            <span v-if="item.signoff_note">{{ item.signoff_note }}</span>
+                            <span v-if="item.purchase_link">{{ $root.compactPurchaseLink(item.purchase_link) }}</span>
                         </div>
 
-                        <label class="ledger-mobile-field ledger-mobile-field-wide">
-                            <span>签收备注</span>
-                            <input
-                                type="text"
-                                v-model="item.signoff_note"
-                                @blur="$root.updateItem(item.id, { signoff_note: item.signoff_note })"
-                                placeholder="签收备注"
-                            >
-                        </label>
-
-                        <label class="ledger-mobile-field ledger-mobile-field-wide">
-                            <span>采购链接</span>
-                            <input
-                                type="url"
-                                v-model="item.purchase_link"
-                                @blur="$root.updateItem(item.id, { purchase_link: item.purchase_link })"
-                                placeholder="采购链接"
-                            >
-                        </label>
-
                         <div class="ledger-mobile-card-actions">
+                            <button
+                                v-if="$root.mobileLedgerPrimaryAction(item)"
+                                @click="$root.runMobileLedgerPrimaryAction(item)"
+                                :disabled="$root.isMobileLedgerActionSaving(item, $root.mobileLedgerPrimaryAction(item).key)"
+                                type="button"
+                                class="ledger-mobile-action-button ledger-mobile-action-stage"
+                            >
+                                {{ $root.mobileLedgerPrimaryActionText(item) }}
+                            </button>
                             <button
                                 @click="$root.openMobileLedgerEdit(item)"
                                 type="button"
@@ -2602,8 +2713,15 @@
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M3 7.5A2.5 2.5 0 015.5 5h13A2.5 2.5 0 0121 7.5v9A2.5 2.5 0 0118.5 19h-13A2.5 2.5 0 013 16.5v-9zM8 9h8M8 12h8M8 15h5"/>
                         </svg>
                     </div>
-                    <p class="mt-4 text-base font-semibold text-slate-700">暂无采购数据</p>
-                    <p class="mt-1 text-sm text-slate-500">请点击上方“手动新增”或“导入单据”开始录入</p>
+                    <template v-if="$root.ledgerFilterChips.length">
+                        <p class="mt-4 text-base font-semibold text-slate-700">没有匹配当前筛选的台账记录</p>
+                        <p class="mt-1 text-sm text-slate-500">{{ $root.ledgerFilterSummary }}</p>
+                        <button @click="$root.clearFilters()" type="button" class="ledger-empty-state-action">一键清空筛选</button>
+                    </template>
+                    <template v-else>
+                        <p class="mt-4 text-base font-semibold text-slate-700">暂无采购数据</p>
+                        <p class="mt-1 text-sm text-slate-500">请点击上方“手动新增”或“导入单据”开始录入</p>
+                    </template>
                 </div>
             </div>
 
@@ -2633,6 +2751,7 @@
     
     <script src="/static/view-config.js?v=1.2.62"></script>
     <script src="/static/time-utils.js?v=1.2.62"></script>
+    <script src="/static/ledger-ui-helpers.js?v=1.2.62"></script>
     <script src="/static/state.js?v=1.2.62"></script>
     <script src="/static/operations-center-api.js?v=1.2.62"></script>
     <script src="/static/api.js?v=1.2.62"></script>

@@ -59,6 +59,10 @@
                 type: Number,
                 default: 1,
             },
+            ledgerDensity: {
+                type: String,
+                default: 'comfortable',
+            },
             jumpPage: {
                 type: [Number, String, null],
                 default: '',

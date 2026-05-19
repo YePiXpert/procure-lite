@@ -466,6 +466,7 @@ async def _load_items_by_unique_keys(
 
 async def get_items(
     status: Optional[str] = None,
+    payment_status: Optional[str] = None,
     department: Optional[str] = None,
     month: Optional[str] = None,
     keyword: Optional[str] = None,
@@ -473,7 +474,11 @@ async def get_items(
     page_size: Optional[int] = None,
 ) -> list[dict]:
     conditions, params = build_item_filters(
-        status=status, department=department, month=month, keyword=keyword
+        status=status,
+        payment_status=payment_status,
+        department=department,
+        month=month,
+        keyword=keyword,
     )
     where_clause = " WHERE " + " AND ".join(conditions) if conditions else ""
     query = "SELECT * FROM items" + where_clause + " ORDER BY created_at DESC, id DESC"
@@ -496,12 +501,17 @@ async def get_items(
 
 async def stream_items(
     status: Optional[str] = None,
+    payment_status: Optional[str] = None,
     department: Optional[str] = None,
     month: Optional[str] = None,
     keyword: Optional[str] = None,
 ):
     conditions, params = build_item_filters(
-        status=status, department=department, month=month, keyword=keyword
+        status=status,
+        payment_status=payment_status,
+        department=department,
+        month=month,
+        keyword=keyword,
     )
     where_clause = " WHERE " + " AND ".join(conditions) if conditions else ""
     query = "SELECT * FROM items" + where_clause + " ORDER BY created_at DESC, id DESC"
@@ -577,12 +587,17 @@ async def get_execution_board(
 
 async def count_items(
     status: Optional[str] = None,
+    payment_status: Optional[str] = None,
     department: Optional[str] = None,
     month: Optional[str] = None,
     keyword: Optional[str] = None,
 ) -> int:
     conditions, params = build_item_filters(
-        status=status, department=department, month=month, keyword=keyword
+        status=status,
+        payment_status=payment_status,
+        department=department,
+        month=month,
+        keyword=keyword,
     )
     query = "SELECT COUNT(*) FROM items"
     if conditions:
@@ -596,6 +611,7 @@ async def count_items(
 
 async def get_items_page(
     status: Optional[str] = None,
+    payment_status: Optional[str] = None,
     department: Optional[str] = None,
     month: Optional[str] = None,
     keyword: Optional[str] = None,
@@ -603,7 +619,11 @@ async def get_items_page(
     page_size: int = 20,
 ) -> tuple[list[dict], int]:
     conditions, params = build_item_filters(
-        status=status, department=department, month=month, keyword=keyword
+        status=status,
+        payment_status=payment_status,
+        department=department,
+        month=month,
+        keyword=keyword,
     )
     where_clause = " WHERE " + " AND ".join(conditions) if conditions else ""
     offset = max(0, (page - 1) * page_size)

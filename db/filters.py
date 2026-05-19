@@ -8,6 +8,7 @@ def escape_like_pattern(value: str) -> str:
 
 def build_item_filters(
     status: Optional[str] = None,
+    payment_status: Optional[str] = None,
     department: Optional[str] = None,
     month: Optional[str] = None,
     keyword: Optional[str] = None,
@@ -26,6 +27,9 @@ def build_item_filters(
     if status:
         conditions.append("status = ?")
         params.append(status)
+    if payment_status:
+        conditions.append("payment_status = ?")
+        params.append(payment_status)
     if department:
         conditions.append("department = ?")
         params.append(department)

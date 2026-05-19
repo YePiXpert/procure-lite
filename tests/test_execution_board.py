@@ -53,19 +53,53 @@ async def _create_execution_board_schema(engine) -> None:
                 """
             )
         )
+        await conn.execute(
+            text(
+                """
+                CREATE TABLE item_history (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    item_id INTEGER,
+                    action TEXT NOT NULL,
+                    serial_number TEXT,
+                    department TEXT,
+                    handler TEXT,
+                    item_name TEXT,
+                    changed_fields TEXT,
+                    before_data TEXT,
+                    after_data TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+                """
+            )
+        )
+        await conn.execute(
+            text(
+                """
+                CREATE TABLE audit_logs (
+                    log_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    record_id INTEGER NOT NULL,
+                    action TEXT NOT NULL,
+                    changed_fields TEXT NOT NULL,
+                    operator_ip TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+                """
+            )
+        )
 
 
 async def _insert_item(
     engine,
     *,
     status: str,
+    payment_status: str = PaymentStatus.UNPAID.value,
     department: str = "IT",
     serial_number: str = "SN-001",
     item_name: str = "Printer paper",
     deleted_at=None,
-) -> None:
+) -> int:
     async with engine.begin() as conn:
-        await conn.execute(
+        result = await conn.execute(
             text(
                 """
                 INSERT INTO items (
@@ -89,10 +123,29 @@ async def _insert_item(
                 "department": department,
                 "item_name": item_name,
                 "status": status,
-                "payment_status": PaymentStatus.UNPAID.value,
+                "payment_status": payment_status,
                 "deleted_at": deleted_at,
             },
         )
+        return int(result.lastrowid)
+
+
+async def _fetch_item_by_id(engine, item_id: int) -> dict:
+    async with engine.begin() as conn:
+        row = (
+            await conn.execute(
+                text(
+                    """
+                    SELECT status, payment_status, arrival_date,
+                           distribution_date, signoff_note
+                    FROM items
+                    WHERE id = :item_id
+                    """
+                ),
+                {"item_id": item_id},
+            )
+        ).mappings().one()
+        return dict(row)
 
 
 @pytest.mark.asyncio
@@ -163,3 +216,81 @@ async def test_execution_board_applies_filters(execution_board_db):
     )
     assert pending_column["count"] == 1
     assert [item["serial_number"] for item in pending_column["items"]] == ["FIN-001"]
+
+
+@pytest.mark.asyncio
+async def test_items_page_filters_by_payment_status(execution_board_db):
+    await _create_execution_board_schema(execution_board_db)
+    await _insert_item(
+        execution_board_db,
+        status=ItemStatus.DISTRIBUTED.value,
+        payment_status=PaymentStatus.PAID.value,
+        serial_number="PAY-001",
+        item_name="Paid item",
+    )
+    await _insert_item(
+        execution_board_db,
+        status=ItemStatus.DISTRIBUTED.value,
+        payment_status=PaymentStatus.REIMBURSED.value,
+        serial_number="PAY-002",
+        item_name="Reimbursed item",
+    )
+
+    rows, total = await items.get_items_page(
+        status=ItemStatus.DISTRIBUTED.value,
+        payment_status=PaymentStatus.PAID.value,
+        page=1,
+        page_size=20,
+    )
+
+    assert total == 1
+    assert [row["serial_number"] for row in rows] == ["PAY-001"]
+
+
+@pytest.mark.asyncio
+async def test_mobile_field_action_patches_update_status_dates_and_payment(execution_board_db):
+    await _create_execution_board_schema(execution_board_db)
+    arrival_id = await _insert_item(
+        execution_board_db,
+        status=ItemStatus.PENDING_ARRIVAL.value,
+        serial_number="MOB-ARR",
+        item_name="Mobile arrival",
+    )
+    distribution_id = await _insert_item(
+        execution_board_db,
+        status=ItemStatus.PENDING_DISTRIBUTION.value,
+        payment_status=PaymentStatus.PAID.value,
+        serial_number="MOB-DST",
+        item_name="Mobile distribution",
+    )
+
+    assert await items.update_item(
+        arrival_id,
+        {
+            "status": ItemStatus.PENDING_DISTRIBUTION.value,
+            "arrival_date": "2026-05-18",
+        },
+    )
+    arrival = await _fetch_item_by_id(execution_board_db, arrival_id)
+    assert arrival["status"] == ItemStatus.PENDING_DISTRIBUTION.value
+    assert arrival["arrival_date"] == "2026-05-18"
+
+    assert await items.update_item(
+        distribution_id,
+        {
+            "status": ItemStatus.DISTRIBUTED.value,
+            "distribution_date": "2026-05-18",
+            "signoff_note": "现场签收",
+        },
+    )
+    distributed = await _fetch_item_by_id(execution_board_db, distribution_id)
+    assert distributed["status"] == ItemStatus.DISTRIBUTED.value
+    assert distributed["distribution_date"] == "2026-05-18"
+    assert distributed["signoff_note"] == "现场签收"
+
+    assert await items.update_item(
+        distribution_id,
+        {"payment_status": PaymentStatus.REIMBURSED.value},
+    )
+    reimbursed = await _fetch_item_by_id(execution_board_db, distribution_id)
+    assert reimbursed["payment_status"] == PaymentStatus.REIMBURSED.value

@@ -3,8 +3,9 @@ from typing import Optional
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 
-from api_utils import normalize_item_filters
+from api_utils import normalize_item_filters, normalize_text_filter
 from database import (
+    PaymentStatus,
     get_amount_report,
     get_operations_report,
     get_supplier_report,
@@ -25,6 +26,7 @@ router = APIRouter(prefix="/api")
 @router.get("/export")
 async def export_items(
     status: Optional[str] = None,
+    payment_status: Optional[str] = None,
     department: Optional[str] = None,
     month: Optional[str] = None,
     keyword: Optional[str] = None,
@@ -32,8 +34,15 @@ async def export_items(
     status_val, department_val, month_val, keyword_val = normalize_item_filters(
         status, department, month, keyword
     )
+    payment_status_val = normalize_text_filter(payment_status)
+    if payment_status_val and payment_status_val not in {item.value for item in PaymentStatus}:
+        raise HTTPException(status_code=400, detail="payment_status 参数不合法")
     items = stream_items(
-        status=status_val, department=department_val, month=month_val, keyword=keyword_val
+        status=status_val,
+        payment_status=payment_status_val,
+        department=department_val,
+        month=month_val,
+        keyword=keyword_val,
     )
     try:
         output = await build_items_excel_stream_async(items)

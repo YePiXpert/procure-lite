@@ -19,8 +19,11 @@
                     paymentStatuses: ['未付款', '已付款', '已报销'],
                     filterKeyword: '',
                     filterStatus: '',
+                    filterPaymentStatus: '',
                     filterDepartment: '',
                     filterMonth: '',
+                    ledgerDensity: 'comfortable',
+                    ledgerRecentFilters: [],
                     appVersion: '',
                     authInitialized: false,
                     isAuthenticated: false,
@@ -76,6 +79,9 @@
                     inlineEditId: null,
                     inlineEditField: '',
                     inlineEditCommitting: false,
+                    inlineEditSavingKey: '',
+                    inlineEditSavedKey: '',
+                    inlineEditSavedTimer: null,
                     inlineEditRefs: {},
                     toasts: [],
                     nextToastId: 1,
@@ -241,6 +247,9 @@
                     mobileLedgerEditId: null,
                     mobileLedgerEditDraft: null,
                     mobileLedgerEditSaving: false,
+                    mobileLedgerActionSavingKey: '',
+                    mobileLedgerActionSavedKey: '',
+                    mobileLedgerActionSavedTimer: null,
                     importPreview: {
                         serial_number: '',
                         department: '',
@@ -353,6 +362,86 @@
                 pageRangeEnd() {
                     if (!this.totalItems) return 0;
                     return Math.min(this.currentPage * this.pageSize, this.totalItems);
+                },
+                ledgerFilterSnapshot() {
+                    return {
+                        keyword: this.filterKeyword,
+                        status: this.filterStatus,
+                        paymentStatus: this.filterPaymentStatus,
+                        department: this.filterDepartment,
+                        month: this.filterMonth,
+                    };
+                },
+                ledgerQuickFilters() {
+                    return global.LedgerUiHelpers?.quickFilterDefinitions(this.stats) || [];
+                },
+                activeLedgerQuickFilterKey() {
+                    return global.LedgerUiHelpers?.matchQuickFilter(
+                        this.ledgerFilterSnapshot,
+                        this.ledgerQuickFilters
+                    ) || '';
+                },
+                ledgerFilterChips() {
+                    return global.LedgerUiHelpers?.filterChips(this.ledgerFilterSnapshot) || [];
+                },
+                ledgerFilterSummary() {
+                    return global.LedgerUiHelpers?.filterSummary(this.ledgerFilterSnapshot, this.totalItems)
+                        || `当前结果 ${this.totalItems || 0} 条`;
+                },
+                ledgerDensityLabel() {
+                    return this.ledgerDensity === 'compact' ? '紧凑' : '舒适';
+                },
+                dashboardTodoCards() {
+                    const center = this.operationsCenter || {};
+                    const queues = center.action_queues || {};
+                    const stats = this.stats || {};
+                    const statusCount = stats.statusCount || {};
+                    const importTasks = Array.isArray(center.import_tasks) ? center.import_tasks : [];
+                    const invoiceQueue = Array.isArray(center.invoice_queue) ? center.invoice_queue : [];
+                    const receiptQueue = Array.isArray(center.receipt_queue) ? center.receipt_queue : [];
+                    const purchaseQueue = Array.isArray(center.purchase_queue) ? center.purchase_queue : [];
+                    const importRecoveryCount = importTasks.filter((task) => task?.status !== 'completed').length;
+                    const pendingInvoiceCount = invoiceQueue.filter((item) => item?.reimbursement_status !== 'reimbursed').length;
+                    return [
+                        {
+                            key: 'purchase',
+                            label: '待下单',
+                            count: purchaseQueue.length || (Array.isArray(queues.purchase) ? queues.purchase.length : 0) || Number(statusCount['待采购']) || 0,
+                            description: '确认供应商和下单日期',
+                        },
+                        {
+                            key: 'receipt',
+                            label: '待收货',
+                            count: receiptQueue.length || (Array.isArray(queues.receipt) ? queues.receipt.length : 0) || Number(statusCount['待到货']) || 0,
+                            description: '同步到货和收货数量',
+                        },
+                        {
+                            key: 'distribution',
+                            label: '待分发',
+                            count: Number(statusCount['待分发']) || 0,
+                            description: '安排签收与发放',
+                        },
+                        {
+                            key: 'reimbursement',
+                            label: '待报销',
+                            count: pendingInvoiceCount || Number(stats.paymentCount?.['已付款']) || 0,
+                            description: '补发票、附件或报销状态',
+                        },
+                        {
+                            key: 'imports',
+                            label: '导入异常',
+                            count: importRecoveryCount,
+                            description: '处理失败或解析中的单据',
+                        },
+                    ];
+                },
+                dashboardTodoTotal() {
+                    return this.dashboardTodoCards.reduce((sum, card) => sum + (Number(card.count) || 0), 0);
+                },
+                dashboardActionRows() {
+                    const center = this.operationsCenter || {};
+                    const rows = Array.isArray(center.action_queues?.all) ? center.action_queues.all : [];
+                    return rows.slice(0, 5);
                 },
                 navPrimaryViews() {
                     return window.AppViewConfig?.primaryNav || [];
@@ -965,6 +1054,9 @@
                         window.localStorage.removeItem(`gemini_${field}`);
                     }
                 } catch (_) {}
+                if (typeof this.initializeLedgerUiPreferences === 'function') {
+                    this.initializeLedgerUiPreferences();
+                }
                 if (typeof this.loadAppMetadata === 'function') {
                     await this.loadAppMetadata();
                 }
@@ -999,6 +1091,14 @@
                 if (this.focusedLedgerItemTimer) {
                     clearTimeout(this.focusedLedgerItemTimer);
                     this.focusedLedgerItemTimer = null;
+                }
+                if (this.inlineEditSavedTimer) {
+                    clearTimeout(this.inlineEditSavedTimer);
+                    this.inlineEditSavedTimer = null;
+                }
+                if (this.mobileLedgerActionSavedTimer) {
+                    clearTimeout(this.mobileLedgerActionSavedTimer);
+                    this.mobileLedgerActionSavedTimer = null;
                 }
             },
     };

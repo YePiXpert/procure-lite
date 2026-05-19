@@ -475,17 +475,75 @@ async def upsert_invoice_record(item_id: int, payload: dict) -> int:
     )
 
 
+async def _get_or_create_invoice_record_id_in_session(session, item_id: int) -> int:
+    item_check = await session.execute(
+        text(
+            """
+            SELECT 1
+            FROM items
+            WHERE id = :item_id AND deleted_at IS NULL
+            LIMIT 1
+            """
+        ),
+        {"item_id": int(item_id)},
+    )
+    if item_check.first() is None:
+        raise ValueError("item does not exist")
+
+    existing = await session.execute(
+        text("SELECT id FROM invoice_records WHERE item_id = :item_id LIMIT 1"),
+        {"item_id": int(item_id)},
+    )
+    existing_row = existing.mappings().first()
+    if existing_row:
+        return int(existing_row["id"])
+
+    await session.execute(
+        text(
+            """
+            INSERT INTO invoice_records (
+                item_id, reimbursement_status, reimbursement_date, invoice_number, note, updated_at
+            )
+            VALUES (
+                :item_id, :reimbursement_status, NULL, NULL, NULL, CURRENT_TIMESTAMP
+            )
+            """
+        ),
+        {
+            "item_id": int(item_id),
+            "reimbursement_status": DEFAULT_REIMBURSEMENT_STATUS,
+        },
+    )
+    return await _last_insert_rowid(session)
+
+
 async def create_invoice_attachment(
     *, item_id: int, file_name: str, stored_name: str, mime_type: str, file_size: int
 ) -> int:
-    record_id = await upsert_invoice_record(item_id, {})
-    return await execute_write_sql(
-        """
-        INSERT INTO invoice_attachments (invoice_record_id, file_name, stored_name, mime_type, file_size)
-        VALUES (?, ?, ?, ?, ?)
-        """,
-        [record_id, file_name, stored_name, mime_type, file_size],
-    )
+    async with AsyncSessionLocal() as session:
+        record_id = await _get_or_create_invoice_record_id_in_session(session, item_id)
+        await session.execute(
+            text(
+                """
+                INSERT INTO invoice_attachments (
+                    invoice_record_id, file_name, stored_name, mime_type, file_size
+                )
+                VALUES (
+                    :invoice_record_id, :file_name, :stored_name, :mime_type, :file_size
+                )
+                """
+            ),
+            {
+                "invoice_record_id": record_id,
+                "file_name": file_name,
+                "stored_name": stored_name,
+                "mime_type": mime_type,
+                "file_size": file_size,
+            },
+        )
+        attachment_id = await _last_insert_rowid(session)
+        await session.commit()
+        return attachment_id
 
 
 async def delete_invoice_attachment(attachment_id: int) -> dict | None:
@@ -572,23 +630,26 @@ async def upsert_purchase_order(item_id: int, payload: dict) -> int:
             )
             purchase_order_id = await _last_insert_rowid(session)
 
-        if supplier is not None:
-            await session.execute(
-                text(
-                    """
-                    UPDATE items
-                    SET supplier_id = :supplier_id,
-                        supplier_name_snapshot = :supplier_name_snapshot,
-                        updated_at = CURRENT_TIMESTAMP
-                    WHERE id = :item_id
-                    """
+        await session.execute(
+            text(
+                """
+                UPDATE items
+                SET supplier_id = :supplier_id,
+                    supplier_name_snapshot = :supplier_name_snapshot,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE id = :item_id
+                """
+            ),
+            {
+                "supplier_id": int(supplier["id"]) if supplier is not None else None,
+                "supplier_name_snapshot": (
+                    str(supplier["name"] or "").strip() or None
+                    if supplier is not None
+                    else None
                 ),
-                {
-                    "supplier_id": int(supplier["id"]),
-                    "supplier_name_snapshot": str(supplier["name"] or "").strip() or None,
-                    "item_id": int(item_id),
-                },
-            )
+                "item_id": int(item_id),
+            },
+        )
         if normalized["status"] == "ordered":
             await session.execute(
                 text(
