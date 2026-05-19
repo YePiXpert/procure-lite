@@ -2439,67 +2439,209 @@ body {
 }
 
 @media (min-width: 1024px) {
+    .app-header-ledger-compact {
+        display: none;
+    }
+
+    .app-main-ledger {
+        padding: 0.75rem 1rem 1rem !important;
+        overflow: hidden !important;
+    }
+
     .ledger-pane {
-        gap: 0.75rem;
+        height: 100%;
+        min-height: 0;
+        gap: 0.5rem;
+        overflow: hidden;
+        padding-right: 0;
     }
 
     .ledger-filter-card {
-        padding: 0.8rem 0.9rem;
+        flex: 0 0 auto;
+        border-radius: 0.65rem;
+        padding: 0.45rem 0.65rem;
     }
 
     .ledger-filter-header {
         flex-direction: row;
         align-items: center;
         justify-content: space-between;
+        gap: 0.75rem;
     }
 
     .ledger-filter-title {
-        font-size: 1.25rem;
-        line-height: 1.25;
+        font-size: 1.05rem;
+        line-height: 1.2;
         letter-spacing: 0;
     }
 
     .ledger-filter-description {
-        margin-top: 0.15rem;
-        font-size: 0.8rem;
+        display: none;
+    }
+
+    .ledger-filter-actions {
+        flex: 0 0 auto;
+        justify-content: flex-end;
+        gap: 0.4rem;
+    }
+
+    .ledger-filter-actions button {
+        height: 1.85rem;
+        border-radius: 0.5rem;
+        padding-left: 0.7rem;
+        padding-right: 0.7rem;
+        font-size: 0.78rem;
+        line-height: 1;
+        white-space: nowrap;
     }
 
     .ledger-filter-row {
-        margin-top: 0.65rem;
-        gap: 0.5rem;
+        display: grid;
+        grid-template-columns:
+            minmax(260px, 2.1fr)
+            minmax(112px, 0.55fr)
+            minmax(112px, 0.55fr)
+            minmax(160px, 0.9fr)
+            minmax(120px, 0.55fr)
+            auto
+            auto;
+        margin-top: 0.35rem;
+        gap: 0.4rem;
     }
 
     .ledger-filter-control {
-        height: 2.25rem;
+        width: 100%;
+        min-width: 0;
+        height: 1.85rem;
+        border-radius: 0.5rem;
+        font-size: 0.78rem;
+    }
+
+    .ledger-filter-search {
+        min-width: 0;
+    }
+
+    .ledger-filter-search-icon {
+        left: 0.6rem;
+        width: 0.9rem;
+        height: 0.9rem;
+    }
+
+    .ledger-filter-control-search {
+        padding-left: 1.95rem;
+    }
+
+    .ledger-filter-row > button {
+        height: 1.85rem;
+        min-width: 4.1rem;
+        border-radius: 0.5rem;
+        padding-left: 0.75rem;
+        padding-right: 0.75rem;
+        font-size: 0.78rem;
+        line-height: 1;
     }
 
     .ledger-quick-filter-row {
-        margin-top: 0.65rem;
-        gap: 0.45rem;
+        display: flex;
+        align-items: center;
+        gap: 0.35rem;
+        margin-top: 0.35rem;
+        overflow-x: auto;
+        overflow-y: hidden;
+        scrollbar-width: none;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    .ledger-quick-filter-row::-webkit-scrollbar {
+        display: none;
     }
 
     .ledger-quick-filter-button,
     .ledger-density-toggle {
-        min-height: 3.35rem;
-        gap: 0.12rem;
-        padding: 0.45rem 0.65rem;
+        flex: 0 0 auto;
+        min-height: 1.55rem;
+        height: 1.55rem;
+        flex-direction: row;
+        align-items: center;
+        justify-content: flex-start;
+        gap: 0.35rem;
+        border-radius: 999px;
+        padding: 0 0.55rem;
+        box-shadow: none;
+        white-space: nowrap;
+    }
+
+    .ledger-quick-filter-button:hover,
+    .ledger-density-toggle:hover,
+    .ledger-quick-filter-active {
+        box-shadow: none;
+    }
+
+    .ledger-quick-filter-button span,
+    .ledger-density-toggle span {
+        font-size: 0.68rem;
+        line-height: 1;
     }
 
     .ledger-quick-filter-button strong,
     .ledger-density-toggle strong {
-        font-size: 1rem;
+        font-size: 0.86rem;
+        line-height: 1;
+    }
+
+    .ledger-quick-filter-button em {
+        display: none;
     }
 
     .ledger-filter-summary-row {
-        margin-top: 0.55rem;
+        flex-wrap: nowrap;
+        margin-top: 0.3rem;
+        min-height: 1.3rem;
+        gap: 0.35rem;
+        overflow: hidden;
+    }
+
+    .ledger-filter-summary {
+        flex: 0 0 auto;
+        font-size: 0.7rem;
+        white-space: nowrap;
+    }
+
+    .ledger-filter-chip-list,
+    .ledger-recent-filter-list {
+        flex-wrap: nowrap;
+        min-width: 0;
+        overflow-x: auto;
+        scrollbar-width: none;
+    }
+
+    .ledger-filter-chip-list::-webkit-scrollbar,
+    .ledger-recent-filter-list::-webkit-scrollbar {
+        display: none;
+    }
+
+    .ledger-filter-chip,
+    .ledger-recent-filter-button {
+        flex: 0 0 auto;
+        min-height: 1.3rem;
+        max-width: 13rem;
+        padding: 0 0.5rem;
+        font-size: 0.66rem;
+    }
+
+    .ledger-table-shell {
+        min-height: 0;
     }
 
     .ledger-table-card {
-        min-height: clamp(660px, calc(100dvh - 160px), 940px);
+        flex: 1 1 auto;
+        min-height: 0;
+        height: auto;
     }
 
     .ledger-table-scroll {
-        min-height: 560px;
+        flex: 1 1 auto;
+        min-height: 0;
     }
 
     .ledger-table thead th {
@@ -2549,22 +2691,35 @@ body {
     }
 
     .ledger-table-footer {
-        padding: 0.65rem 0.85rem !important;
-        gap: 0.5rem 0.75rem;
+        flex: 0 0 auto;
+        min-height: 2.5rem;
+        flex-direction: row !important;
+        align-items: center !important;
+        padding: 0.3rem 0.65rem !important;
+        gap: 0.35rem 0.65rem !important;
     }
 
     .ledger-table-footer-copy {
-        padding: 0.3rem 0.65rem;
+        padding: 0.25rem 0.55rem;
     }
 
     .ledger-pagination {
-        padding: 0.22rem;
+        padding: 0.18rem;
         border-radius: 0.65rem;
+        gap: 0.35rem;
+        flex-wrap: nowrap !important;
+        max-width: 100%;
+        overflow-x: auto;
+        scrollbar-width: none;
+    }
+
+    .ledger-pagination::-webkit-scrollbar {
+        display: none;
     }
 
     .ledger-pagination-control,
     .ledger-pagination-button {
-        height: 2rem !important;
+        height: 1.75rem !important;
         border-radius: 0.5rem !important;
     }
 }
