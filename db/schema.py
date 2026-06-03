@@ -426,6 +426,21 @@ async def init_db():
             "CREATE INDEX IF NOT EXISTS idx_items_deleted_at ON items(deleted_at)"
         )
         await db.execute(
+            "CREATE INDEX IF NOT EXISTS idx_items_active_created ON items(deleted_at, created_at DESC, id DESC)"
+        )
+        await db.execute(
+            "CREATE INDEX IF NOT EXISTS idx_items_active_status_created ON items(deleted_at, status, created_at DESC, id DESC)"
+        )
+        await db.execute(
+            "CREATE INDEX IF NOT EXISTS idx_items_active_department_created ON items(deleted_at, department, created_at DESC, id DESC)"
+        )
+        await db.execute(
+            "CREATE INDEX IF NOT EXISTS idx_items_active_payment_status_created ON items(deleted_at, payment_status, created_at DESC, id DESC)"
+        )
+        await db.execute(
+            "CREATE INDEX IF NOT EXISTS idx_items_active_request_date_created ON items(deleted_at, request_date, created_at DESC, id DESC)"
+        )
+        await db.execute(
             "CREATE INDEX IF NOT EXISTS idx_item_history_created_at ON item_history(created_at DESC)"
         )
         await db.execute(

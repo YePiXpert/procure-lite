@@ -61,6 +61,10 @@
                 type: Array,
                 default: () => [],
             },
+            itemsLoading: {
+                type: Boolean,
+                default: false,
+            },
         },
         emits: [
             'update:filterKeyword',

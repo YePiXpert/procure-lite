@@ -39,6 +39,10 @@
                 type: Number,
                 default: 0,
             },
+            itemsLoading: {
+                type: Boolean,
+                default: false,
+            },
             pageSize: {
                 type: Number,
                 default: 20,

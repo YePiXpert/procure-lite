@@ -2821,34 +2821,77 @@
                         this.showApiError('加载筛选项失败', e);
                     }
                 },
-                async loadItems() {
+                isRequestCanceled(error) {
+                    return Boolean(
+                        error?.code === 'ERR_CANCELED' ||
+                        error?.name === 'CanceledError' ||
+                        (typeof axios !== 'undefined' && typeof axios.isCancel === 'function' && axios.isCancel(error))
+                    );
+                },
+                async loadItems(options = {}) {
+                    const requestedPage = Math.max(1, Math.trunc(Number(options.page ?? this.currentPage) || 1));
+                    const requestedPageSize = Math.max(1, Math.min(200, Math.trunc(Number(options.pageSize ?? this.pageSize) || 20)));
+                    const keyword = this.normalizeText(this.filterKeyword);
+                    if (this.filterKeyword !== keyword) {
+                        this.filterKeyword = keyword;
+                    }
+                    this.currentPage = requestedPage;
+                    this.pageSize = requestedPageSize;
+
+                    const params = {
+                        page: requestedPage,
+                        page_size: requestedPageSize,
+                    };
+                    if (keyword) params.keyword = keyword;
+                    if (this.filterStatus) params.status = this.filterStatus;
+                    if (this.filterPaymentStatus) params.payment_status = this.filterPaymentStatus;
+                    if (this.filterDepartment) params.department = this.filterDepartment;
+                    if (this.filterMonth) params.month = this.filterMonth;
+
+                    const requestSeq = this.ledgerItemsRequestSeq + 1;
+                    this.ledgerItemsRequestSeq = requestSeq;
+                    if (this.ledgerItemsAbortController) {
+                        this.ledgerItemsAbortController.abort();
+                    }
+                    const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+                    this.ledgerItemsAbortController = controller;
+                    this.itemsLoading = true;
+
                     try {
-                        const params = {
-                            page: this.currentPage,
-                            page_size: this.pageSize,
-                        };
-                        if (this.filterKeyword) params.keyword = this.filterKeyword;
-                        if (this.filterStatus) params.status = this.filterStatus;
-                        if (this.filterPaymentStatus) params.payment_status = this.filterPaymentStatus;
-                        if (this.filterDepartment) params.department = this.filterDepartment;
-                        if (this.filterMonth) params.month = this.filterMonth;
-                        const res = await axios.get('/api/items', { params });
+                        const requestConfig = { params };
+                        if (controller) {
+                            requestConfig.signal = controller.signal;
+                        }
+                        const res = await axios.get('/api/items', requestConfig);
+                        if (requestSeq !== this.ledgerItemsRequestSeq) return;
+
                         const rawItems = Array.isArray(res.data.items) ? res.data.items : [];
+                        const total = typeof res.data.total === 'number' ? res.data.total : rawItems.length;
+                        const maxPage = Math.max(1, Math.ceil(total / requestedPageSize));
+                        if (requestedPage > maxPage) {
+                            this.currentPage = maxPage;
+                            await this.loadItems({ page: maxPage, pageSize: requestedPageSize });
+                            return;
+                        }
+
                         this.items = rawItems.map((entry) => ({
                             ...entry,
                             status: this.normalizeProcurementStatus(entry?.status) || this.normalizeText(entry?.status),
                         }));
-                        this.totalItems = typeof res.data.total === 'number' ? res.data.total : this.items.length;
+                        this.totalItems = total;
                         this.selectedItems = [];
                         this.selectAll = false;
-
-                        const maxPage = Math.max(1, Math.ceil(this.totalItems / this.pageSize));
-                        if (this.currentPage > maxPage) {
-                            this.currentPage = maxPage;
-                            await this.loadItems();
+                    } catch(e) {
+                        if (requestSeq !== this.ledgerItemsRequestSeq || this.isRequestCanceled(e)) return;
+                        this.showApiError('加载台账失败', e);
+                    } finally {
+                        if (requestSeq === this.ledgerItemsRequestSeq) {
+                            this.itemsLoading = false;
+                            if (this.ledgerItemsAbortController === controller) {
+                                this.ledgerItemsAbortController = null;
+                            }
                         }
                     }
-                    catch(e) { this.showApiError('加载台账失败', e); }
                 },
                 async loadStats() {
                     try {
@@ -2933,23 +2976,25 @@
                     }
                 },
                 handleFilter() {
+                    this.filterKeyword = this.normalizeText(this.filterKeyword);
                     this.currentPage = 1;
                     this.reportsInitialized = false;
                     this.persistLedgerRecentFilter();
-                    this.loadItems();
+                    this.loadItems({ page: 1 });
                     if (this.currentView === 'reports') {
                         this.loadAmountReport();
                     }
                 },
                 goToPage(page) {
-                    if (page < 1 || page > this.totalPages || page === this.currentPage) return;
-                    this.currentPage = page;
-                    this.loadItems();
+                    const target = Math.trunc(Number(page));
+                    if (!Number.isFinite(target) || target < 1 || target > this.totalPages || target === this.currentPage) return;
+                    this.loadItems({ page: target });
                 },
                 changePageSize() {
-                    if (!this.pageSize || this.pageSize < 1) this.pageSize = 20;
+                    const nextPageSize = Math.max(1, Math.min(200, Number(this.pageSize) || 20));
+                    this.pageSize = nextPageSize;
                     this.currentPage = 1;
-                    this.loadItems();
+                    this.loadItems({ page: 1, pageSize: nextPageSize });
                 },
                 jumpToPage() {
                     const page = Number(this.jumpPage);

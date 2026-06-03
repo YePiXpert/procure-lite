@@ -15,6 +15,7 @@ STREAM_CHUNK_SIZE = 1024 * 1024
 MIN_PAGE = 1
 MAX_PAGE_SIZE = 200
 DEFAULT_PAGE_SIZE = 20
+MAX_KEYWORD_LENGTH = 200
 
 
 def normalize_month(month: Optional[str]) -> Optional[str]:
@@ -35,6 +36,16 @@ def normalize_text_filter(value: Optional[str]) -> Optional[str]:
         return None
     value = value.strip()
     return value or None
+
+
+def normalize_keyword_filter(value: Optional[str], max_length: int = MAX_KEYWORD_LENGTH) -> Optional[str]:
+    """Normalize a keyword query and reject unusually large scans."""
+    value = normalize_text_filter(value)
+    if value is None:
+        return None
+    if len(value) > max_length:
+        raise HTTPException(status_code=400, detail=f"keyword 参数长度不能超过 {max_length} 个字符")
+    return value
 
 
 def normalize_history_action(value: Optional[str]) -> Optional[str]:

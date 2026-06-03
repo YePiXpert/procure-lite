@@ -10,6 +10,9 @@
         data() {
                 return {
                     items: [],
+                    itemsLoading: false,
+                    ledgerItemsRequestSeq: 0,
+                    ledgerItemsAbortController: null,
                     totalItems: 0,
                     stats: { total: 0, statusCount: {}, paymentCount: {}, invoiceCount: { issued: 0, notIssued: 0 }},
                     statuses: ['待采购', '待到货', '待分发', '已分发'],

@@ -36,6 +36,7 @@ def build_item_filters(
     if month:
         conditions.append("request_date LIKE ?")
         params.append(f"{month}%")
+    keyword = str(keyword).strip() if keyword is not None else ""
     if keyword:
         pattern = f"%{escape_like_pattern(keyword)}%"
         conditions.append(

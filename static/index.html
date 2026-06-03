@@ -335,6 +335,7 @@
                         :ledger-density="ledgerDensity"
                         :ledger-density-label="ledgerDensityLabel"
                         :recent-filters="ledgerRecentFilters"
+                        :items-loading="itemsLoading"
                         @update:filter-keyword="filterKeyword = $event"
                         @update:filter-status="filterStatus = $event"
                         @update:filter-payment-status="filterPaymentStatus = $event"
@@ -377,6 +378,7 @@
                             :page-range-start="pageRangeStart"
                             :page-range-end="pageRangeEnd"
                             :total-items="totalItems"
+                            :items-loading="itemsLoading"
                             :page-size="pageSize"
                             :page-size-options="pageSizeOptions"
                             :current-page="currentPage"
@@ -1549,7 +1551,13 @@
                     @change="$emit('search')"
                     class="ledger-filter-control"
                 >
-                <button @click="$emit('search')" class="h-10 px-5 rounded-lg bg-blue-600 text-white text-sm font-semibold hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition-all duration-200 ease-in-out">搜索</button>
+                <button
+                    @click="$emit('search')"
+                    :disabled="itemsLoading"
+                    class="h-10 px-5 rounded-lg bg-blue-600 text-white text-sm font-semibold hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition-all duration-200 ease-in-out disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                    {{ itemsLoading ? '搜索中...' : '搜索' }}
+                </button>
                 <button @click="$emit('clear-filters')" class="h-10 px-4 rounded-lg bg-white border border-slate-300 text-slate-700 text-sm font-medium hover:bg-slate-50 transition-all duration-200 ease-in-out">清空</button>
             </div>
 
@@ -2271,6 +2279,7 @@
                     <span>本页 {{ items.length }} 条</span>
                     <span>已选 {{ selectedItemsModel.length }} 条</span>
                     <span>总计 {{ totalItems }} 条</span>
+                    <span v-if="itemsLoading" class="text-blue-600">正在刷新...</span>
                 </div>
                 <div class="ledger-table-toolbar-hints">
                     <span>点击字段直接编辑</span>
@@ -2278,7 +2287,13 @@
                     <span>Esc 取消</span>
                 </div>
             </div>
-            <div class="ledger-table-scroll flex-1 min-h-0 overflow-x-auto border-b border-slate-200">
+            <div class="ledger-table-scroll relative flex-1 min-h-0 overflow-x-auto border-b border-slate-200">
+                <div
+                    v-if="itemsLoading"
+                    class="pointer-events-none absolute inset-0 z-40 flex items-start justify-center bg-white/60 pt-16 text-sm font-semibold text-blue-700 backdrop-blur-[1px]"
+                >
+                    正在加载台账...
+                </div>
                 <table v-if="items.length > 0" class="ledger-table w-full min-w-max whitespace-nowrap text-left border-separate border-spacing-0">
                     <thead class="sticky top-0 z-20 bg-slate-50 shadow-[0_1px_0_0_#e2e8f0]">
                         <tr class="text-xs font-semibold text-slate-500 uppercase tracking-wider">
@@ -2731,19 +2746,19 @@
                 </div>
                 <div class="ledger-pagination flex items-center gap-2 flex-wrap">
                     <label class="text-xs text-slate-500">每页</label>
-                    <select v-model.number="pageSizeModel" @change="$root.changePageSize()" class="ledger-pagination-control h-9 px-2 bg-white border border-slate-300 rounded-lg text-xs font-medium focus:outline-none focus:ring-2 focus:ring-blue-500/20">
+                    <select v-model.number="pageSizeModel" @change="$root.changePageSize()" :disabled="itemsLoading" class="ledger-pagination-control h-9 px-2 bg-white border border-slate-300 rounded-lg text-xs font-medium focus:outline-none focus:ring-2 focus:ring-blue-500/20 disabled:cursor-not-allowed disabled:opacity-60">
                         <option v-for="size in pageSizeOptions" :key="`size-${size}`" :value="size">{{ size }}</option>
                     </select>
                     <div class="w-px h-5 bg-slate-300 mx-1"></div>
-                    <button @click="$root.goToPage(currentPage - 1)" :disabled="currentPage <= 1" class="ledger-pagination-button h-9 px-3 bg-white border border-slate-300 rounded-lg text-xs font-medium text-slate-700 disabled:opacity-50 hover:bg-slate-50 transition-colors duration-200">上一页</button>
+                    <button @click="$root.goToPage(currentPage - 1)" :disabled="itemsLoading || currentPage <= 1" class="ledger-pagination-button h-9 px-3 bg-white border border-slate-300 rounded-lg text-xs font-medium text-slate-700 disabled:cursor-not-allowed disabled:opacity-50 hover:bg-slate-50 transition-colors duration-200">上一页</button>
                     <template v-for="(token, idx) in pageTokens" :key="`pt-${idx}-${token}`">
                         <span v-if="token === 'ellipsis'" class="h-9 px-2 inline-flex items-center text-slate-400">…</span>
-                        <button v-else @click="$root.goToPage(token)" :class="token === currentPage ? 'bg-blue-600 text-white border-blue-600 shadow-sm' : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-50'" class="ledger-pagination-button h-9 min-w-[36px] px-2 border rounded-lg text-xs font-medium transition-colors duration-200">{{ token }}</button>
+                        <button v-else @click="$root.goToPage(token)" :disabled="itemsLoading" :class="token === currentPage ? 'bg-blue-600 text-white border-blue-600 shadow-sm' : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-50'" class="ledger-pagination-button h-9 min-w-[36px] px-2 border rounded-lg text-xs font-medium transition-colors duration-200 disabled:cursor-not-allowed disabled:opacity-50">{{ token }}</button>
                     </template>
-                    <button @click="$root.goToPage(currentPage + 1)" :disabled="currentPage >= totalPages" class="ledger-pagination-button h-9 px-3 bg-white border border-slate-300 rounded-lg text-xs font-medium text-slate-700 disabled:opacity-50 hover:bg-slate-50 transition-colors duration-200">下一页</button>
+                    <button @click="$root.goToPage(currentPage + 1)" :disabled="itemsLoading || currentPage >= totalPages" class="ledger-pagination-button h-9 px-3 bg-white border border-slate-300 rounded-lg text-xs font-medium text-slate-700 disabled:cursor-not-allowed disabled:opacity-50 hover:bg-slate-50 transition-colors duration-200">下一页</button>
                     <div class="w-px h-5 bg-slate-300 mx-1"></div>
-                    <input v-model.number="jumpPageModel" @keyup.enter="$root.jumpToPage()" type="number" min="1" :max="totalPages" class="ledger-pagination-control h-9 w-20 px-2 bg-white border border-slate-300 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-blue-500/20" placeholder="页码">
-                    <button @click="$root.jumpToPage()" class="ledger-pagination-button h-9 px-3 bg-white border border-slate-300 rounded-lg text-xs font-medium text-slate-700 hover:bg-slate-50 transition-colors duration-200">跳转</button>
+                    <input v-model.number="jumpPageModel" @keyup.enter="$root.jumpToPage()" :disabled="itemsLoading" type="number" min="1" :max="totalPages" class="ledger-pagination-control h-9 w-20 px-2 bg-white border border-slate-300 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-blue-500/20 disabled:cursor-not-allowed disabled:opacity-60" placeholder="页码">
+                    <button @click="$root.jumpToPage()" :disabled="itemsLoading" class="ledger-pagination-button h-9 px-3 bg-white border border-slate-300 rounded-lg text-xs font-medium text-slate-700 hover:bg-slate-50 transition-colors duration-200 disabled:cursor-not-allowed disabled:opacity-50">跳转</button>
                 </div>
             </div>
         </div>

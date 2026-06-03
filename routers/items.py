@@ -3,7 +3,7 @@ from typing import Optional
 from fastapi import APIRouter, HTTPException
 from sqlalchemy.exc import IntegrityError as SAIntegrityError
 
-from api_utils import normalize_text_filter, normalize_item_filters, validate_pagination
+from api_utils import normalize_keyword_filter, normalize_text_filter, normalize_item_filters, validate_pagination
 from app_locks import DATA_MUTATION_LOCK
 from database import (
     ItemStatus,
@@ -62,6 +62,7 @@ async def list_items(
     status, department, month, keyword = normalize_item_filters(
         status, department, month, keyword
     )
+    keyword = normalize_keyword_filter(keyword)
     payment_status = normalize_text_filter(payment_status)
     if payment_status and payment_status not in {item.value for item in PaymentStatus}:
         raise HTTPException(status_code=400, detail="payment_status 参数不合法")

@@ -1,10 +1,12 @@
 import pytest
 import pytest_asyncio
+from fastapi import HTTPException
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from db import items
 from db.constants import ItemStatus, PaymentStatus
+from routers.items import list_items
 
 
 @pytest_asyncio.fixture
@@ -245,6 +247,78 @@ async def test_items_page_filters_by_payment_status(execution_board_db):
 
     assert total == 1
     assert [row["serial_number"] for row in rows] == ["PAY-001"]
+
+
+@pytest.mark.asyncio
+async def test_items_page_keyword_trims_and_escapes_like_special_characters(execution_board_db):
+    await _create_execution_board_schema(execution_board_db)
+    await _insert_item(
+        execution_board_db,
+        status=ItemStatus.PENDING.value,
+        serial_number="TRIM-001",
+        item_name="Stapler",
+    )
+    await _insert_item(
+        execution_board_db,
+        status=ItemStatus.PENDING.value,
+        serial_number="PCT-001",
+        item_name="Printer 100% Toner",
+    )
+    await _insert_item(
+        execution_board_db,
+        status=ItemStatus.PENDING.value,
+        serial_number="PCT-002",
+        item_name="Printer 1000 Toner",
+    )
+    await _insert_item(
+        execution_board_db,
+        status=ItemStatus.PENDING.value,
+        serial_number="UND-001",
+        item_name="Cable_A",
+    )
+    await _insert_item(
+        execution_board_db,
+        status=ItemStatus.PENDING.value,
+        serial_number="UND-002",
+        item_name="CableXA",
+    )
+    await _insert_item(
+        execution_board_db,
+        status=ItemStatus.PENDING.value,
+        serial_number="BSL-001",
+        item_name="Path C:\\Tools",
+    )
+    await _insert_item(
+        execution_board_db,
+        status=ItemStatus.PENDING.value,
+        serial_number="BSL-002",
+        item_name="Path C:/Tools",
+    )
+
+    rows, total = await items.get_items_page(keyword="  Stapler  ", page=1, page_size=20)
+    assert total == 1
+    assert [row["serial_number"] for row in rows] == ["TRIM-001"]
+
+    rows, total = await items.get_items_page(keyword="100%", page=1, page_size=20)
+    assert total == 1
+    assert [row["serial_number"] for row in rows] == ["PCT-001"]
+
+    rows, total = await items.get_items_page(keyword="_", page=1, page_size=20)
+    assert total == 1
+    assert [row["serial_number"] for row in rows] == ["UND-001"]
+
+    rows, total = await items.get_items_page(keyword="\\", page=1, page_size=20)
+    assert total == 1
+    assert [row["serial_number"] for row in rows] == ["BSL-001"]
+
+
+@pytest.mark.asyncio
+async def test_items_api_rejects_overlong_keyword():
+    with pytest.raises(HTTPException) as exc_info:
+        await list_items(keyword="x" * 201)
+
+    assert exc_info.value.status_code == 400
+    assert "keyword" in str(exc_info.value.detail)
 
 
 @pytest.mark.asyncio
