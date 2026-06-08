@@ -5824,3 +5824,394 @@ body {
         flex: 1;
     }
 }
+
+/* Procurement cockpit refresh */
+.app-body,
+.app-content {
+    background: #f3f6f8;
+}
+
+.app-sidebar {
+    width: 14.5rem;
+}
+
+.app-sidebar > .h-16 {
+    height: 5rem;
+    padding-left: 1rem;
+    padding-right: 1rem;
+}
+
+.app-sidebar > .h-16 .rounded-lg {
+    width: 2.75rem;
+    height: 2.75rem;
+    border-radius: 0.5rem;
+    background: #0f766e;
+    box-shadow: 0 14px 24px -18px rgba(15, 118, 110, 0.75);
+}
+
+.app-sidebar nav button,
+.app-sidebar .border-t button {
+    display: flex;
+    align-items: center;
+    gap: 0.72rem;
+    height: 2.8rem;
+    border-radius: 0.5rem;
+}
+
+.sidebar-nav-active {
+    background: #e8f6f4 !important;
+    color: #0f766e !important;
+    box-shadow: inset 3px 0 0 #0f766e;
+}
+
+.sidebar-nav-icon {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.75rem;
+    height: 1.75rem;
+    flex: 0 0 auto;
+    border-radius: 0.45rem;
+    background: #eef3f6;
+    color: currentColor;
+}
+
+.sidebar-nav-active .sidebar-nav-icon {
+    background: #ccfbf1;
+}
+
+.sidebar-nav-icon::before,
+.sidebar-nav-icon::after {
+    content: "";
+    position: absolute;
+    box-sizing: border-box;
+    color: currentColor;
+}
+
+.sidebar-nav-icon-dashboard::before {
+    width: 0.95rem;
+    height: 0.95rem;
+    border-radius: 0.2rem;
+    border: 2px solid currentColor;
+    box-shadow: -0.22rem -0.22rem 0 -0.08rem #eef3f6, 0.22rem 0.22rem 0 -0.08rem #eef3f6;
+}
+
+.sidebar-nav-active .sidebar-nav-icon-dashboard::before {
+    box-shadow: -0.22rem -0.22rem 0 -0.08rem #ccfbf1, 0.22rem 0.22rem 0 -0.08rem #ccfbf1;
+}
+
+.sidebar-nav-icon-ledger::before {
+    width: 0.9rem;
+    height: 1.08rem;
+    border: 2px solid currentColor;
+    border-radius: 0.14rem;
+}
+
+.sidebar-nav-icon-ledger::after {
+    width: 0.42rem;
+    height: 0.12rem;
+    top: 0.66rem;
+    background: currentColor;
+    box-shadow: 0 0.28rem 0 currentColor;
+}
+
+.sidebar-nav-icon-execution::before {
+    width: 0.58rem;
+    height: 1.12rem;
+    border-radius: 0.16rem;
+    background: currentColor;
+    transform: skewX(-18deg);
+}
+
+.sidebar-nav-icon-execution::after {
+    width: 0.84rem;
+    height: 0.84rem;
+    border: 2px solid currentColor;
+    border-radius: 999px;
+    opacity: 0.42;
+}
+
+.sidebar-nav-icon-operations::before {
+    width: 1rem;
+    height: 0.8rem;
+    border: 2px solid currentColor;
+    border-radius: 0.16rem;
+}
+
+.sidebar-nav-icon-operations::after {
+    width: 0.56rem;
+    height: 0.56rem;
+    top: 0.39rem;
+    border-top: 2px solid currentColor;
+    border-left: 2px solid currentColor;
+    transform: rotate(45deg);
+}
+
+.sidebar-nav-icon-reports::before {
+    bottom: 0.42rem;
+    left: 0.44rem;
+    width: 0.16rem;
+    height: 0.56rem;
+    border-radius: 999px;
+    background: currentColor;
+    box-shadow: 0.36rem -0.2rem 0 currentColor, 0.72rem -0.42rem 0 currentColor;
+}
+
+.sidebar-nav-icon-audit::before {
+    width: 0.98rem;
+    height: 1.1rem;
+    border: 2px solid currentColor;
+    border-radius: 0.45rem 0.45rem 0.32rem 0.32rem;
+}
+
+.sidebar-nav-icon-audit::after {
+    width: 0.38rem;
+    height: 0.18rem;
+    border-left: 2px solid currentColor;
+    border-bottom: 2px solid currentColor;
+    transform: rotate(-45deg);
+}
+
+.sidebar-nav-icon-settings::before {
+    width: 0.92rem;
+    height: 0.92rem;
+    border: 2px solid currentColor;
+    border-radius: 999px;
+}
+
+.sidebar-nav-icon-settings::after {
+    width: 0.24rem;
+    height: 1.18rem;
+    border-radius: 999px;
+    background: currentColor;
+    box-shadow: 0 0 0 0 currentColor;
+    transform: rotate(45deg);
+    opacity: 0.9;
+}
+
+.dashboard-command-strip {
+    display: grid;
+    grid-template-columns: minmax(0, 1.1fr) minmax(28rem, 0.92fr);
+    gap: 1rem;
+    min-height: 16rem;
+    border: 1px solid rgba(18, 83, 77, 0.22);
+    border-radius: 0.5rem;
+    background:
+        linear-gradient(135deg, #0f2f2e 0%, #183f4a 52%, #92400e 100%);
+    padding: 1.2rem;
+    color: #f8fafc;
+    box-shadow: 0 26px 56px -42px rgba(15, 23, 42, 0.8);
+}
+
+.dashboard-command-main {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    justify-content: center;
+    padding: 0.5rem 0.35rem;
+}
+
+.dashboard-command-kicker {
+    width: fit-content;
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.12);
+    padding: 0.36rem 0.66rem;
+    color: #ccfbf1;
+    font-size: 0.72rem;
+    font-weight: 850;
+}
+
+.dashboard-command-main h2 {
+    margin: 0.9rem 0 0;
+    color: #ffffff;
+    font-size: 2.25rem;
+    line-height: 1.12;
+    font-weight: 900;
+}
+
+.dashboard-command-main p {
+    margin: 0.75rem 0 0;
+    max-width: 40rem;
+    color: rgba(240, 253, 250, 0.82);
+    font-size: 0.95rem;
+    line-height: 1.7;
+    font-weight: 650;
+}
+
+.dashboard-command-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.55rem;
+    margin-top: 1.25rem;
+}
+
+.dashboard-command-actions button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    height: 2.5rem;
+    border: 1px solid rgba(255, 255, 255, 0.22);
+    border-radius: 0.5rem;
+    background: rgba(255, 255, 255, 0.12);
+    padding: 0 0.95rem;
+    color: #ffffff;
+    font-size: 0.82rem;
+    font-weight: 850;
+    transition: background 0.16s ease, border-color 0.16s ease, transform 0.16s ease;
+}
+
+.dashboard-command-actions button:first-child {
+    border-color: #f59e0b;
+    background: #f59e0b;
+    color: #111827;
+}
+
+.dashboard-command-actions button:hover {
+    transform: translateY(-1px);
+    border-color: rgba(255, 255, 255, 0.42);
+    background: rgba(255, 255, 255, 0.2);
+}
+
+.dashboard-command-actions button:first-child:hover {
+    border-color: #fbbf24;
+    background: #fbbf24;
+}
+
+.dashboard-command-panel {
+    display: grid;
+    grid-template-columns: minmax(10rem, 0.56fr) minmax(0, 1fr);
+    gap: 0.85rem;
+}
+
+.dashboard-command-total,
+.dashboard-command-flow {
+    border: 1px solid rgba(255, 255, 255, 0.16);
+    border-radius: 0.5rem;
+    background: rgba(255, 255, 255, 0.12);
+}
+
+.dashboard-command-total {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    padding: 1rem;
+}
+
+.dashboard-command-total span,
+.dashboard-command-total em {
+    color: rgba(240, 253, 250, 0.82);
+    font-size: 0.78rem;
+    font-style: normal;
+    font-weight: 800;
+}
+
+.dashboard-command-total strong {
+    margin: 0.42rem 0;
+    color: #ffffff;
+    font-size: 3.8rem;
+    line-height: 1;
+    font-weight: 950;
+    font-variant-numeric: tabular-nums;
+}
+
+.dashboard-command-flow {
+    display: grid;
+    gap: 0.55rem;
+    padding: 0.8rem;
+}
+
+.dashboard-command-flow button {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 0.65rem;
+    min-height: 2.75rem;
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    border-radius: 0.45rem;
+    background: rgba(255, 255, 255, 0.1);
+    padding: 0.58rem 0.7rem;
+    color: #ffffff;
+    text-align: left;
+    transition: background 0.16s ease, border-color 0.16s ease;
+}
+
+.dashboard-command-flow button:hover {
+    border-color: rgba(251, 191, 36, 0.55);
+    background: rgba(251, 191, 36, 0.16);
+}
+
+.dashboard-command-flow span {
+    color: #99f6e4;
+    font-size: 0.7rem;
+    font-weight: 900;
+}
+
+.dashboard-command-flow strong {
+    overflow: hidden;
+    font-size: 0.84rem;
+    font-weight: 850;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.dashboard-command-flow em {
+    color: #fef3c7;
+    font-size: 1.05rem;
+    font-style: normal;
+    font-weight: 950;
+    font-variant-numeric: tabular-nums;
+}
+
+.dashboard-metrics-row {
+    grid-template-columns: repeat(4, minmax(13rem, 1fr));
+}
+
+.dashboard-metric-card {
+    border-color: #dbe6e4;
+}
+
+.dashboard-metric-blue .dashboard-metric-icon { background: linear-gradient(135deg, #14b8a6, #0f766e); }
+.dashboard-metric-amber .dashboard-metric-icon { background: linear-gradient(135deg, #f59e0b, #b45309); }
+.dashboard-metric-green .dashboard-metric-icon { background: linear-gradient(135deg, #22c55e, #15803d); }
+.dashboard-metric-red .dashboard-metric-icon { background: linear-gradient(135deg, #f97316, #dc2626); }
+
+@media (max-width: 1280px) {
+    .dashboard-command-strip {
+        grid-template-columns: 1fr;
+    }
+
+    .dashboard-command-panel {
+        grid-template-columns: minmax(10rem, 0.36fr) minmax(0, 1fr);
+    }
+}
+
+@media (max-width: 900px) {
+    .dashboard-command-panel {
+        grid-template-columns: 1fr;
+    }
+
+    .dashboard-command-main h2 {
+        font-size: 1.75rem;
+    }
+
+    .dashboard-command-total strong {
+        font-size: 3rem;
+    }
+}
+
+@media (max-width: 767px) {
+    .dashboard-command-strip {
+        min-height: auto;
+        padding: 1rem;
+    }
+
+    .dashboard-command-actions button {
+        flex: 1 1 9rem;
+    }
+
+    .dashboard-command-flow button {
+        grid-template-columns: auto minmax(0, 1fr) auto;
+    }
+}

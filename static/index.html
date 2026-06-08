@@ -10,7 +10,7 @@
     <script src="/static/vendor/tailwindcss-cdn.js"></script>
     <script src="/static/vendor/vue.global.prod.js"></script>
     <script src="/static/vendor/axios.min.js"></script>
-    <link rel="stylesheet" href="/static/app.css?v=1.2.69">
+    <link rel="stylesheet" href="/static/app.css?v=1.2.70">
         <style>
             .toast-enter-active,
             .toast-leave-active {
@@ -76,7 +76,7 @@
                                 :class="currentView === view.id ? 'sidebar-nav-active font-semibold' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'"
                                 class="w-full h-10 px-3 pl-4 rounded-lg text-left text-sm font-medium transition-all duration-200 ease-in-out"
                             >
-                                <span class="sidebar-nav-icon" aria-hidden="true">{{ view.icon }}</span>
+                                <span class="sidebar-nav-icon" :class="`sidebar-nav-icon-${view.id}`" aria-hidden="true"></span>
                                 <span class="sidebar-nav-label">{{ view.label }}</span>
                             </button>
 
@@ -91,7 +91,7 @@
                         :class="currentView === view.id ? 'sidebar-nav-active font-semibold' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'"
                         class="w-full h-10 px-3 pl-4 rounded-lg text-left text-sm font-medium transition-all duration-200 ease-in-out"
                     >
-                        <span class="sidebar-nav-icon" aria-hidden="true">{{ view.icon }}</span>
+                        <span class="sidebar-nav-icon" :class="`sidebar-nav-icon-${view.id}`" aria-hidden="true"></span>
                         <span class="sidebar-nav-label">{{ view.label }}</span>
                     </button>
                     <button @click="authLogout(true)"
@@ -164,6 +164,40 @@
 
             <main class="app-main flex-1 min-h-0 p-6 overflow-hidden" :class="{ 'app-main-ledger': currentView === 'ledger' }">
                 <section v-if="currentView === 'dashboard'" class="dashboard-pane view-pane h-full overflow-y-auto pr-1">
+                    <div class="dashboard-command-strip">
+                        <div class="dashboard-command-main">
+                            <span class="dashboard-command-kicker">PROCURE COMMAND CENTER</span>
+                            <h2>采购执行驾驶舱</h2>
+                            <p>把申请、采购、收货、分发和报销集中到同一个工作台，优先处理会阻塞闭环的事项。</p>
+                            <div class="dashboard-command-actions">
+                                <button @click="$refs.fileInput && $refs.fileInput.click()" type="button">导入采购单</button>
+                                <button @click="openAddModal" type="button">新增记录</button>
+                                <button @click="switchView('execution')" type="button">进入执行看板</button>
+                            </div>
+                        </div>
+                        <div class="dashboard-command-panel">
+                            <div class="dashboard-command-total">
+                                <span>当前采购总量</span>
+                                <strong>{{ stats.total }}</strong>
+                                <em>今日待办 {{ dashboardTodoTotal }} 项</em>
+                            </div>
+                            <div class="dashboard-command-flow" aria-label="采购闭环进度">
+                                <button @click="switchView('ledger'); applyLedgerSnapshot({ ...ledgerFilterSnapshot, status: '待采购', paymentStatus: '', month: '' })" type="button">
+                                    <span>01</span><strong>待采购</strong><em>{{ stats.statusCount['待采购'] || 0 }}</em>
+                                </button>
+                                <button @click="switchView('ledger'); applyLedgerSnapshot({ ...ledgerFilterSnapshot, status: '待到货', paymentStatus: '', month: '' })" type="button">
+                                    <span>02</span><strong>待到货</strong><em>{{ stats.statusCount['待到货'] || 0 }}</em>
+                                </button>
+                                <button @click="switchView('ledger'); applyLedgerSnapshot({ ...ledgerFilterSnapshot, status: '待分发', paymentStatus: '', month: '' })" type="button">
+                                    <span>03</span><strong>待分发</strong><em>{{ stats.statusCount['待分发'] || 0 }}</em>
+                                </button>
+                                <button @click="switchView('ledger'); applyLedgerSnapshot({ ...ledgerFilterSnapshot, status: '已分发', paymentStatus: '', month: '' })" type="button">
+                                    <span>04</span><strong>已完成</strong><em>{{ stats.statusCount['已分发'] || 0 }}</em>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
                     <div class="dashboard-metrics-row">
                         <button @click="switchView('ledger'); applyLedgerSnapshot({ ...ledgerFilterSnapshot, status: '待采购', paymentStatus: '', month: '' })" type="button" class="dashboard-metric-card dashboard-metric-blue">
                             <span class="dashboard-metric-icon" aria-hidden="true">
@@ -2778,32 +2812,32 @@
         </div>
     </template>
     
-    <script src="/static/view-config.js?v=1.2.69"></script>
-    <script src="/static/time-utils.js?v=1.2.69"></script>
-    <script src="/static/ledger-ui-helpers.js?v=1.2.69"></script>
-    <script src="/static/state.js?v=1.2.69"></script>
-    <script src="/static/operations-center-api.js?v=1.2.69"></script>
-    <script src="/static/api.js?v=1.2.69"></script>
-    <script src="/static/ledger-filter-panel.js?v=1.2.69"></script>
-    <script src="/static/ledger-batch-toolbar.js?v=1.2.69"></script>
-    <script src="/static/ledger-table-panel.js?v=1.2.69"></script>
-    <script src="/static/ledger-detail-modal.js?v=1.2.69"></script>
-    <script src="/static/ledger-add-modal.js?v=1.2.69"></script>
-    <script src="/static/ops-panel-mixin.js?v=1.2.69"></script>
-    <script src="/static/ops-overview-panel.js?v=1.2.69"></script>
-    <script src="/static/ops-procurement-panel.js?v=1.2.69"></script>
-    <script src="/static/ops-master-data-panel.js?v=1.2.69"></script>
-    <script src="/static/ops-exceptions-panel.js?v=1.2.69"></script>
-    <script src="/static/settings-operations-panel.js?v=1.2.69"></script>
-    <script src="/static/settings-ai-panel.js?v=1.2.69"></script>
-    <script src="/static/settings-maintenance-panel.js?v=1.2.69"></script>
-    <script src="/static/webdav-modal.js?v=1.2.69"></script>
-    <script src="/static/audit-log-panel.js?v=1.2.69"></script>
-    <script src="/static/recycle-bin-modal.js?v=1.2.69"></script>
-    <script src="/static/data-quality-modal.js?v=1.2.69"></script>
-    <script src="/static/import-preview-modal.js?v=1.2.69"></script>
-    <script src="/static/duplicate-modal.js?v=1.2.69"></script>
-    <script src="/static/ui.js?v=1.2.69"></script>
+    <script src="/static/view-config.js?v=1.2.70"></script>
+    <script src="/static/time-utils.js?v=1.2.70"></script>
+    <script src="/static/ledger-ui-helpers.js?v=1.2.70"></script>
+    <script src="/static/state.js?v=1.2.70"></script>
+    <script src="/static/operations-center-api.js?v=1.2.70"></script>
+    <script src="/static/api.js?v=1.2.70"></script>
+    <script src="/static/ledger-filter-panel.js?v=1.2.70"></script>
+    <script src="/static/ledger-batch-toolbar.js?v=1.2.70"></script>
+    <script src="/static/ledger-table-panel.js?v=1.2.70"></script>
+    <script src="/static/ledger-detail-modal.js?v=1.2.70"></script>
+    <script src="/static/ledger-add-modal.js?v=1.2.70"></script>
+    <script src="/static/ops-panel-mixin.js?v=1.2.70"></script>
+    <script src="/static/ops-overview-panel.js?v=1.2.70"></script>
+    <script src="/static/ops-procurement-panel.js?v=1.2.70"></script>
+    <script src="/static/ops-master-data-panel.js?v=1.2.70"></script>
+    <script src="/static/ops-exceptions-panel.js?v=1.2.70"></script>
+    <script src="/static/settings-operations-panel.js?v=1.2.70"></script>
+    <script src="/static/settings-ai-panel.js?v=1.2.70"></script>
+    <script src="/static/settings-maintenance-panel.js?v=1.2.70"></script>
+    <script src="/static/webdav-modal.js?v=1.2.70"></script>
+    <script src="/static/audit-log-panel.js?v=1.2.70"></script>
+    <script src="/static/recycle-bin-modal.js?v=1.2.70"></script>
+    <script src="/static/data-quality-modal.js?v=1.2.70"></script>
+    <script src="/static/import-preview-modal.js?v=1.2.70"></script>
+    <script src="/static/duplicate-modal.js?v=1.2.70"></script>
+    <script src="/static/ui.js?v=1.2.70"></script>
     <script>
         window.addEventListener('load', () => {
             setTimeout(() => {
