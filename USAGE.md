@@ -7,17 +7,16 @@
 系统只通过 VPS Docker 服务运行。先在 VPS 上进入项目目录：
 
 ```bash
-cd office-supplies-tracker
+cd procure-lite
 cp .env.example .env
-docker compose pull
-docker compose up -d
+docker compose up -d --build
 ```
 
-默认端口是 `8000`。如需调整，修改 `.env` 中的 `OFFICE_SUPPLIES_PORT`：
+默认端口是 `8000`。如需调整，修改 `.env` 中的 `PROCURE_LITE_PORT`：
 
 ```bash
-OFFICE_SUPPLIES_PORT=8000
-OFFICE_AUTH_COOKIE_SECURE=auto
+PROCURE_LITE_PORT=8000
+PROCURE_LITE_AUTH_COOKIE_SECURE=auto
 ```
 
 启动后访问：
@@ -137,7 +136,7 @@ https://你的域名
 
 ## 9. 备份与恢复
 
-本地备份会导出 zip，包含数据库和上传文件。系统设置页也提供自动本机备份，默认每 24 小时在 VPS 的 `office-supplies-state/backups/` 中保留最近 7 份，可在页面里立即创建或从列表恢复。
+本地备份会导出 zip，包含数据库和上传文件。系统设置页也提供自动本机备份，默认每 24 小时在 VPS 的 `procure-lite-state/backups/` 中保留最近 7 份，可在页面里立即创建或从列表恢复。
 
 恢复时上传 zip，系统会先执行健康检查，再恢复数据。恢复期间接口可能短暂返回 `503`，稍后重试即可。
 
@@ -153,10 +152,10 @@ WebDAV 云同步支持：
 Docker 部署默认位于：
 
 ```text
-office-supplies-state/
+procure-lite-state/
 ```
 
-迁移或备份 VPS 时，优先备份整个 `office-supplies-state/` 目录。
+迁移或备份 VPS 时，优先备份整个 `procure-lite-state/` 目录。
 
 ## 11. 常见问题
 
@@ -175,19 +174,18 @@ office-supplies-state/
 
 ## 12. 更新、日志与停止
 
-更新到最新代码和镜像：
+更新到最新代码并重建镜像：
 
 ```bash
 git pull --ff-only
-docker compose pull
-docker compose up -d
+docker compose up -d --build
 ```
 
 查看状态和日志：
 
 ```bash
 docker compose ps
-docker compose logs -f office-supplies-tracker
+docker compose logs -f procure-lite
 ```
 
 停止服务：

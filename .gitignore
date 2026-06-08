@@ -24,6 +24,7 @@ outputs/
 data/*
 !data/.gitkeep
 state/
+procure-lite-state/
 office-supplies-state/
 samples/regression/last_report.json
 samples/regression/pdf_text/*

@@ -12,10 +12,10 @@ from passlib.handlers import argon2 as _passlib_argon2  # noqa: F401
 from app_runtime import APP_STATE_DIR
 
 
-AUTH_COOKIE_NAME = "office_auth_session"
+AUTH_COOKIE_NAME = "procure_lite_auth_session"
 AUTH_COOKIE_MAX_AGE_SECONDS = 30 * 60
 AUTH_COOKIE_SAMESITE = "strict"
-AUTH_COOKIE_SALT = "office-supplies-auth"
+AUTH_COOKIE_SALT = "procure-lite-auth"
 AUTH_COOKIE_SECRET_PATH = Path(APP_STATE_DIR) / ".auth_cookie_secret"
 RECOVERY_CODE_LENGTH = 16
 COOKIE_SECRET_READ_RETRIES = 20
@@ -35,7 +35,10 @@ def init_cookie_secret() -> None:
 
 
 def _resolve_secure_cookie_override() -> Optional[bool]:
-    raw = os.environ.get("OFFICE_AUTH_COOKIE_SECURE", "").strip().lower()
+    raw = (
+        os.environ.get("PROCURE_LITE_AUTH_COOKIE_SECURE")
+        or os.environ.get("OFFICE_AUTH_COOKIE_SECURE", "")
+    ).strip().lower()
     if raw in {"", "auto"}:
         return None
     if raw in {"1", "true", "yes", "on"}:
@@ -43,7 +46,7 @@ def _resolve_secure_cookie_override() -> Optional[bool]:
     if raw in {"0", "false", "no", "off"}:
         return False
     raise RuntimeError(
-        "Invalid OFFICE_AUTH_COOKIE_SECURE value. Use auto, true, or false."
+        "Invalid PROCURE_LITE_AUTH_COOKIE_SECURE value. Use auto, true, or false."
     )
 
 

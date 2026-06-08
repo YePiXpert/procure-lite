@@ -25,6 +25,7 @@ from auto_backup_service import (
     save_auto_backup_config,
 )
 from backup_service import (
+    BACKUP_FILENAME_PREFIX,
     MAX_BACKUP_TOTAL_SIZE,
     build_backup_archive_file,
     cleanup_temp_backup_archives,
@@ -292,7 +293,7 @@ async def backup_data():
         except Exception as e:
             safe_unlink(local_archive_path)
             raise HTTPException(status_code=500, detail=format_backup_error(e))
-    filename = f"office_supplies_backup_{beijing_filename_timestamp()}.zip"
+    filename = f"{BACKUP_FILENAME_PREFIX}_{beijing_filename_timestamp()}.zip"
     return FileResponse(
         local_archive_path,
         media_type="application/zip",
@@ -474,7 +475,7 @@ async def backup_to_webdav():
     retention = {}
     async with DATA_MUTATION_LOCK:
         try:
-            upload_name = f"office_supplies_backup_{uuid4().hex[:8]}.zip"
+            upload_name = f"{BACKUP_FILENAME_PREFIX}_{uuid4().hex[:8]}.zip"
             remote_url = await run_in_threadpool(
                 upload_backup_archive, config, upload_name
             )

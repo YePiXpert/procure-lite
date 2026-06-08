@@ -1,5 +1,5 @@
 #!/bin/bash
-# Office Supplies Tracker Docker launcher
+# Procure Lite Docker launcher
 
 set -euo pipefail
 
@@ -20,17 +20,14 @@ if [ ! -f ".env" ]; then
   echo "Created .env from .env.example"
 fi
 
-echo "Pulling the published Docker image..."
-docker compose pull office-supplies-tracker
+echo "Building and starting Procure Lite..."
+docker compose up -d --build
 
-echo "Starting Office Supplies Tracker..."
-docker compose up -d
-
-port="$(grep -E '^[[:space:]]*OFFICE_SUPPLIES_PORT[[:space:]]*=' .env 2>/dev/null | tail -n 1 | cut -d '=' -f 2- | sed 's/[[:space:]]*#.*$//' | tr -d '[:space:]')"
+port="$(grep -E '^[[:space:]]*PROCURE_LITE_PORT[[:space:]]*=' .env 2>/dev/null | tail -n 1 | cut -d '=' -f 2- | sed 's/[[:space:]]*#.*$//' | tr -d '[:space:]')"
 port="${port:-8000}"
 
 echo ""
-echo "Office Supplies Tracker is running:"
+echo "Procure Lite is running:"
 echo "  http://<VPS_PUBLIC_IP>:${port}"
 echo "  or your configured HTTPS domain"
 echo ""

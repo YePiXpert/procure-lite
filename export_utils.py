@@ -20,8 +20,8 @@ EXPORT_HEADERS = (
     "签收备注",
 )
 EXPORT_COLUMN_WIDTHS = (18, 12, 24, 12, 18, 28, 10, 10, 12, 12, 12, 28)
-EXPORT_FALLBACK_FILENAME = "office_supplies_export.xlsx"
-EXPORT_DISPLAY_NAME_PREFIX = "办公用品台账"
+EXPORT_FALLBACK_FILENAME = "procure_lite_export.xlsx"
+EXPORT_DISPLAY_NAME_PREFIX = "采购台账"
 SUPPLIER_EXPORT_FALLBACK_FILENAME = "supplier_purchase_report.xlsx"
 SUPPLIER_EXPORT_DISPLAY_NAME_PREFIX = "供应商采购报表"
 

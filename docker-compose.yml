@@ -1,15 +1,17 @@
 services:
-  office-supplies-tracker:
-    image: ghcr.io/yepixpert/office-supplies-tracker:latest
-    container_name: office-supplies-tracker
+  procure-lite:
+    image: ghcr.io/yepixpert/procure-lite:latest
+    build:
+      context: .
+    container_name: procure-lite
     restart: unless-stopped
     ports:
-      - "${OFFICE_SUPPLIES_PORT:-8000}:8000"
+      - "${PROCURE_LITE_PORT:-8000}:8000"
     environment:
-      OFFICE_SUPPLIES_STATE_DIR: /app/state
-      OFFICE_AUTH_COOKIE_SECURE: ${OFFICE_AUTH_COOKIE_SECURE:-auto}
+      PROCURE_LITE_STATE_DIR: /app/state
+      PROCURE_LITE_AUTH_COOKIE_SECURE: ${PROCURE_LITE_AUTH_COOKIE_SECURE:-auto}
     volumes:
-      - ./office-supplies-state:/app/state
+      - ./procure-lite-state:/app/state
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/app/metadata', timeout=5).read()"]
       interval: 30s

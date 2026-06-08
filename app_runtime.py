@@ -35,18 +35,30 @@ def _resolve_env_dir(env_var_name: str) -> Path | None:
     return override_path
 
 
+def _resolve_first_env_dir(env_var_names: tuple[str, ...]) -> Path | None:
+    for env_var_name in env_var_names:
+        path = _resolve_env_dir(env_var_name)
+        if path is not None:
+            return path
+    return None
+
+
 def resolve_state_dir() -> Path:
     """Return the Docker-mounted state directory.
 
     VPS deployments should mount this directory as a persistent Docker volume.
-    ``OFFICE_SUPPLIES_DATA_DIR`` remains supported for existing compose files.
+    Legacy ``OFFICE_SUPPLIES_*`` variables remain supported for existing compose files.
     """
-    state_dir = _resolve_env_dir("OFFICE_SUPPLIES_STATE_DIR")
+    state_dir = _resolve_first_env_dir(
+        ("PROCURE_LITE_STATE_DIR", "OFFICE_SUPPLIES_STATE_DIR")
+    )
     if state_dir is not None:
         _ensure_writable_dir(state_dir)
         return state_dir
 
-    data_dir = _resolve_env_dir("OFFICE_SUPPLIES_DATA_DIR")
+    data_dir = _resolve_first_env_dir(
+        ("PROCURE_LITE_DATA_DIR", "OFFICE_SUPPLIES_DATA_DIR")
+    )
     if data_dir is not None:
         _ensure_writable_dir(data_dir)
         return data_dir.parent
@@ -58,7 +70,9 @@ def resolve_state_dir() -> Path:
 
 def resolve_data_dir() -> Path:
     """Return the SQLite data directory inside the state directory."""
-    data_dir = _resolve_env_dir("OFFICE_SUPPLIES_DATA_DIR")
+    data_dir = _resolve_first_env_dir(
+        ("PROCURE_LITE_DATA_DIR", "OFFICE_SUPPLIES_DATA_DIR")
+    )
     if data_dir is None:
         data_dir = resolve_state_dir() / "data"
     _ensure_writable_dir(data_dir)

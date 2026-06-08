@@ -1,8 +1,8 @@
 [project]
-name = "office-supplies-tracker"
+name = "procure-lite"
 dynamic = ["version", "readme"]
 requires-python = ">=3.11"
-description = "办公用品采购系统"
+description = "Procure Lite：轻量自托管采购台账系统"
 
 [build-system]
 requires = ["setuptools>=65"]

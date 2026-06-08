@@ -38,7 +38,7 @@ async def test_restore_data_releases_db_handles_before_restore(monkeypatch, tmp_
     monkeypatch.setattr(system, "run_in_threadpool", fake_run_in_threadpool)
 
     result = await system.restore_data(
-        UploadFile(filename="office_supplies_backup.zip", file=io.BytesIO(b"unused"))
+        UploadFile(filename="procure_lite_backup.zip", file=io.BytesIO(b"unused"))
     )
 
     assert result["restored_upload_files"] == 0
@@ -74,7 +74,7 @@ async def test_restore_from_webdav_releases_db_handles_before_restore(
     monkeypatch.setattr(system, "run_in_threadpool", fake_run_in_threadpool)
 
     result = await system.restore_from_webdav(
-        WebDAVRestoreRequest(filename="office_supplies_backup.zip")
+        WebDAVRestoreRequest(filename="procure_lite_backup.zip")
     )
 
     assert result["restored_upload_files"] == 0

@@ -49,7 +49,7 @@ jobs:
         run: |
           OWNER="${GITHUB_REPOSITORY_OWNER:-${GITHUB_REPOSITORY%%/*}}"
           OWNER="$(echo "${OWNER}" | tr '[:upper:]' '[:lower:]')"
-          IMAGE="ghcr.io/${OWNER}/office-supplies-tracker"
+          IMAGE="ghcr.io/${OWNER}/procure-lite"
           TAGS="${IMAGE}:latest\n${IMAGE}:sha-${GITHUB_SHA}"
 
           if [ "${GITHUB_EVENT_NAME}" = "release" ]; then

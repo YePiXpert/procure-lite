@@ -41,7 +41,7 @@ def _create_valid_items_db(db_path: Path) -> None:
 
 class TestZipSafety:
     def test_safe_paths(self):
-        assert is_safe_zip_entry("office_supplies.db")
+        assert is_safe_zip_entry("procure_lite.db")
         assert is_safe_zip_entry("uploads/file.pdf")
         assert is_safe_zip_entry("nested/path/file.txt")
 
@@ -90,7 +90,7 @@ class TestValidateArchiveMembers:
     def test_valid_archive_passes(self):
         buffer = BytesIO()
         with zipfile.ZipFile(buffer, "w") as zf:
-            zf.writestr("office_supplies.db", "fake db content")
+            zf.writestr("procure_lite.db", "fake db content")
             zf.writestr("uploads/a.pdf", "fake pdf")
         buffer.seek(0)
         with zipfile.ZipFile(buffer) as archive:
@@ -100,7 +100,7 @@ class TestValidateArchiveMembers:
 
 class TestValidateSqliteDb:
     def test_valid_db_passes(self, tmp_path):
-        db_path = tmp_path / "office_supplies.db"
+        db_path = tmp_path / "procure_lite.db"
         conn = sqlite3.connect(str(db_path))
         conn.execute("CREATE TABLE items (id INTEGER, serial_number TEXT, department TEXT, handler TEXT, request_date TEXT, item_name TEXT, quantity REAL, purchase_link TEXT, unit_price REAL, status TEXT, invoice_issued INTEGER, payment_status TEXT, created_at TEXT, updated_at TEXT)")
         conn.execute("INSERT INTO items VALUES (1, 'S001', '研发部', '张三', '2024-01-01', '笔', 10, NULL, 2.5, '待采购', 0, '未付款', '2024-01-01', '2024-01-01')")
@@ -112,7 +112,7 @@ class TestValidateSqliteDb:
         assert result["item_count"] == 1
 
     def test_missing_items_table(self, tmp_path):
-        db_path = tmp_path / "office_supplies.db"
+        db_path = tmp_path / "procure_lite.db"
         conn = sqlite3.connect(str(db_path))
         conn.execute("CREATE TABLE other_table (id INTEGER)")
         conn.commit()
@@ -127,6 +127,24 @@ class TestValidateSqliteDb:
 
         with pytest.raises((ValueError, sqlite3.DatabaseError)):
             _validate_sqlite_db_file(corrupt_path)
+
+
+def test_inspect_backup_archive_accepts_legacy_database_name(tmp_path, monkeypatch):
+    state_dir = tmp_path / "state"
+    state_dir.mkdir()
+    legacy_db_path = tmp_path / "office_supplies.db"
+    _create_valid_items_db(legacy_db_path)
+
+    archive_path = tmp_path / "legacy-backup.zip"
+    with zipfile.ZipFile(archive_path, "w") as archive:
+        archive.write(legacy_db_path, arcname="office_supplies.db")
+
+    monkeypatch.setattr(backup_service, "APP_STATE_DIR", state_dir)
+
+    result = backup_service.inspect_backup_archive(archive_path)
+
+    assert result["ok"] is True
+    assert result["db"]["item_count"] == 1
 
 
 def test_build_backup_archive_requires_database(tmp_path, monkeypatch):
@@ -178,8 +196,8 @@ def test_cleanup_temp_backup_archives_only_removes_stale_files(tmp_path, monkeyp
 
 def test_upload_backup_artifact_filter_preserves_regular_attachments():
     skipped_names = [
-        "office_supplies_backup_20260507_120000.zip",
-        ".office_supplies_backup_20260507_120000.zip.abcdef.tmp",
+        "procure_lite_backup_20260507_120000.zip",
+        ".procure_lite_backup_20260507_120000.zip.abcdef.tmp",
         ".download_backup_deadbeef.zip",
         "webdav_backup_deadbeef.zip",
         ".webdav_backup_deadbeef.zip.abcdef.tmp",
@@ -190,7 +208,7 @@ def test_upload_backup_artifact_filter_preserves_regular_attachments():
     kept_names = [
         "manual_archive.zip",
         "receipt.pdf",
-        "office_supplies_backup_notes.txt",
+        "procure_lite_backup_notes.txt",
     ]
 
     for name in skipped_names:
@@ -205,7 +223,7 @@ def test_build_backup_archive_file_rejects_destination_inside_uploads(tmp_path, 
     monkeypatch.setattr(backup_service, "UPLOAD_DIR", upload_dir)
 
     with pytest.raises(ValueError, match="uploads"):
-        backup_service.build_backup_archive_file(upload_dir / "office_supplies_backup_test.zip")
+        backup_service.build_backup_archive_file(upload_dir / "procure_lite_backup_test.zip")
 
 
 def test_build_backup_archive_skips_system_backup_artifacts_in_uploads(tmp_path, monkeypatch):
@@ -213,7 +231,7 @@ def test_build_backup_archive_skips_system_backup_artifacts_in_uploads(tmp_path,
     upload_dir.mkdir()
     temp_dir = tmp_path / "temp"
     temp_dir.mkdir()
-    db_path = tmp_path / "office_supplies.db"
+    db_path = tmp_path / "procure_lite.db"
     _create_valid_items_db(db_path)
 
     kept_pdf = upload_dir / "invoice_attachments" / "receipt.pdf"
@@ -223,8 +241,8 @@ def test_build_backup_archive_skips_system_backup_artifacts_in_uploads(tmp_path,
     kept_zip.write_bytes(b"zip")
 
     skipped_files = [
-        upload_dir / "office_supplies_backup_20260507_120000.zip",
-        upload_dir / ".office_supplies_backup_20260507_120000.zip.abcdef.tmp",
+        upload_dir / "procure_lite_backup_20260507_120000.zip",
+        upload_dir / ".procure_lite_backup_20260507_120000.zip.abcdef.tmp",
         upload_dir / "webdav_backup_deadbeef.zip",
         upload_dir / ".webdav_backup_deadbeef.zip",
         upload_dir / ".webdav_backup_deadbeef.zip.abcdef.tmp",
@@ -245,7 +263,7 @@ def test_build_backup_archive_skips_system_backup_artifacts_in_uploads(tmp_path,
     with zipfile.ZipFile(destination, "r") as archive:
         names = set(archive.namelist())
 
-    assert "office_supplies.db" in names
+    assert "procure_lite.db" in names
     assert "uploads/invoice_attachments/receipt.pdf" in names
     assert "uploads/manual_archive.zip" in names
     for path in skipped_files:
@@ -255,7 +273,7 @@ def test_build_backup_archive_skips_system_backup_artifacts_in_uploads(tmp_path,
 def test_build_backup_archive_file_fails_fast_when_disk_space_is_low(tmp_path, monkeypatch):
     upload_dir = tmp_path / "uploads"
     upload_dir.mkdir()
-    db_path = tmp_path / "office_supplies.db"
+    db_path = tmp_path / "procure_lite.db"
     _create_valid_items_db(db_path)
 
     class _Usage:

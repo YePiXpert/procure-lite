@@ -1,6 +1,6 @@
 (function (global) {
-    const DENSITY_KEY = 'office_supplies_ledger_density';
-    const RECENT_FILTERS_KEY = 'office_supplies_ledger_recent_filters';
+    const DENSITY_KEY = 'procure_lite_ledger_density';
+    const RECENT_FILTERS_KEY = 'procure_lite_ledger_recent_filters';
     const MAX_RECENT_FILTERS = 5;
 
     const normalizeText = (value) => (value || '').toString().trim();

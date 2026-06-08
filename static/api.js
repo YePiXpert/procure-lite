@@ -3011,7 +3011,7 @@
                     this.filterMonth = '';
                     this.handleFilter();
                 },
-                parseDownloadFilename(contentDisposition, fallback = 'office_supplies_export.xlsx') {
+                parseDownloadFilename(contentDisposition, fallback = 'procure_lite_export.xlsx') {
                     const header = (contentDisposition || '').toString();
                     if (!header) return fallback;
 
@@ -3078,7 +3078,7 @@
                         const response = await axios.get(url, { responseType: 'blob' });
                         const filename = this.parseDownloadFilename(
                             response?.headers?.['content-disposition'],
-                            'office_supplies_export.xlsx'
+                            'procure_lite_export.xlsx'
                         );
                         const result = await this.triggerBlobDownload(response.data, filename);
                         if (result?.ok) {
@@ -3246,7 +3246,7 @@
                         const response = await axios.get('/api/backup', { responseType: 'blob' });
                         const filename = this.parseDownloadFilename(
                             response?.headers?.['content-disposition'],
-                            'office_supplies_backup.zip'
+                            'procure_lite_backup.zip'
                         );
                         const result = await this.triggerBlobDownload(response.data, filename);
                         if (result?.ok) {

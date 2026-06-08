@@ -29,7 +29,7 @@ def _isolate_app_state(monkeypatch, tmp_path):
     monkeypatch.setattr("app_runtime.STATIC_DIR", project_root / "static")
     monkeypatch.setattr("app_runtime.LOG_DIR", state_dir / "logs")
     monkeypatch.setattr("app_runtime.UPLOAD_DIR", state_dir / "uploads")
-    monkeypatch.setattr("db.constants.DB_PATH", str(data_dir / "office_supplies.db"))
+    monkeypatch.setattr("db.constants.DB_PATH", str(data_dir / "procure_lite.db"))
     monkeypatch.setattr("app_runtime.RUNTIME_DIR", project_root)
 
     (state_dir / "logs").mkdir(parents=True, exist_ok=True)

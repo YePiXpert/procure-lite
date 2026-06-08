@@ -2,7 +2,7 @@ from enum import Enum
 from app_runtime import DATA_DIR
 
 # SQLite database stored in the Docker-mounted state directory.
-DB_PATH = str((DATA_DIR / "office_supplies.db").resolve())
+DB_PATH = str((DATA_DIR / "procure_lite.db").resolve())
 
 ALLOWED_COLUMNS = frozenset({
     "serial_number", "department", "handler", "request_date",

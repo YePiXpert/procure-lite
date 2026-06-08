@@ -95,7 +95,7 @@ async def lifespan(app: FastAPI):
                 pass
 
 
-app = FastAPI(title="办公用品采购系统", version=APP_VERSION, lifespan=lifespan)
+app = FastAPI(title="Procure Lite", version=APP_VERSION, lifespan=lifespan)
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
 

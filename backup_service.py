@@ -24,12 +24,17 @@ MAX_COMPRESSION_RATIO = 200
 SQLITE_INTEGRITY_OK = "ok"
 DB_BACKUP_COMPRESSION = zipfile.ZIP_DEFLATED
 UPLOAD_BACKUP_COMPRESSION = zipfile.ZIP_STORED
-TEMP_BACKUP_DIR_NAME = "office-supplies-tracker-temp"
+TEMP_BACKUP_DIR_NAME = "procure-lite-temp"
 TEMP_BACKUP_STALE_SECONDS = 6 * 60 * 60
+BACKUP_DB_ARCNAME = "procure_lite.db"
+LEGACY_BACKUP_DB_ARCNAMES = ("office_supplies.db",)
+BACKUP_FILENAME_PREFIX = "procure_lite_backup"
 BACKUP_NO_SPACE_MESSAGE = "本地磁盘空间不足，无法生成备份，请释放磁盘空间后重试"
 BACKUP_DESTINATION_IN_UPLOADS_MESSAGE = "备份文件不能保存到 uploads 上传附件目录内，请选择其他目录"
 BACKUP_DISK_SPACE_MARGIN_BYTES = 64 * 1024 * 1024
 SYSTEM_UPLOAD_BACKUP_EXCLUDE_PATTERNS = (
+    "procure_lite_backup_*.zip",
+    ".procure_lite_backup_*.zip.*.tmp",
     "office_supplies_backup_*.zip",
     ".office_supplies_backup_*.zip.*.tmp",
     ".download_backup_*.zip",
@@ -213,7 +218,8 @@ def _validate_archive_members(archive: zipfile.ZipFile) -> list[zipfile.ZipInfo]
 
 def _validate_sqlite_db_file(db_file: Path) -> dict:
     if not db_file.exists():
-        raise ValueError("备份包缺少 office_supplies.db")
+        accepted_names = ", ".join((BACKUP_DB_ARCNAME, *LEGACY_BACKUP_DB_ARCNAMES))
+        raise ValueError(f"备份包缺少数据库文件（支持：{accepted_names}）")
 
     try:
         conn = sqlite3.connect(f"file:{db_file}?mode=ro", uri=True)
@@ -250,6 +256,14 @@ def _validate_sqlite_db_file(db_file: Path) -> dict:
     }
 
 
+def _resolve_restored_db_file(extract_dir: Path) -> Path:
+    for candidate_name in (BACKUP_DB_ARCNAME, *LEGACY_BACKUP_DB_ARCNAMES):
+        candidate = extract_dir / candidate_name
+        if candidate.exists():
+            return candidate
+    return extract_dir / BACKUP_DB_ARCNAME
+
+
 def inspect_backup_archive(archive_path: Path) -> dict:
     """备份健康检查：验证 zip 结构与数据库可读性。"""
     extract_dir = APP_STATE_DIR / f".backup_health_{uuid4().hex}"
@@ -262,7 +276,7 @@ def inspect_backup_archive(archive_path: Path) -> dict:
         except zipfile.BadZipFile as exc:
             raise ValueError("备份文件不是有效的 zip 压缩包") from exc
 
-        restored_db = extract_dir / "office_supplies.db"
+        restored_db = _resolve_restored_db_file(extract_dir)
         restored_uploads = extract_dir / "uploads"
         db_report = _validate_sqlite_db_file(restored_db)
         upload_files = 0
@@ -305,7 +319,7 @@ def _build_archive(target: zipfile.ZipFile) -> None:
             source_conn.close()
         target.write(
             snapshot_path,
-            arcname="office_supplies.db",
+            arcname=BACKUP_DB_ARCNAME,
             compress_type=DB_BACKUP_COMPRESSION,
         )
     finally:
@@ -331,7 +345,7 @@ def write_backup_archive(target) -> None:
 def build_backup_archive() -> tuple[BytesIO, str]:
     """打包数据库与上传目录为 zip。"""
     buffer = BytesIO()
-    filename = f"office_supplies_backup_{beijing_filename_timestamp()}.zip"
+    filename = f"{BACKUP_FILENAME_PREFIX}_{beijing_filename_timestamp()}.zip"
     write_backup_archive(buffer)
     buffer.seek(0)
     return buffer, filename
@@ -374,7 +388,7 @@ def restore_from_archive(
         except zipfile.BadZipFile as exc:
             raise ValueError("备份文件不是有效的 zip 压缩包") from exc
 
-        restored_db = extract_dir / "office_supplies.db"
+        restored_db = _resolve_restored_db_file(extract_dir)
         restored_uploads = extract_dir / "uploads"
         _validate_sqlite_db_file(restored_db)
 

@@ -15,7 +15,9 @@ from time_utils import BEIJING_TZ, beijing_filename_timestamp, now_beijing
 
 AUTO_BACKUP_CONFIG_NAME = ".auto_backup_config.json"
 LOCAL_BACKUP_DIR_NAME = "backups"
-LOCAL_BACKUP_PATTERN = "office_supplies_auto_backup_*.zip"
+LOCAL_BACKUP_PATTERN = "procure_lite_auto_backup_*.zip"
+LEGACY_LOCAL_BACKUP_PATTERNS = ("office_supplies_auto_backup_*.zip",)
+LOCAL_BACKUP_PATTERNS = (LOCAL_BACKUP_PATTERN, *LEGACY_LOCAL_BACKUP_PATTERNS)
 DEFAULT_AUTO_BACKUP_CONFIG = {
     "enabled": True,
     "interval_hours": 24,
@@ -187,21 +189,24 @@ def is_auto_backup_due(
 def list_local_backups(limit: int = 20) -> list[dict]:
     backup_dir = get_local_backup_dir()
     items = []
-    for path in backup_dir.glob(LOCAL_BACKUP_PATTERN):
-        if not path.is_file():
-            continue
-        try:
-            stat = path.stat()
-        except OSError:
-            continue
-        modified_at = datetime.fromtimestamp(stat.st_mtime, tz=BEIJING_TZ)
-        items.append(
-            {
-                "name": path.name,
-                "size": stat.st_size,
-                "modified_at": _isoformat(modified_at),
-            }
-        )
+    seen: set[str] = set()
+    for pattern in LOCAL_BACKUP_PATTERNS:
+        for path in backup_dir.glob(pattern):
+            if path.name in seen or not path.is_file():
+                continue
+            seen.add(path.name)
+            try:
+                stat = path.stat()
+            except OSError:
+                continue
+            modified_at = datetime.fromtimestamp(stat.st_mtime, tz=BEIJING_TZ)
+            items.append(
+                {
+                    "name": path.name,
+                    "size": stat.st_size,
+                    "modified_at": _isoformat(modified_at),
+                }
+            )
     items.sort(key=lambda item: item.get("modified_at") or "", reverse=True)
     if limit <= 0:
         return items
@@ -283,7 +288,7 @@ def run_auto_backup(force: bool = False) -> dict:
         }
         _write_auto_backup_config(attempt_config)
 
-        filename = f"office_supplies_auto_backup_{beijing_filename_timestamp(started_at)}.zip"
+        filename = f"procure_lite_auto_backup_{beijing_filename_timestamp(started_at)}.zip"
         destination = get_local_backup_dir() / filename
         backup_service.build_backup_archive_file(destination)
         size = destination.stat().st_size

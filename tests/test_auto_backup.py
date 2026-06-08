@@ -56,8 +56,8 @@ def test_auto_backup_skips_when_not_due(monkeypatch):
 def test_auto_backup_run_creates_file_and_prunes(monkeypatch):
     backup_dir = auto_backup_service.get_local_backup_dir()
     old_files = [
-        backup_dir / "office_supplies_auto_backup_20260501_010101.zip",
-        backup_dir / "office_supplies_auto_backup_20260502_010101.zip",
+        backup_dir / "procure_lite_auto_backup_20260501_010101.zip",
+        backup_dir / "procure_lite_auto_backup_20260502_010101.zip",
     ]
     for index, path in enumerate(old_files):
         path.write_bytes(b"old")
@@ -91,9 +91,19 @@ def test_auto_backup_run_creates_file_and_prunes(monkeypatch):
 
     assert result["ok"] is True
     assert result["skipped"] is False
-    assert result["filename"].startswith("office_supplies_auto_backup_")
+    assert result["filename"].startswith("procure_lite_auto_backup_")
     assert len(backups) == 2
     assert any(item["name"] == result["filename"] for item in backups)
+
+
+def test_list_local_backups_includes_legacy_backup_names():
+    backup_dir = auto_backup_service.get_local_backup_dir()
+    legacy_path = backup_dir / "office_supplies_auto_backup_20260501_010101.zip"
+    legacy_path.write_bytes(b"legacy")
+
+    backups = auto_backup_service.list_local_backups(limit=0)
+
+    assert any(item["name"] == legacy_path.name for item in backups)
 
 
 def test_resolve_local_backup_path_rejects_traversal():
@@ -102,5 +112,5 @@ def test_resolve_local_backup_path_rejects_traversal():
 
     with pytest.raises(FileNotFoundError):
         auto_backup_service.resolve_local_backup_path(
-            "office_supplies_auto_backup_missing.zip"
+            "procure_lite_auto_backup_missing.zip"
         )

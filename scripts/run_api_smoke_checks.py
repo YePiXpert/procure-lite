@@ -39,9 +39,9 @@ def _find_receipt_row(receipt_queue: list[dict], purchase_order_id: int) -> dict
 
 
 def run_smoke_checks() -> None:
-    temp_root = Path(tempfile.mkdtemp(prefix="office-supplies-smoke-"))
+    temp_root = Path(tempfile.mkdtemp(prefix="procure-lite-smoke-"))
     try:
-        os.environ["OFFICE_SUPPLIES_DATA_DIR"] = str(temp_root / "state" / "data")
+        os.environ["PROCURE_LITE_DATA_DIR"] = str(temp_root / "state" / "data")
         try:
             from fastapi.testclient import TestClient
             from main import app
@@ -276,7 +276,7 @@ def run_smoke_checks() -> None:
                         "(Option B: historical-inclusive policy)"
                     )
         finally:
-            os.environ.pop("OFFICE_SUPPLIES_DATA_DIR", None)
+            os.environ.pop("PROCURE_LITE_DATA_DIR", None)
     finally:
         shutil.rmtree(temp_root, ignore_errors=True)
 

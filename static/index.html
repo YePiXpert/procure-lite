@@ -6,7 +6,7 @@
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
     <meta http-equiv="Pragma" content="no-cache">
     <meta http-equiv="Expires" content="0">
-    <title>办公用品采购系统 | Procurement Management</title>
+    <title>Procure Lite | 轻量自托管采购台账</title>
     <script src="/static/vendor/tailwindcss-cdn.js"></script>
     <script src="/static/vendor/vue.global.prod.js"></script>
     <script src="/static/vendor/axios.min.js"></script>
@@ -63,8 +63,8 @@
                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2"/></svg>
                 </div>
                 <div>
-                    <div class="text-sm font-semibold text-slate-900">办公用品采购系统</div>
-                    <div class="text-[11px] text-slate-500">Admin Dashboard</div>
+                    <div class="text-sm font-semibold text-slate-900">Procure Lite</div>
+                    <div class="text-[11px] text-slate-500">轻量采购台账</div>
                 </div>
             </div>
             <div class="flex-1 min-h-0 flex flex-col">
@@ -177,7 +177,7 @@
                     <div class="dashboard-hero">
                         <div class="dashboard-hero-copy">
                             <div class="dashboard-eyebrow">采购概览</div>
-                            <h2 class="dashboard-hero-title">办公用品采购的统一总览</h2>
+                            <h2 class="dashboard-hero-title">轻量采购台账的统一总览</h2>
                             <p class="dashboard-hero-description">从台账数量、发票进度到当前待办，一屏掌握采购执行状态。</p>
                         </div>
                         <div class="dashboard-hero-summary">
@@ -1376,7 +1376,7 @@
             <div class="flex-1 min-h-0 w-full bg-gradient-to-br from-slate-100 via-blue-50 to-slate-200 flex items-center justify-center p-6">
                 <div class="w-full max-w-md bg-white border border-slate-200 shadow-xl rounded-2xl overflow-hidden">
                     <div class="px-6 py-5 border-b border-slate-200 bg-slate-50">
-                        <h2 class="text-lg font-semibold text-slate-900">办公用品采购系统 · 管理员安全入口</h2>
+                        <h2 class="text-lg font-semibold text-slate-900">Procure Lite · 管理员安全入口</h2>
                         <p class="mt-1 text-xs text-slate-500">单管理员本地安全模型（30 分钟闲置自动退出）</p>
                     </div>
                     <div class="p-6 space-y-4">
@@ -1943,7 +1943,7 @@
                         </div>
                         <div class="col-span-2">
                             <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">远端目录（可空）</label>
-                            <input v-model="config.remoteDir" class="h-10 px-3 w-full border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500 transition-all duration-200 ease-in-out" placeholder="office-supplies/backups">
+                            <input v-model="config.remoteDir" class="h-10 px-3 w-full border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500 transition-all duration-200 ease-in-out" placeholder="procure-lite/backups">
                         </div>
                         <div class="col-span-2 text-[11px] text-slate-500 leading-relaxed">
                             坚果云请使用 <span class="font-mono text-slate-700">https://dav.jianguoyun.com/dav/</span>，用户名填写坚果云账号，密码填写“应用密码”而不是登录密码。

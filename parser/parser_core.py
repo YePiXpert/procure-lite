@@ -38,7 +38,7 @@ _OCR_RETRY_PREPROCESS, _OCR_MIN_IMAGE_SIDE, _OCR_ENABLE_BINARIZE = _resolve_ocr_
 
 
 class DocumentParser:
-    """办公用品领用单解析器"""
+    """采购单据解析器"""
 
     MAX_PDF_PAGES = 5
     MIN_TEXT_LENGTH_FOR_PDF_PARSE = 40

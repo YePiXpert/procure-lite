@@ -1,13 +1,13 @@
 # VPS Docker 部署教程
 
-这份文档说明如何把办公用品采购系统部署到一台 Linux VPS 上，并通过浏览器长期访问。项目只推荐 Docker Compose 部署：应用运行在容器内，数据保存在 VPS 本机目录中，后续更新和迁移都围绕这个目录进行。
+这份文档说明如何把 Procure Lite 部署到一台 Linux VPS 上，并通过浏览器长期访问。项目只推荐 Docker Compose 部署：应用运行在容器内，数据保存在 VPS 本机目录中，后续更新和迁移都围绕这个目录进行。
 
 ## 部署目标
 
 完成后你会得到：
 
-- 一个运行中的 Docker 服务：`office-supplies-tracker`
-- 一个持久化数据目录：`office-supplies-state/`
+- 一个运行中的 Docker 服务：`procure-lite`
+- 一个持久化数据目录：`procure-lite-state/`
 - 一个访问地址：`http://VPS公网IP:8000`，或配置 HTTPS 后的域名
 
 ## 1. 准备 VPS
@@ -39,38 +39,37 @@ docker compose version
 
 ```bash
 cd /opt
-sudo git clone https://github.com/YePiXpert/office-supplies-tracker.git
-sudo chown -R $USER:$USER office-supplies-tracker
-cd office-supplies-tracker
+sudo git clone https://github.com/YePiXpert/procure-lite.git
+sudo chown -R $USER:$USER procure-lite
+cd procure-lite
 cp .env.example .env
 ```
 
 默认 `.env` 内容如下：
 
 ```bash
-OFFICE_SUPPLIES_PORT=8000
-OFFICE_AUTH_COOKIE_SECURE=auto
+PROCURE_LITE_PORT=8000
+PROCURE_LITE_AUTH_COOKIE_SECURE=auto
 ```
 
 含义：
 
-- `OFFICE_SUPPLIES_PORT`：VPS 对外暴露的访问端口，默认 `8000`
-- `OFFICE_AUTH_COOKIE_SECURE`：登录 Cookie 安全策略，保持 `auto` 即可
+- `PROCURE_LITE_PORT`：VPS 对外暴露的访问端口，默认 `8000`
+- `PROCURE_LITE_AUTH_COOKIE_SECURE`：登录 Cookie 安全策略，保持 `auto` 即可
 
 ## 3. 启动服务
 
-拉取镜像并启动：
+构建镜像并启动：
 
 ```bash
-docker compose pull
-docker compose up -d
+docker compose up -d --build
 ```
 
 查看状态：
 
 ```bash
 docker compose ps
-docker compose logs -f office-supplies-tracker
+docker compose logs -f procure-lite
 ```
 
 浏览器访问：
@@ -87,7 +86,7 @@ http://VPS公网IP:8000
 ./start.sh
 ```
 
-脚本会自动创建 `.env`、拉取镜像并启动服务。
+脚本会自动创建 `.env`、构建镜像并启动服务。
 
 ## 4. 开放端口
 
@@ -145,8 +144,8 @@ https://你的域名
 如果只希望应用端口监听本机，可以把 `.env` 改成：
 
 ```bash
-OFFICE_SUPPLIES_PORT=127.0.0.1:8000
-OFFICE_AUTH_COOKIE_SECURE=auto
+PROCURE_LITE_PORT=127.0.0.1:8000
+PROCURE_LITE_AUTH_COOKIE_SECURE=auto
 ```
 
 然后重启：
@@ -162,12 +161,12 @@ docker compose up -d
 Docker Compose 会把 VPS 当前项目目录下的这个目录挂载进容器：
 
 ```text
-office-supplies-state/
+procure-lite-state/
 ```
 
 目录内容包括：
 
-- `data/office_supplies.db`：SQLite 数据库
+- `data/procure_lite.db`：SQLite 数据库
 - `uploads/`：上传的单据和附件
 - `backups/`：系统自动创建的本机备份压缩包
 - `logs/`：运行日志
@@ -175,26 +174,26 @@ office-supplies-state/
 - `.auto_backup_config.json`：自动本机备份配置和最近执行状态
 - `.webdav_config.json`：WebDAV 备份配置
 
-不要删除这个目录。迁移、备份、恢复时优先处理整个 `office-supplies-state/`。
+不要删除这个目录。迁移、备份、恢复时优先处理整个 `procure-lite-state/`。
 
 ## 7. 备份和迁移
 
-系统设置页提供“自动本机备份”：默认开启，每 24 小时在 `office-supplies-state/backups/` 生成一个 zip，并默认保留最近 7 份。你可以在页面里修改间隔、保留份数、立即创建备份，也可以从本机备份列表直接恢复。
+系统设置页提供“自动本机备份”：默认开启，每 24 小时在 `procure-lite-state/backups/` 生成一个 zip，并默认保留最近 7 份。你可以在页面里修改间隔、保留份数、立即创建备份，也可以从本机备份列表直接恢复。
 
 创建本机压缩备份：
 
 ```bash
 docker compose down
-tar -czf office-supplies-state-$(date +%F).tar.gz office-supplies-state
+tar -czf procure-lite-state-$(date +%F).tar.gz procure-lite-state
 docker compose up -d
 ```
 
 恢复到新 VPS：
 
 ```bash
-cd /opt/office-supplies-tracker
+cd /opt/procure-lite
 docker compose down
-tar -xzf /path/to/office-supplies-state-YYYY-MM-DD.tar.gz
+tar -xzf /path/to/procure-lite-state-YYYY-MM-DD.tar.gz
 docker compose up -d
 ```
 
@@ -202,24 +201,21 @@ docker compose up -d
 
 ## 8. 更新版本
 
-如果 VPS 上已经部署过项目，不要重新执行 `git clone`。进入已有项目目录，拉取最新代码和镜像：
+如果 VPS 上已经部署过项目，不要重新执行 `git clone`。进入已有项目目录，拉取最新代码并重新构建：
 
 ```bash
-cd /opt/office-supplies-tracker
+cd /opt/procure-lite
 git pull --ff-only
-docker compose pull
-docker compose up -d
+docker compose up -d --build
 ```
 
-如果你的项目不在 `/opt/office-supplies-tracker`，把第一行改成实际目录即可。
-
-如果刚刚向 GitHub 推送了新代码，建议先等待镜像发布完成，再执行 `docker compose pull`。否则可能仍然拉到旧的 `latest` 镜像。
+如果你的项目不在 `/opt/procure-lite`，把第一行改成实际目录即可。
 
 查看更新后的状态：
 
 ```bash
 docker compose ps
-docker compose logs -f office-supplies-tracker
+docker compose logs -f procure-lite
 ```
 
 数据库结构会在服务启动时自动迁移。
@@ -227,11 +223,10 @@ docker compose logs -f office-supplies-tracker
 首次部署才需要执行完整克隆流程：
 
 ```bash
-git clone https://github.com/YePiXpert/office-supplies-tracker.git
-cd office-supplies-tracker
+git clone https://github.com/YePiXpert/procure-lite.git
+cd procure-lite
 cp .env.example .env
-docker compose pull
-docker compose up -d
+docker compose up -d --build
 ```
 
 ## 9. 停止、重启和日志
@@ -251,7 +246,7 @@ docker compose up -d
 查看日志：
 
 ```bash
-docker compose logs -f office-supplies-tracker
+docker compose logs -f procure-lite
 ```
 
 查看容器健康状态：
@@ -267,7 +262,7 @@ docker compose ps
 依次检查：
 
 - `docker compose ps` 中服务是否为 `running` 或 `healthy`
-- `docker compose logs -f office-supplies-tracker` 是否有启动错误
+- `docker compose logs -f procure-lite` 是否有启动错误
 - 云厂商安全组是否开放了 `8000`，或域名访问所需的 `80/443`
 - VPS 防火墙是否放行对应端口
 - 域名 DNS 是否已经解析到 VPS 公网 IP
@@ -278,7 +273,7 @@ docker compose ps
 保持 `.env` 中：
 
 ```bash
-OFFICE_AUTH_COOKIE_SECURE=auto
+PROCURE_LITE_AUTH_COOKIE_SECURE=auto
 ```
 
 同时确认反向代理传递了 HTTPS 协议信息。Caddy 默认会正确处理；Nginx 或宝塔面板需要保留 `X-Forwarded-Proto: https`。
@@ -295,16 +290,16 @@ OFFICE_AUTH_COOKIE_SECURE=auto
 检查目录大小：
 
 ```bash
-du -sh office-supplies-state
+du -sh procure-lite-state
 df -h
 ```
 
-如果上传附件很多，先备份 `office-supplies-state/`，再在系统内清理不需要的数据。
+如果上传附件很多，先备份 `procure-lite-state/`，再在系统内清理不需要的数据。
 
 ## 11. 推荐运维习惯
 
-- 定期备份 `office-supplies-state/`
+- 定期备份 `procure-lite-state/`
 - 更新前先创建一次数据目录备份
 - 使用 HTTPS 域名访问正式环境
-- 不要把 `.env`、`office-supplies-state/` 或备份包提交到 Git
-- VPS 迁移时优先迁移整个 `office-supplies-state/` 目录
+- 不要把 `.env`、`procure-lite-state/` 或备份包提交到 Git
+- VPS 迁移时优先迁移整个 `procure-lite-state/` 目录
