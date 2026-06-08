@@ -10,7 +10,7 @@
     <script src="/static/vendor/tailwindcss-cdn.js"></script>
     <script src="/static/vendor/vue.global.prod.js"></script>
     <script src="/static/vendor/axios.min.js"></script>
-    <link rel="stylesheet" href="/static/app.css?v=1.2.71">
+    <link rel="stylesheet" href="/static/app.css?v=1.2.72">
         <style>
             .toast-enter-active,
             .toast-leave-active {
@@ -1088,30 +1088,7 @@
 
                 <section v-else-if="currentView === 'audit'" class="view-pane h-full min-h-0 flex flex-col gap-4">
                     <audit-log-panel></audit-log-panel>
-                    <div class="bg-white shadow-sm ring-1 ring-slate-900/5 rounded-xl p-6">
-                        <div class="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-4">
-                            <div>
-                                <h2 class="text-3xl font-semibold tracking-tight text-slate-900">审计日志</h2>
-                                <p class="mt-1 text-sm text-slate-500">系统操作与字段变更的可追踪记录</p>
-                            </div>
-                            <button @click="loadHistory" :disabled="historyLoading" class="h-10 px-4 rounded-lg bg-white border border-slate-300 text-slate-700 text-sm font-medium hover:bg-slate-50 disabled:opacity-60 disabled:cursor-not-allowed transition-all duration-200 ease-in-out">{{ historyLoading ? '加载中...' : '刷新日志' }}</button>
-                        </div>
-
-                        <div class="mt-5 flex flex-wrap items-center gap-3">
-                            <input v-model="historyKeyword" @keyup.enter="applyHistoryFilter" class="toolbar-control flex-1 min-w-[240px] h-11 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all duration-200 ease-in-out" placeholder="搜索审计项目 / 关键字...">
-                            <select v-model="historyAction" @change="applyHistoryFilter" class="h-11 px-3 bg-white border border-slate-300 rounded-lg text-sm font-medium focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all duration-200 ease-in-out">
-                                <option value="">所有审计动作</option>
-                                <option value="create">创建记录</option>
-                                <option value="update">字段变更</option>
-                                <option value="delete">数据删除</option>
-                            </select>
-                            <input type="month" v-model="historyMonth" @change="applyHistoryFilter" class="h-11 px-3 bg-white border border-slate-300 rounded-lg text-sm font-medium focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all duration-200 ease-in-out">
-                            <button @click="applyHistoryFilter" :disabled="historyLoading" class="h-11 px-5 rounded-lg bg-blue-600 text-white text-sm font-semibold hover:bg-blue-700 disabled:opacity-60 disabled:cursor-not-allowed transition-all duration-200 ease-in-out">查询</button>
-                            <button @click="clearHistoryFilters" :disabled="historyLoading" class="h-11 px-4 rounded-lg bg-white border border-slate-300 text-slate-700 text-sm font-medium hover:bg-slate-50 disabled:opacity-60 disabled:cursor-not-allowed transition-all duration-200 ease-in-out">清空</button>
-                        </div>
-                    </div>
-
-                                    </section>
+                </section>
 
                 <section v-else-if="currentView === 'operations'" class="view-pane h-full overflow-y-auto pr-1">
                     <operations-center-panel></operations-center-panel>
@@ -2812,32 +2789,32 @@
         </div>
     </template>
     
-    <script src="/static/view-config.js?v=1.2.71"></script>
-    <script src="/static/time-utils.js?v=1.2.71"></script>
-    <script src="/static/ledger-ui-helpers.js?v=1.2.71"></script>
-    <script src="/static/state.js?v=1.2.71"></script>
-    <script src="/static/operations-center-api.js?v=1.2.71"></script>
-    <script src="/static/api.js?v=1.2.71"></script>
-    <script src="/static/ledger-filter-panel.js?v=1.2.71"></script>
-    <script src="/static/ledger-batch-toolbar.js?v=1.2.71"></script>
-    <script src="/static/ledger-table-panel.js?v=1.2.71"></script>
-    <script src="/static/ledger-detail-modal.js?v=1.2.71"></script>
-    <script src="/static/ledger-add-modal.js?v=1.2.71"></script>
-    <script src="/static/ops-panel-mixin.js?v=1.2.71"></script>
-    <script src="/static/ops-overview-panel.js?v=1.2.71"></script>
-    <script src="/static/ops-procurement-panel.js?v=1.2.71"></script>
-    <script src="/static/ops-master-data-panel.js?v=1.2.71"></script>
-    <script src="/static/ops-exceptions-panel.js?v=1.2.71"></script>
-    <script src="/static/settings-operations-panel.js?v=1.2.71"></script>
-    <script src="/static/settings-ai-panel.js?v=1.2.71"></script>
-    <script src="/static/settings-maintenance-panel.js?v=1.2.71"></script>
-    <script src="/static/webdav-modal.js?v=1.2.71"></script>
-    <script src="/static/audit-log-panel.js?v=1.2.71"></script>
-    <script src="/static/recycle-bin-modal.js?v=1.2.71"></script>
-    <script src="/static/data-quality-modal.js?v=1.2.71"></script>
-    <script src="/static/import-preview-modal.js?v=1.2.71"></script>
-    <script src="/static/duplicate-modal.js?v=1.2.71"></script>
-    <script src="/static/ui.js?v=1.2.71"></script>
+    <script src="/static/view-config.js?v=1.2.72"></script>
+    <script src="/static/time-utils.js?v=1.2.72"></script>
+    <script src="/static/ledger-ui-helpers.js?v=1.2.72"></script>
+    <script src="/static/state.js?v=1.2.72"></script>
+    <script src="/static/operations-center-api.js?v=1.2.72"></script>
+    <script src="/static/api.js?v=1.2.72"></script>
+    <script src="/static/ledger-filter-panel.js?v=1.2.72"></script>
+    <script src="/static/ledger-batch-toolbar.js?v=1.2.72"></script>
+    <script src="/static/ledger-table-panel.js?v=1.2.72"></script>
+    <script src="/static/ledger-detail-modal.js?v=1.2.72"></script>
+    <script src="/static/ledger-add-modal.js?v=1.2.72"></script>
+    <script src="/static/ops-panel-mixin.js?v=1.2.72"></script>
+    <script src="/static/ops-overview-panel.js?v=1.2.72"></script>
+    <script src="/static/ops-procurement-panel.js?v=1.2.72"></script>
+    <script src="/static/ops-master-data-panel.js?v=1.2.72"></script>
+    <script src="/static/ops-exceptions-panel.js?v=1.2.72"></script>
+    <script src="/static/settings-operations-panel.js?v=1.2.72"></script>
+    <script src="/static/settings-ai-panel.js?v=1.2.72"></script>
+    <script src="/static/settings-maintenance-panel.js?v=1.2.72"></script>
+    <script src="/static/webdav-modal.js?v=1.2.72"></script>
+    <script src="/static/audit-log-panel.js?v=1.2.72"></script>
+    <script src="/static/recycle-bin-modal.js?v=1.2.72"></script>
+    <script src="/static/data-quality-modal.js?v=1.2.72"></script>
+    <script src="/static/import-preview-modal.js?v=1.2.72"></script>
+    <script src="/static/duplicate-modal.js?v=1.2.72"></script>
+    <script src="/static/ui.js?v=1.2.72"></script>
     <script>
         window.addEventListener('load', () => {
             setTimeout(() => {
