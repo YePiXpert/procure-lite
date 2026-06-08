@@ -2985,6 +2985,13 @@
                         this.loadAmountReport();
                     }
                 },
+                handleGlobalSearch() {
+                    const keyword = this.normalizeText(this.globalSearchKeyword);
+                    this.globalSearchKeyword = keyword;
+                    this.filterKeyword = keyword;
+                    this.switchView('ledger');
+                    this.handleFilter();
+                },
                 goToPage(page) {
                     const target = Math.trunc(Number(page));
                     if (!Number.isFinite(target) || target < 1 || target > this.totalPages || target === this.currentPage) return;

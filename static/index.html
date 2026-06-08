@@ -80,32 +80,6 @@
                                 <span class="sidebar-nav-label">{{ view.label }}</span>
                             </button>
 
-                            <div
-                                v-if="currentView === view.id && currentViewHasSubViews"
-                                class="ml-4 space-y-1 border-l border-slate-200 pl-3 pb-2"
-                            >
-                                <button
-                                    v-for="subview in currentViewSidebarSubViews"
-                                    :key="`${view.id}-submenu-${subview.id}`"
-                                    @click="switchSubView(subview.id)"
-                                    :class="subview.isActive ? 'bg-blue-600 text-white shadow-sm' : 'bg-white text-slate-600 hover:bg-slate-100'"
-                                    class="w-full rounded-xl px-3 py-2.5 text-left text-sm font-medium transition-all duration-200 ease-in-out"
-                                >
-                                    <div class="flex items-center justify-between gap-3">
-                                        <span>{{ subview.label }}</span>
-                                        <span
-                                            v-if="subview.badgeLabel"
-                                            :class="subview.isActive ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-600'"
-                                            class="inline-flex min-w-[1.8rem] items-center justify-center rounded-full px-2 py-0.5 text-[11px] font-semibold"
-                                        >
-                                            {{ subview.badgeLabel }}
-                                        </span>
-                                    </div>
-                                    <div v-if="subview.isActive && subview.description" class="mt-1 text-[11px] leading-5 text-blue-100">
-                                        {{ subview.description }}
-                                    </div>
-                                </button>
-                            </div>
                         </div>
                     </div>
                 </nav>
@@ -131,190 +105,230 @@
 
         <div class="app-content flex-1 min-w-0 flex flex-col">
             <header class="app-header bg-white border-b border-slate-200" :class="{ 'app-header-searchable': currentViewSearchEnabled, 'app-header-ledger-compact': currentView === 'ledger' }">
-                <div class="px-6 py-4">
-                    <div class="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
-                        <div class="min-w-0">
-                            <div class="flex flex-wrap items-center gap-2 text-xs uppercase tracking-wide text-slate-400">
-                                <span>{{ currentViewMeta.label || currentViewMeta.title }}</span>
-                                <span v-if="currentViewHasSubViews">/</span>
-                                <span v-if="currentViewHasSubViews" class="text-slate-500">{{ currentSubViewMeta.label }}</span>
-                            </div>
-                            <div class="mt-1 text-lg font-semibold text-slate-900">
-                                {{ currentSubViewMeta.title || currentViewMeta.title }}
-                            </div>
-                            <p v-if="currentSubViewMeta.description" class="mt-1 max-w-3xl text-sm text-slate-500">
-                                {{ currentSubViewMeta.description }}
-                            </p>
+                <div class="app-header-top">
+                    <div class="app-header-title-wrap">
+                        <div class="app-header-breadcrumb">
+                            <span>{{ currentViewMeta.label || currentViewMeta.title }}</span>
+                            <span v-if="currentViewHasSubViews">/</span>
+                            <span v-if="currentViewHasSubViews">{{ currentSubViewMeta.label }}</span>
                         </div>
-                        <div v-if="currentViewSearchEnabled" class="w-full xl:w-[360px]">
-                            <div class="flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
-                                <svg class="h-4 w-4 shrink-0 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-4.35-4.35M10.5 18a7.5 7.5 0 110-15 7.5 7.5 0 010 15z"/>
-                                </svg>
-                                <input
-                                    :value="currentViewSearchQuery"
-                                    @input="setCurrentViewSearch($event.target.value)"
-                                    :placeholder="currentViewSearchPlaceholder"
-                                    class="h-8 flex-1 bg-transparent text-sm text-slate-700 placeholder:text-slate-400 focus:outline-none"
-                                >
-                                <button
-                                    v-if="currentViewSearchQuery"
-                                    type="button"
-                                    @click="clearCurrentViewSearch()"
-                                    class="inline-flex h-7 items-center rounded-lg px-2 text-xs font-medium text-slate-500 hover:bg-white hover:text-slate-700 transition-all duration-200 ease-in-out"
-                                >
-                                    清空
-                                </button>
-                            </div>
-                        </div>
+                        <h1 class="app-header-title">{{ currentSubViewMeta.title || currentViewMeta.title }}</h1>
                     </div>
 
+                    <div class="app-header-tools">
+                        <label class="app-global-search">
+                            <svg class="app-global-search-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-4.35-4.35M10.5 18a7.5 7.5 0 110-15 7.5 7.5 0 010 15z"/>
+                            </svg>
+                            <input
+                                v-model="globalSearchKeyword"
+                                @keyup.enter="handleGlobalSearch"
+                                type="search"
+                                placeholder="搜索物品、单据、供应商等"
+                            >
+                            <button v-if="globalSearchKeyword" @click="globalSearchKeyword = ''" type="button" title="清空搜索">×</button>
+                        </label>
+                        <button @click="handleGlobalSearch" type="button" class="app-header-tool-button app-header-search-button">搜索</button>
+                        <div class="app-header-date-pill">
+                            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3M5 11h14M6 5h12a2 2 0 012 2v12a2 2 0 01-2 2H6a2 2 0 01-2-2V7a2 2 0 012-2z"/>
+                            </svg>
+                            <span>{{ todayDateText() || '今日' }}</span>
+                        </div>
+                        <button @click="loadOperationsCenter" type="button" class="app-header-icon-button" title="刷新待办">
+                            <span class="app-header-badge" v-if="dashboardTodoTotal">{{ dashboardTodoTotal > 99 ? '99+' : dashboardTodoTotal }}</span>
+                            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M15 17h5l-1.4-1.4A2 2 0 0118 14.2V11a6 6 0 10-12 0v3.2a2 2 0 01-.6 1.4L4 17h5m6 0a3 3 0 01-6 0"/>
+                            </svg>
+                        </button>
+                        <button type="button" class="app-header-user">
+                            <span>管</span>
+                            <strong>管理员</strong>
+                        </button>
+                    </div>
+                </div>
+
+                <div v-if="currentViewHasSubViews" class="app-header-tabs">
+                    <button
+                        v-for="subview in currentViewSidebarSubViews"
+                        :key="`header-tab-${currentView}-${subview.id}`"
+                        @click="switchSubView(subview.id)"
+                        :class="{ 'is-active': subview.isActive }"
+                        type="button"
+                    >
+                        <span>{{ subview.label }}</span>
+                        <em v-if="subview.badgeLabel">{{ subview.badgeLabel }}</em>
+                    </button>
                 </div>
             </header>
 
             <main class="app-main flex-1 min-h-0 p-6 overflow-hidden" :class="{ 'app-main-ledger': currentView === 'ledger' }">
-                <section v-if="currentView === 'dashboard'" class="dashboard-pane view-pane h-full overflow-y-auto space-y-6 pr-1">
-                    <div class="dashboard-hero">
-                        <div class="dashboard-hero-copy">
-                            <div class="dashboard-eyebrow">采购概览</div>
-                            <h2 class="dashboard-hero-title">轻量采购台账的统一总览</h2>
-                            <p class="dashboard-hero-description">从台账数量、发票进度到当前待办，一屏掌握采购执行状态。</p>
-                        </div>
-                        <div class="dashboard-hero-summary">
-                            <div class="dashboard-summary-label">当前采购总量</div>
-                            <div class="dashboard-summary-value">{{ stats.total }}</div>
-                            <div class="dashboard-summary-meta">含待采购、待到货、待分发与已分发记录</div>
-                        </div>
+                <section v-if="currentView === 'dashboard'" class="dashboard-pane view-pane h-full overflow-y-auto pr-1">
+                    <div class="dashboard-metrics-row">
+                        <button @click="switchView('ledger'); applyLedgerSnapshot({ ...ledgerFilterSnapshot, status: '待采购', paymentStatus: '', month: '' })" type="button" class="dashboard-metric-card dashboard-metric-blue">
+                            <span class="dashboard-metric-icon" aria-hidden="true">
+                                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M3 5h2l2.2 10.2a2 2 0 002 1.6h7.9a2 2 0 001.9-1.4L21 8H6.2M10 20h.01M18 20h.01"/>
+                                </svg>
+                            </span>
+                            <span class="dashboard-metric-copy">
+                                <em>待采购</em>
+                                <strong>{{ stats.statusCount['待采购'] || 0 }}</strong>
+                                <small>确认供应商与采购单</small>
+                            </span>
+                        </button>
+                        <button @click="switchView('ledger'); applyLedgerSnapshot({ ...ledgerFilterSnapshot, status: '待到货', paymentStatus: '', month: '' })" type="button" class="dashboard-metric-card dashboard-metric-amber">
+                            <span class="dashboard-metric-icon" aria-hidden="true">
+                                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M4 6h10v10H4zM14 10h3l3 3v3h-6zM7 19a2 2 0 100-4 2 2 0 000 4zM17 19a2 2 0 100-4 2 2 0 000 4z"/>
+                                </svg>
+                            </span>
+                            <span class="dashboard-metric-copy">
+                                <em>待到货</em>
+                                <strong>{{ stats.statusCount['待到货'] || 0 }}</strong>
+                                <small>跟进收货和到货日期</small>
+                            </span>
+                        </button>
+                        <button @click="switchView('ledger'); applyLedgerSnapshot({ ...ledgerFilterSnapshot, status: '待分发', paymentStatus: '', month: '' })" type="button" class="dashboard-metric-card dashboard-metric-green">
+                            <span class="dashboard-metric-icon" aria-hidden="true">
+                                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M12 3l8 4.5v9L12 21l-8-4.5v-9L12 3zM4 7.5l8 4.5 8-4.5M12 12v9"/>
+                                </svg>
+                            </span>
+                            <span class="dashboard-metric-copy">
+                                <em>待分发</em>
+                                <strong>{{ stats.statusCount['待分发'] || 0 }}</strong>
+                                <small>安排发放与签收</small>
+                            </span>
+                        </button>
+                        <button @click="goToViewSubview('operations', 'exceptions')" type="button" class="dashboard-metric-card dashboard-metric-red">
+                            <span class="dashboard-metric-icon" aria-hidden="true">
+                                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M8 3h8l4 4v14H8a4 4 0 01-4-4V7a4 4 0 014-4zM15 3v5h5M10 11h6M10 15h6M12 11l2 4 2-4"/>
+                                </svg>
+                            </span>
+                            <span class="dashboard-metric-copy">
+                                <em>待报销</em>
+                                <strong>{{ dashboardReimbursementTodoCount }}</strong>
+                                <small>补发票、附件或状态</small>
+                            </span>
+                        </button>
                     </div>
 
-                    <section class="dashboard-todo-workbench">
-                        <div class="dashboard-todo-header">
-                            <div>
-                                <div class="dashboard-panel-title">今日待办</div>
-                                <div class="dashboard-panel-subtitle">先处理会阻塞采购闭环的事项，再看台账明细</div>
-                            </div>
-                            <button @click="loadOperationsCenter" :disabled="operationsCenterLoading" class="dashboard-todo-refresh">
-                                {{ operationsCenterLoading ? '同步中...' : '刷新待办' }}
-                            </button>
-                        </div>
-                        <div class="dashboard-todo-grid">
-                            <button
-                                v-for="card in dashboardTodoCards"
-                                :key="`dashboard-todo-${card.key}`"
-                                @click="openDashboardTodo(card.key)"
-                                class="dashboard-todo-card"
-                            >
-                                <span>{{ card.label }}</span>
-                                <strong>{{ card.count }}</strong>
-                                <em>{{ card.description }}</em>
-                            </button>
-                        </div>
-                        <div v-if="!dashboardTodoTotal" class="dashboard-todo-empty">
-                            <div>
-                                <strong>今日待办已清空</strong>
-                                <span>可以继续巡检台账，或进入运营中心查看采购闭环。</span>
-                            </div>
-                            <div class="dashboard-todo-empty-actions">
-                                <button @click="switchView('ledger')" type="button">进入台账</button>
-                                <button @click="goToViewSubview('operations', 'procurement')" type="button">运营中心</button>
-                            </div>
-                        </div>
-                        <div class="dashboard-todo-footer">
-                            <div class="dashboard-todo-total">
-                                今日可处理队列 <strong>{{ dashboardTodoTotal }}</strong> 项
-                            </div>
-                            <div v-if="dashboardActionRows.length" class="dashboard-todo-preview">
-                                <span v-for="row in dashboardActionRows" :key="`dashboard-action-preview-${row.category || row.bucket}-${row.related_item_id || row.purchase_order_id || row.task_id || row.title}`">
-                                    {{ row.item_name || row.file_name || row.title || '待办' }}
-                                </span>
-                            </div>
-                        </div>
-                    </section>
-
-                    <div class="dashboard-grid">
-                        <div class="dashboard-card dashboard-card-accent">
-                            <div class="dashboard-card-label">待采购申请</div>
-                            <div class="dashboard-card-value">{{ stats.statusCount['待采购'] || 0 }}</div>
-                            <div class="dashboard-card-meta">等待采购下单的记录数</div>
-                        </div>
-                        <div class="dashboard-card">
-                            <div class="dashboard-card-label">待到货</div>
-                            <div class="dashboard-card-value">{{ stats.statusCount['待到货'] || 0 }}</div>
-                            <div class="dashboard-card-meta">已下单，等待收货确认</div>
-                        </div>
-                        <div class="dashboard-card">
-                            <div class="dashboard-card-label">已开具发票</div>
-                            <div class="dashboard-card-value">{{ stats.invoiceCount.issued }}</div>
-                            <div class="dashboard-card-meta">可继续跟进付款与报销</div>
-                        </div>
-                        <div class="dashboard-card">
-                            <div class="dashboard-card-label">已完成报销</div>
-                            <div class="dashboard-card-value">{{ stats.paymentCount['已报销'] || 0 }}</div>
-                            <div class="dashboard-card-meta">当前已闭环的付款记录</div>
-                        </div>
-                    </div>
-
-                    <div class="dashboard-content-grid">
-                        <div class="dashboard-panel">
-                            <div class="dashboard-panel-header">
+                    <div class="dashboard-workspace-grid">
+                        <section class="dashboard-ledger-card">
+                            <div class="dashboard-section-header">
                                 <div>
-                                    <div class="dashboard-panel-title">状态分布</div>
-                                    <div class="dashboard-panel-subtitle">采购流转当前停留位置</div>
+                                    <h2>采购台账</h2>
+                                    <p>最近记录与关键采购字段，点击可进入完整台账。</p>
+                                </div>
+                                <div class="dashboard-section-actions">
+                                    <button @click="$refs.fileInput && $refs.fileInput.click()" type="button">导入单据</button>
+                                    <button @click="switchView('ledger')" type="button">查看全部</button>
                                 </div>
                             </div>
-                            <div class="dashboard-status-list">
-                                <div class="dashboard-status-item">
-                                    <div class="dashboard-status-copy">
-                                        <span class="dashboard-status-dot dashboard-status-dot-amber"></span>
-                                        <span>待采购</span>
-                                    </div>
-                                    <span class="dashboard-status-value">{{ stats.statusCount['待采购'] || 0 }}</span>
-                                </div>
-                                <div class="dashboard-status-item">
-                                    <div class="dashboard-status-copy">
-                                        <span class="dashboard-status-dot dashboard-status-dot-blue"></span>
-                                        <span>待到货</span>
-                                    </div>
-                                    <span class="dashboard-status-value">{{ stats.statusCount['待到货'] || 0 }}</span>
-                                </div>
-                                <div class="dashboard-status-item">
-                                    <div class="dashboard-status-copy">
-                                        <span class="dashboard-status-dot dashboard-status-dot-violet"></span>
-                                        <span>待分发</span>
-                                    </div>
-                                    <span class="dashboard-status-value">{{ stats.statusCount['待分发'] || 0 }}</span>
-                                </div>
-                                <div class="dashboard-status-item">
-                                    <div class="dashboard-status-copy">
-                                        <span class="dashboard-status-dot dashboard-status-dot-emerald"></span>
-                                        <span>已分发</span>
-                                    </div>
-                                    <span class="dashboard-status-value">{{ stats.statusCount['已分发'] || 0 }}</span>
-                                </div>
-                            </div>
-                        </div>
 
-                        <div class="dashboard-panel">
-                            <div class="dashboard-panel-header">
-                                <div>
-                                    <div class="dashboard-panel-title">最近新增台账</div>
-                                    <div class="dashboard-panel-subtitle">按记录 ID 倒序展示最近 5 条</div>
+                            <div class="dashboard-ledger-table-wrap">
+                                <table class="dashboard-ledger-table">
+                                    <thead>
+                                        <tr>
+                                            <th>流水号</th>
+                                            <th>部门</th>
+                                            <th>经办人</th>
+                                            <th>物品</th>
+                                            <th>数量</th>
+                                            <th>状态</th>
+                                            <th>供应商</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody v-if="latestItems.length">
+                                        <tr v-for="item in latestItems" :key="`dashboard-ledger-row-${item.id}`" @click="openLedgerDetail(item)">
+                                            <td>{{ item.serial_number || `REC-${item.id}` }}</td>
+                                            <td>{{ item.department || '-' }}</td>
+                                            <td>{{ item.handler || '-' }}</td>
+                                            <td>
+                                                <span class="dashboard-ledger-name">{{ item.item_name || '未命名物品' }}</span>
+                                            </td>
+                                            <td>{{ item.quantity || '-' }}</td>
+                                            <td>
+                                                <span class="dashboard-status-pill" :class="statusSelectClass(item.status)">{{ item.status || '-' }}</span>
+                                            </td>
+                                            <td>{{ item.supplier_name_snapshot || item.supplier_name || '-' }}</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                                <div v-if="!latestItems.length" class="dashboard-ledger-empty">
+                                    <strong>暂无采购数据</strong>
+                                    <span>可以先导入单据，或手动新增采购申请。</span>
+                                    <button @click="$refs.fileInput && $refs.fileInput.click()" type="button">导入采购单据</button>
                                 </div>
                             </div>
-                            <div v-if="latestItems.length" class="dashboard-recent-list">
-                                <div v-for="item in latestItems" :key="`recent-${item.id}`" class="dashboard-recent-item">
-                                    <div class="dashboard-recent-main">
-                                        <div class="dashboard-recent-name">{{ item.item_name || '未命名物品' }}</div>
-                                        <div class="dashboard-recent-meta">{{ item.department || '未分配部门' }} · {{ item.handler || '未登记经办人' }}</div>
-                                    </div>
-                                    <div class="dashboard-recent-side">
-                                        <div class="dashboard-recent-serial">{{ item.serial_number || `REC-${item.id}` }}</div>
-                                        <div class="dashboard-recent-status">{{ item.status || '-' }}</div>
+                        </section>
+
+                        <aside class="dashboard-side-column">
+                            <section class="dashboard-side-card">
+                                <div class="dashboard-side-header">
+                                    <h2>今日待办</h2>
+                                    <button @click="loadOperationsCenter" :disabled="operationsCenterLoading" type="button">
+                                        {{ operationsCenterLoading ? '同步中' : '刷新' }}
+                                    </button>
+                                </div>
+                                <div class="dashboard-action-list">
+                                    <button
+                                        v-for="card in dashboardPrimaryTodoCards"
+                                        :key="`dashboard-action-${card.key}`"
+                                        @click="openDashboardTodo(card.key)"
+                                        type="button"
+                                        class="dashboard-action-card"
+                                    >
+                                        <span>{{ card.label }}</span>
+                                        <em>{{ card.description }}</em>
+                                        <strong>{{ card.count }}</strong>
+                                    </button>
+                                </div>
+                                <div v-if="!dashboardTodoTotal" class="dashboard-todo-empty compact">
+                                    <div>
+                                        <strong>今日待办已清空</strong>
+                                        <span>采购闭环目前没有阻塞项。</span>
                                     </div>
                                 </div>
-                            </div>
-                            <div v-else class="dashboard-recent-empty">当前还没有可展示的台账记录</div>
-                        </div>
+                            </section>
+
+                            <section class="dashboard-side-card">
+                                <div class="dashboard-side-header">
+                                    <h2>部门支出</h2>
+                                    <span>当前筛选</span>
+                                </div>
+                                <div class="dashboard-donut-block">
+                                    <div class="dashboard-donut">
+                                        <strong>{{ stats.total }}</strong>
+                                        <span>总记录</span>
+                                    </div>
+                                    <div class="dashboard-donut-legend">
+                                        <div><span class="dashboard-status-dot dashboard-status-dot-amber"></span>待采购 <strong>{{ stats.statusCount['待采购'] || 0 }}</strong></div>
+                                        <div><span class="dashboard-status-dot dashboard-status-dot-blue"></span>待到货 <strong>{{ stats.statusCount['待到货'] || 0 }}</strong></div>
+                                        <div><span class="dashboard-status-dot dashboard-status-dot-violet"></span>待分发 <strong>{{ stats.statusCount['待分发'] || 0 }}</strong></div>
+                                        <div><span class="dashboard-status-dot dashboard-status-dot-emerald"></span>已分发 <strong>{{ stats.statusCount['已分发'] || 0 }}</strong></div>
+                                    </div>
+                                </div>
+                            </section>
+
+                            <section class="dashboard-side-card">
+                                <div class="dashboard-side-header">
+                                    <h2>采购周期</h2>
+                                    <span>执行效率</span>
+                                </div>
+                                <div class="dashboard-cycle-chart" aria-label="采购周期趋势">
+                                    <span style="--value: 56%"></span>
+                                    <span style="--value: 68%"></span>
+                                    <span style="--value: 48%"></span>
+                                    <span style="--value: 72%"></span>
+                                    <span style="--value: 52%"></span>
+                                    <span style="--value: 44%"></span>
+                                </div>
+                                <p class="dashboard-cycle-note">切换到统计报表可查看真实月度、供应商和效率分析。</p>
+                            </section>
+                        </aside>
                     </div>
                 </section>
 

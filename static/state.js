@@ -21,6 +21,7 @@
                     supplierOptions: [],
                     paymentStatuses: ['未付款', '已付款', '已报销'],
                     filterKeyword: '',
+                    globalSearchKeyword: '',
                     filterStatus: '',
                     filterPaymentStatus: '',
                     filterDepartment: '',
@@ -440,6 +441,13 @@
                 },
                 dashboardTodoTotal() {
                     return this.dashboardTodoCards.reduce((sum, card) => sum + (Number(card.count) || 0), 0);
+                },
+                dashboardPrimaryTodoCards() {
+                    return this.dashboardTodoCards.slice(0, 3);
+                },
+                dashboardReimbursementTodoCount() {
+                    const card = this.dashboardTodoCards.find((entry) => entry.key === 'reimbursement');
+                    return Number(card?.count) || 0;
                 },
                 dashboardActionRows() {
                     const center = this.operationsCenter || {};
