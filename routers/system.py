@@ -60,6 +60,15 @@ from webdav_service import (
 router = APIRouter()  # 无 prefix: 此 router 同时注册 / 主页和 /api/* 端点
 WEBDAV_CONFIG_PATH = APP_STATE_DIR / ".webdav_config.json"
 _WEBDAV_ENCRYPTION_SALT = "webdav-password"
+PWA_CACHE_HEADERS = {"Cache-Control": "no-cache"}
+PWA_ICON_CACHE_HEADERS = {"Cache-Control": "public, max-age=86400"}
+PWA_ICON_FILES = {
+    "icon-180.png",
+    "icon-192.png",
+    "icon-512.png",
+    "maskable-192.png",
+    "maskable-512.png",
+}
 
 
 def _get_webdav_encryptor() -> URLSafeSerializer:
@@ -276,7 +285,43 @@ def _build_system_status() -> dict:
 async def root():
     """返回主页。"""
     html_path = STATIC_DIR / "index.html"
-    return FileResponse(html_path)
+    return FileResponse(html_path, headers=PWA_CACHE_HEADERS)
+
+
+@router.get("/manifest.webmanifest")
+async def pwa_manifest():
+    """Return the PWA manifest from the site root."""
+    return FileResponse(
+        STATIC_DIR / "manifest.webmanifest",
+        media_type="application/manifest+json",
+        headers=PWA_CACHE_HEADERS,
+    )
+
+
+@router.get("/sw.js")
+async def service_worker():
+    """Return the service worker from the site root so it can control the app."""
+    return FileResponse(
+        STATIC_DIR / "sw.js",
+        media_type="application/javascript",
+        headers={
+            **PWA_CACHE_HEADERS,
+            "Service-Worker-Allowed": "/",
+        },
+    )
+
+
+@router.get("/icons/{filename}")
+async def pwa_icon(filename: str):
+    """Return install icons from root-scoped URLs used by the manifest."""
+    safe_name = Path(filename or "").name
+    if safe_name not in PWA_ICON_FILES:
+        raise HTTPException(status_code=404, detail="Icon not found")
+    return FileResponse(
+        STATIC_DIR / "icons" / safe_name,
+        media_type="image/png",
+        headers=PWA_ICON_CACHE_HEADERS,
+    )
 
 
 @router.get("/api/backup")

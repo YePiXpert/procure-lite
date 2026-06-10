@@ -303,3 +303,11 @@ df -h
 - 使用 HTTPS 域名访问正式环境
 - 不要把 `.env`、`procure-lite-state/` 或备份包提交到 Git
 - VPS 迁移时优先迁移整个 `procure-lite-state/` 目录
+
+## PWA 与 HTTPS
+
+Procure Lite 暴露了 `/manifest.webmanifest`、`/sw.js` 和 `/icons/*`，在 HTTPS 域名下可作为在线型 PWA 安装到桌面或手机主屏幕。Chrome、Edge 和 Android 浏览器通常会显示安装入口；iOS Safari 可通过“分享” → “添加到主屏幕”安装。
+
+PWA 缓存只覆盖 `/`、manifest、图标、CSS、JS 和 vendor 静态资源。所有 `/api/*` 请求都保持联网执行，包括登录态、台账、OCR、上传下载、导出、备份恢复、WebDAV、SQLite 数据和 zip 文件相关操作。离线打开时只能看到已缓存的应用壳，并会提示业务操作需要联网。
+
+如果通过公网 IP 的 `http://VPS公网IP:8000` 访问，浏览器通常不会启用 Service Worker 或安装能力。生产部署请使用 Caddy、Nginx、宝塔面板或云厂商负载均衡提供 HTTPS 反向代理。

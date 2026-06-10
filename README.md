@@ -109,3 +109,9 @@ procurement purchase ledger inventory ocr self-hosted docker paddleocr office-au
 - [使用说明](./USAGE.md)
 - [VPS 部署教程](./docs/vps-deployment.md)
 - [文档索引](./docs/README.md)
+
+## PWA 安装说明
+
+Procure Lite 可以作为在线型 PWA 安装到桌面或手机主屏幕。请通过 HTTPS 域名访问后，在 Chrome、Edge、Android 浏览器或 iOS Safari 中使用浏览器的“安装应用”或“添加到主屏幕”入口。
+
+离线能力仅限应用壳和静态资源缓存：已缓存页面可以打开并提示当前离线，但登录、台账数据、OCR、上传下载、备份恢复、WebDAV 和所有 `/api/*` 操作都必须连接服务器才能执行。Procure Lite 仍然是服务端保存 SQLite 数据和上传文件的自托管 Web 应用，不是完全离线的本地原生 App。

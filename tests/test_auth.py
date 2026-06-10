@@ -1,6 +1,7 @@
 import pytest
 import auth_security
 from auth_security import (
+    AUTH_COOKIE_NAME,
     AUTH_COOKIE_MAX_AGE_SECONDS,
     create_auth_cookie,
     clear_auth_cookie,
@@ -105,12 +106,12 @@ class TestResponseCookieHelpers:
     def test_set_cookie(self):
         response = self.MockResponse()
         set_auth_cookie(response, "admin", secure=False)
-        assert "office_auth_session" in response.cookies
-        cookie = response.cookies["office_auth_session"]
+        assert AUTH_COOKIE_NAME in response.cookies
+        cookie = response.cookies[AUTH_COOKIE_NAME]
         assert cookie["httponly"] is True
         assert cookie["path"] == "/"
 
     def test_clear_cookie(self):
         response = self.MockResponse()
         clear_auth_cookie(response)
-        assert "office_auth_session" in response.deleted
+        assert AUTH_COOKIE_NAME in response.deleted
