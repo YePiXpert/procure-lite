@@ -74,6 +74,30 @@ def test_static_assets_are_not_cached(monkeypatch):
     assert "no-store" in response.headers.get("cache-control", "")
 
 
+def test_mobile_pwa_shell_contract(monkeypatch):
+    with _client(monkeypatch) as client:
+        html_response = client.get("/")
+        css_response = client.get(f"/static/app.css?v={APP_VERSION}")
+        state_response = client.get(f"/static/state.js?v={APP_VERSION}")
+
+    html = html_response.text
+    css = css_response.text
+    state_js = state_response.text
+    assert 'class="mobile-tabbar"' in html
+    assert 'v-for="view in mobileTabViews"' in html
+    assert 'class="ledger-mobile-more-actions"' in html
+    assert "mobileTabViews()" in state_js
+    assert "dashboard', 'ledger', 'execution', 'operations', 'reports" in state_js
+    assert "Mobile PWA v2" in css
+    assert "--mobile-touch-target: 2.75rem" in css
+    assert ".mobile-tabbar" in css
+    assert "position: fixed" in css
+    assert "grid-template-columns: repeat(5, minmax(0, 1fr))" in css
+    assert ".ledger-mobile-more-actions" in css
+    assert ".ledger-filter-card" in css
+    assert ".execution-filter-bar" in css
+
+
 def test_pwa_icons_are_root_served_pngs(monkeypatch):
     icon_paths = [
         "/icons/icon-180.png",

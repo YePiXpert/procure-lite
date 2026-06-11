@@ -460,6 +460,13 @@
                 navSecondaryViews() {
                     return window.AppViewConfig?.secondaryNav || [];
                 },
+                mobileTabViews() {
+                    const preferredOrder = ['dashboard', 'ledger', 'execution', 'operations', 'reports'];
+                    const views = window.AppViewConfig?.views || {};
+                    return preferredOrder
+                        .map((id) => views[id])
+                        .filter(Boolean);
+                },
                 currentViewMeta() {
                     const config = window.AppViewConfig?.views || {};
                     return config[this.currentView] || config.dashboard || {

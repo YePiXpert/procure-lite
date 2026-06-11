@@ -1230,6 +1230,21 @@
                 </section>
             </main>
 
+            <nav class="mobile-tabbar" aria-label="手机主导航">
+                <button
+                    v-for="view in mobileTabViews"
+                    :key="`mobile-tab-${view.id}`"
+                    @click="switchView(view.id)"
+                    :class="{ 'is-active': currentView === view.id }"
+                    :aria-current="currentView === view.id ? 'page' : null"
+                    type="button"
+                >
+                    <span class="mobile-tabbar-icon sidebar-nav-icon" :class="`sidebar-nav-icon-${view.id}`" aria-hidden="true"></span>
+                    <span class="mobile-tabbar-label">{{ view.label }}</span>
+                    <em v-if="view.id === 'dashboard' && dashboardTodoTotal">{{ dashboardTodoTotal > 99 ? '99+' : dashboardTodoTotal }}</em>
+                </button>
+            </nav>
+
         </div>
 
         <ledger-detail-modal
@@ -2725,36 +2740,41 @@
                             >
                                 {{ $root.mobileLedgerPrimaryActionText(item) }}
                             </button>
-                            <button
-                                @click="$root.openMobileLedgerEdit(item)"
-                                type="button"
-                                class="ledger-mobile-action-button ledger-mobile-action-primary"
-                            >
-                                编辑
-                            </button>
-                            <button
-                                v-if="item.purchase_link"
-                                @click="$root.copyPurchaseLink(item.purchase_link)"
-                                type="button"
-                                class="ledger-mobile-action-button"
-                            >
-                                复制链接
-                            </button>
-                            <a
-                                v-if="item.purchase_link"
-                                :href="item.purchase_link"
-                                target="_blank"
-                                class="ledger-mobile-action-button"
-                            >
-                                打开链接
-                            </a>
-                            <button
-                                @click="$root.deleteItem(item.id)"
-                                type="button"
-                                class="ledger-mobile-action-button ledger-mobile-action-danger"
-                            >
-                                删除
-                            </button>
+                            <details class="ledger-mobile-more-actions">
+                                <summary>更多</summary>
+                                <div>
+                                    <button
+                                        @click="$root.openMobileLedgerEdit(item)"
+                                        type="button"
+                                        class="ledger-mobile-action-button ledger-mobile-action-primary"
+                                    >
+                                        编辑
+                                    </button>
+                                    <button
+                                        v-if="item.purchase_link"
+                                        @click="$root.copyPurchaseLink(item.purchase_link)"
+                                        type="button"
+                                        class="ledger-mobile-action-button"
+                                    >
+                                        复制链接
+                                    </button>
+                                    <a
+                                        v-if="item.purchase_link"
+                                        :href="item.purchase_link"
+                                        target="_blank"
+                                        class="ledger-mobile-action-button"
+                                    >
+                                        打开链接
+                                    </a>
+                                    <button
+                                        @click="$root.deleteItem(item.id)"
+                                        type="button"
+                                        class="ledger-mobile-action-button ledger-mobile-action-danger"
+                                    >
+                                        删除
+                                    </button>
+                                </div>
+                            </details>
                         </div>
                     </article>
                 </div>
