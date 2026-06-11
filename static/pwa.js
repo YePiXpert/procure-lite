@@ -215,6 +215,26 @@
         );
     }
 
+    function setupMobileInteractionGuards() {
+        const hasTouch = ('ontouchstart' in global) || Number(navigator.maxTouchPoints || 0) > 0;
+        if (!hasTouch) return;
+
+        const preventGestureZoom = (event) => {
+            event.preventDefault();
+        };
+        const preventMultiTouchMove = (event) => {
+            if (event.touches && event.touches.length > 1) {
+                event.preventDefault();
+            }
+        };
+
+        ['gesturestart', 'gesturechange', 'gestureend'].forEach((eventName) => {
+            global.addEventListener(eventName, preventGestureZoom, { passive: false });
+        });
+
+        document.addEventListener('touchmove', preventMultiTouchMove, { passive: false });
+    }
+
     global.addEventListener('online', updateOnlineState);
     global.addEventListener('offline', updateOnlineState);
     global.addEventListener('load', updateOnlineState);
@@ -222,4 +242,5 @@
     registerServiceWorker();
     setupInstallExperience();
     setupApiOfflineNotice();
+    setupMobileInteractionGuards();
 })(window);

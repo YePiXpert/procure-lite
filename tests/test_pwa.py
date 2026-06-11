@@ -17,6 +17,7 @@ def test_root_exposes_pwa_metadata(monkeypatch):
     assert response.status_code == 200
     assert "no-store" in response.headers.get("cache-control", "")
     html = response.text
+    assert 'name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, minimum-scale=1, user-scalable=no, viewport-fit=cover"' in html
     assert 'rel="manifest"' in html
     assert 'href="/manifest.webmanifest"' in html
     assert 'name="theme-color" content="#2563eb"' in html
@@ -80,15 +81,20 @@ def test_mobile_pwa_shell_contract(monkeypatch):
         css_response = client.get(f"/static/app.css?v={APP_VERSION}")
         state_response = client.get(f"/static/state.js?v={APP_VERSION}")
         api_response = client.get(f"/static/api.js?v={APP_VERSION}")
+        pwa_response = client.get(f"/static/pwa.js?v={APP_VERSION}")
 
     html = html_response.text
     css = css_response.text
     state_js = state_response.text
     api_js = api_response.text
+    pwa_js = pwa_response.text
     assert 'class="mobile-tabbar"' in html
     assert 'v-for="view in mobileTabViews"' in html
     assert 'class="mobile-selection-dock"' in html
     assert 'class="mobile-action-sheet-overlay"' in html
+    assert 'class="mobile-action-sheet-details"' in html
+    assert 'class="ledger-mobile-quick-meta"' in html
+    assert 'class="ledger-mobile-summary-grid"' not in html
     assert "openMobileLedgerActionSheet(item)" in html
     assert "mobileTabViews()" in state_js
     assert "dashboard', 'ledger', 'execution', 'operations', 'reports" in state_js
@@ -97,13 +103,22 @@ def test_mobile_pwa_shell_contract(monkeypatch):
     assert ".mobile-tabbar" in css
     assert ".mobile-selection-dock" in css
     assert ".mobile-action-sheet-overlay" in css
+    assert ".mobile-action-sheet-details" in css
+    assert ".ledger-mobile-quick-meta" in css
     assert "position: fixed" in css
+    assert "touch-action: pan-x pan-y" in css
+    assert "content-visibility: auto" in css
+    assert "max-height: min(58dvh, 30rem)" in css
     assert "grid-template-columns: repeat(5, minmax(0, 1fr))" in css
+    assert "execution-card:nth-of-type(n+4)" not in css
     assert ".ledger-filter-card" in css
     assert ".execution-filter-bar" in css
     assert "openMobileLedgerActionSheet(item)" in api_js
     assert "closeMobileTransientSurfaces()" in api_js
     assert "scrollMobileViewportToTop()" in api_js
+    assert "setupMobileInteractionGuards()" in pwa_js
+    assert "'gesturestart', 'gesturechange', 'gestureend'" in pwa_js
+    assert "document.addEventListener('touchmove', preventMultiTouchMove, { passive: false })" in pwa_js
 
 
 def test_pwa_icons_are_root_served_pngs(monkeypatch):

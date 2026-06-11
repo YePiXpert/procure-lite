@@ -2,7 +2,7 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, minimum-scale=1, user-scalable=no, viewport-fit=cover">
     <meta name="theme-color" content="#2563eb">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
@@ -1462,6 +1462,32 @@
                     <span>{{ mobileLedgerActionSheetItem.payment_status || '未付款' }}</span>
                     <span>{{ mobileLedgerActionSheetItem.invoice_issued ? '发票已入账' : '待报票' }}</span>
                 </div>
+                <div class="mobile-action-sheet-details">
+                    <div>
+                        <span>经办</span>
+                        <strong>{{ mobileLedgerActionSheetItem.handler || '-' }}</strong>
+                    </div>
+                    <div>
+                        <span>数量</span>
+                        <strong>{{ mobileLedgerActionSheetItem.quantity || '-' }}</strong>
+                    </div>
+                    <div>
+                        <span>单价</span>
+                        <strong>{{ mobileLedgerActionSheetItem.unit_price === null || mobileLedgerActionSheetItem.unit_price === undefined || mobileLedgerActionSheetItem.unit_price === '' ? '-' : `¥${formatCurrency(mobileLedgerActionSheetItem.unit_price)}` }}</strong>
+                    </div>
+                    <div>
+                        <span>到货</span>
+                        <strong>{{ mobileLedgerActionSheetItem.arrival_date || '-' }}</strong>
+                    </div>
+                    <div v-if="mobileLedgerActionSheetItem.distribution_date">
+                        <span>分发</span>
+                        <strong>{{ mobileLedgerActionSheetItem.distribution_date }}</strong>
+                    </div>
+                    <div v-if="mobileLedgerActionSheetItem.signoff_note" class="mobile-action-sheet-detail-wide">
+                        <span>备注</span>
+                        <strong>{{ mobileLedgerActionSheetItem.signoff_note }}</strong>
+                    </div>
+                </div>
                 <div class="mobile-action-sheet-actions">
                     <button
                         v-if="mobileLedgerPrimaryAction(mobileLedgerActionSheetItem)"
@@ -2821,29 +2847,10 @@
                             </div>
                         </div>
 
-                        <div class="ledger-mobile-summary-grid">
-                            <div>
-                                <span>经办</span>
-                                <strong>{{ item.handler || '-' }}</strong>
-                            </div>
-                            <div>
-                                <span>数量</span>
-                                <strong>{{ item.quantity || '-' }}</strong>
-                            </div>
-                            <div>
-                                <span>单价</span>
-                                <strong>{{ item.unit_price === null || item.unit_price === undefined || item.unit_price === '' ? '-' : `¥${$root.formatCurrency(item.unit_price)}` }}</strong>
-                            </div>
-                            <div>
-                                <span>到货</span>
-                                <strong>{{ item.arrival_date || '-' }}</strong>
-                            </div>
-                        </div>
-
-                        <div v-if="item.signoff_note || item.purchase_link || item.distribution_date" class="ledger-mobile-meta-strip">
-                            <span v-if="item.distribution_date">分发 {{ item.distribution_date }}</span>
-                            <span v-if="item.signoff_note">{{ item.signoff_note }}</span>
-                            <span v-if="item.purchase_link">{{ $root.compactPurchaseLink(item.purchase_link) }}</span>
+                        <div class="ledger-mobile-quick-meta">
+                            <span>{{ item.handler || '未登记经办' }}</span>
+                            <span>数量 {{ item.quantity || '-' }}</span>
+                            <span>{{ item.arrival_date ? `到货 ${item.arrival_date}` : '未到货' }}</span>
                         </div>
 
                         <div class="ledger-mobile-card-actions">
