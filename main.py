@@ -95,8 +95,15 @@ async def lifespan(app: FastAPI):
                 pass
 
 
+class NoStoreStaticFiles(StaticFiles):
+    async def get_response(self, path, scope):
+        response = await super().get_response(path, scope)
+        response.headers["Cache-Control"] = "no-store"
+        return response
+
+
 app = FastAPI(title="Procure Lite", version=APP_VERSION, lifespan=lifespan)
-app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
+app.mount("/static", NoStoreStaticFiles(directory=str(STATIC_DIR)), name="static")
 
 
 def _resolve_operator_ip(request) -> str:

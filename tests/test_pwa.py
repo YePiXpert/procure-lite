@@ -15,7 +15,7 @@ def test_root_exposes_pwa_metadata(monkeypatch):
         response = client.get("/")
 
     assert response.status_code == 200
-    assert "no-cache" in response.headers.get("cache-control", "")
+    assert "no-store" in response.headers.get("cache-control", "")
     html = response.text
     assert 'rel="manifest"' in html
     assert 'href="/manifest.webmanifest"' in html
@@ -30,6 +30,7 @@ def test_manifest_contract(monkeypatch):
 
     assert response.status_code == 200
     assert "application/manifest+json" in response.headers.get("content-type", "")
+    assert "no-store" in response.headers.get("cache-control", "")
     manifest = response.json()
     assert manifest["name"] == "Procure Lite"
     assert manifest["short_name"] == "Procure Lite"
@@ -52,13 +53,25 @@ def test_service_worker_contract(monkeypatch):
     assert response.status_code == 200
     assert "application/javascript" in response.headers.get("content-type", "")
     assert response.headers.get("service-worker-allowed") == "/"
-    assert "no-cache" in response.headers.get("cache-control", "")
+    assert "no-store" in response.headers.get("cache-control", "")
     body = response.text
     assert f"CACHE_VERSION = '{APP_VERSION}'" in body
-    assert "url.pathname.startsWith('/api/')" in body
-    assert "network-only" in body
+    assert "clearProcureLiteCaches" in body
+    assert "addEventListener('fetch'" not in body
+    assert "respondWith" not in body
+    assert "caches.open" not in body
+    assert "cache.addAll" not in body
+    assert "cache.match" not in body
     assert "SKIP_WAITING" in body
-    assert f"/static/pwa.js?v={APP_VERSION}" in body
+
+
+def test_static_assets_are_not_cached(monkeypatch):
+    with _client(monkeypatch) as client:
+        response = client.get(f"/static/app.css?v={APP_VERSION}")
+
+    assert response.status_code == 200
+    assert "text/css" in response.headers.get("content-type", "")
+    assert "no-store" in response.headers.get("cache-control", "")
 
 
 def test_pwa_icons_are_root_served_pngs(monkeypatch):
@@ -74,6 +87,7 @@ def test_pwa_icons_are_root_served_pngs(monkeypatch):
             response = client.get(path)
             assert response.status_code == 200
             assert "image/png" in response.headers.get("content-type", "")
+            assert "no-store" in response.headers.get("cache-control", "")
             assert response.content.startswith(b"\x89PNG\r\n\x1a\n")
 
 
@@ -82,4 +96,5 @@ def test_app_metadata_remains_network_api(monkeypatch):
         response = client.get("/api/app/metadata")
 
     assert response.status_code == 200
+    assert "no-store" in response.headers.get("cache-control", "")
     assert response.json()["version"] == APP_VERSION

@@ -60,8 +60,8 @@ from webdav_service import (
 router = APIRouter()  # 无 prefix: 此 router 同时注册 / 主页和 /api/* 端点
 WEBDAV_CONFIG_PATH = APP_STATE_DIR / ".webdav_config.json"
 _WEBDAV_ENCRYPTION_SALT = "webdav-password"
-PWA_CACHE_HEADERS = {"Cache-Control": "no-cache"}
-PWA_ICON_CACHE_HEADERS = {"Cache-Control": "public, max-age=86400"}
+PWA_CACHE_HEADERS = {"Cache-Control": "no-store"}
+PWA_ICON_CACHE_HEADERS = {"Cache-Control": "no-store"}
 PWA_ICON_FILES = {
     "icon-180.png",
     "icon-192.png",

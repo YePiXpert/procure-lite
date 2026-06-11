@@ -7172,3 +7172,82 @@ html,
         grid-template-columns: 1fr !important;
     }
 }
+
+@media (max-width: 767px) {
+    .dashboard-ledger-table tbody {
+        gap: 0.5rem !important;
+        padding: 0.5rem !important;
+    }
+
+    .dashboard-ledger-table tbody tr:nth-child(n+4) {
+        display: none !important;
+    }
+
+    .dashboard-ledger-table tbody tr {
+        grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+        padding: 0.55rem !important;
+    }
+
+    .dashboard-ledger-table td {
+        padding: 0.42rem 0.48rem !important;
+    }
+
+    .dashboard-ledger-table td:nth-child(5),
+    .dashboard-ledger-table td:nth-child(6),
+    .dashboard-ledger-table td:nth-child(7) {
+        display: none !important;
+    }
+
+    .dashboard-ledger-name {
+        font-size: 0.9rem !important;
+    }
+
+    .ledger-mobile-card {
+        box-shadow: none !important;
+    }
+
+    .ledger-mobile-card-header {
+        padding: 0.55rem !important;
+    }
+
+    .ledger-mobile-status-row {
+        padding: 0.45rem 0.55rem !important;
+    }
+
+    .ledger-mobile-workflow-row,
+    .ledger-mobile-summary-grid,
+    .ledger-mobile-meta-strip {
+        display: none !important;
+    }
+
+    .ledger-mobile-card-actions {
+        padding: 0.5rem 0.55rem 0.55rem !important;
+    }
+
+    .execution-card-list .execution-card:nth-of-type(n+4) {
+        display: none !important;
+    }
+
+    .execution-column-header {
+        padding: 0.65rem !important;
+    }
+
+    .execution-card-list {
+        padding: 0.55rem !important;
+    }
+
+    .execution-card {
+        gap: 0.4rem !important;
+        padding: 0.65rem !important;
+        box-shadow: none !important;
+    }
+
+    .execution-card-chips {
+        gap: 0.28rem !important;
+    }
+
+    .execution-card-chips span {
+        height: 1.22rem !important;
+        font-size: 0.62rem !important;
+    }
+}
