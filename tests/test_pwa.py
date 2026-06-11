@@ -79,23 +79,31 @@ def test_mobile_pwa_shell_contract(monkeypatch):
         html_response = client.get("/")
         css_response = client.get(f"/static/app.css?v={APP_VERSION}")
         state_response = client.get(f"/static/state.js?v={APP_VERSION}")
+        api_response = client.get(f"/static/api.js?v={APP_VERSION}")
 
     html = html_response.text
     css = css_response.text
     state_js = state_response.text
+    api_js = api_response.text
     assert 'class="mobile-tabbar"' in html
     assert 'v-for="view in mobileTabViews"' in html
-    assert 'class="ledger-mobile-more-actions"' in html
+    assert 'class="mobile-selection-dock"' in html
+    assert 'class="mobile-action-sheet-overlay"' in html
+    assert "openMobileLedgerActionSheet(item)" in html
     assert "mobileTabViews()" in state_js
     assert "dashboard', 'ledger', 'execution', 'operations', 'reports" in state_js
     assert "Mobile PWA v2" in css
     assert "--mobile-touch-target: 2.75rem" in css
     assert ".mobile-tabbar" in css
+    assert ".mobile-selection-dock" in css
+    assert ".mobile-action-sheet-overlay" in css
     assert "position: fixed" in css
     assert "grid-template-columns: repeat(5, minmax(0, 1fr))" in css
-    assert ".ledger-mobile-more-actions" in css
     assert ".ledger-filter-card" in css
     assert ".execution-filter-bar" in css
+    assert "openMobileLedgerActionSheet(item)" in api_js
+    assert "closeMobileTransientSurfaces()" in api_js
+    assert "scrollMobileViewportToTop()" in api_js
 
 
 def test_pwa_icons_are_root_served_pngs(monkeypatch):

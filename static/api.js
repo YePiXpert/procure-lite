@@ -601,6 +601,49 @@
                     if (this.isMobileLedgerActionSaved(item, action.key)) return action.savedLabel || '已刷新';
                     return action.label || '';
                 },
+                isMobileViewport() {
+                    return typeof window !== 'undefined'
+                        && typeof window.matchMedia === 'function'
+                        && window.matchMedia('(max-width: 767px)').matches;
+                },
+                scrollMobileViewportToTop() {
+                    if (!this.isMobileViewport()) return;
+                    this.$nextTick(() => {
+                        try {
+                            window.scrollTo({ top: 0, behavior: 'smooth' });
+                        } catch (_) {
+                            window.scrollTo(0, 0);
+                        }
+                    });
+                },
+                closeMobileActionSheet() {
+                    this.showMobileLedgerActionSheet = false;
+                    this.mobileLedgerActionSheetItemId = null;
+                },
+                closeMobileTransientSurfaces() {
+                    this.closeMobileActionSheet();
+                },
+                openMobileLedgerActionSheet(item) {
+                    if (!item?.id) return;
+                    this.mobileLedgerActionSheetItemId = Number(item.id);
+                    this.showMobileLedgerActionSheet = true;
+                },
+                openMobileLedgerActionSheetEdit(item) {
+                    this.closeMobileActionSheet();
+                    this.openMobileLedgerEdit(item);
+                },
+                async runMobileLedgerActionSheetPrimary(item) {
+                    await this.runMobileLedgerPrimaryAction(item);
+                    this.closeMobileActionSheet();
+                },
+                async copyMobileLedgerActionSheetLink(item) {
+                    await this.copyPurchaseLink(item?.purchase_link || '');
+                    this.closeMobileActionSheet();
+                },
+                async deleteMobileLedgerActionSheetItem(item) {
+                    this.closeMobileActionSheet();
+                    await this.deleteItem(item?.id);
+                },
                 fillMobileLedgerDraftDate(field) {
                     if (!this.mobileLedgerEditDraft) return;
                     if (!['arrival_date', 'distribution_date'].includes(field)) return;
@@ -847,6 +890,7 @@
                 },
                 switchView(view, forceReload = false, syncHash = true, subview = null) {
                     const normalized = this.normalizeView(view);
+                    const previousView = this.currentView;
                     const normalizedSubView = this.normalizeSubView(
                         normalized,
                         subview === null
@@ -864,6 +908,10 @@
                         this.setViewHash(normalized, normalizedSubView);
                     }
                     this.ensureViewData(normalized, forceReload);
+                    if (previousView !== normalized) {
+                        this.closeMobileTransientSurfaces();
+                        this.scrollMobileViewportToTop();
+                    }
                 },
                 switchSubView(subview, forceReload = false, syncHash = true) {
                     const view = this.currentView;
@@ -877,6 +925,8 @@
                         this.setViewHash(view, normalizedSubView);
                     }
                     this.ensureViewData(view, forceReload);
+                    this.closeMobileTransientSurfaces();
+                    this.scrollMobileViewportToTop();
                 },
                 goToViewSubview(view, subview, forceReload = false) {
                     this.switchView(view, forceReload, true, subview);

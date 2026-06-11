@@ -254,6 +254,8 @@
                     mobileLedgerActionSavingKey: '',
                     mobileLedgerActionSavedKey: '',
                     mobileLedgerActionSavedTimer: null,
+                    showMobileLedgerActionSheet: false,
+                    mobileLedgerActionSheetItemId: null,
                     importPreview: {
                         serial_number: '',
                         department: '',
@@ -466,6 +468,11 @@
                     return preferredOrder
                         .map((id) => views[id])
                         .filter(Boolean);
+                },
+                mobileLedgerActionSheetItem() {
+                    const itemId = Number(this.mobileLedgerActionSheetItemId) || 0;
+                    if (!itemId) return null;
+                    return this.items.find((item) => Number(item?.id) === itemId) || null;
                 },
                 currentViewMeta() {
                     const config = window.AppViewConfig?.views || {};

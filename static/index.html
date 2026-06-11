@@ -423,6 +423,63 @@
                         @batch-delete="batchDelete"
                     ></ledger-batch-toolbar>
 
+                    <div v-if="selectedItems.length" class="mobile-selection-dock">
+                        <div class="mobile-selection-dock-summary">
+                            <strong>已选 {{ selectedItems.length }} 条</strong>
+                            <button @click="selectedItems = []; selectAll = false; batchEditField = ''; batchEditValue = ''" type="button">取消</button>
+                        </div>
+                        <div class="mobile-selection-dock-controls">
+                            <select
+                                v-model="batchEditField"
+                                @change="onBatchFieldChange"
+                                class="mobile-selection-dock-control"
+                            >
+                                <option value="">选择批量操作</option>
+                                <option value="status">采购状态</option>
+                                <option value="payment_status">付款状态</option>
+                                <option value="invoice_issued">发票状态</option>
+                                <option value="supplier_id">供应商</option>
+                            </select>
+                            <select
+                                v-if="batchEditField === 'status'"
+                                v-model="batchEditValue"
+                                class="mobile-selection-dock-control"
+                            >
+                                <option value="">选择采购状态</option>
+                                <option v-for="s in statuses" :key="`mobile-batch-s-${s}`" :value="s">{{ s }}</option>
+                            </select>
+                            <select
+                                v-if="batchEditField === 'payment_status'"
+                                v-model="batchEditValue"
+                                class="mobile-selection-dock-control"
+                            >
+                                <option value="">选择付款状态</option>
+                                <option v-for="p in paymentStatuses" :key="`mobile-batch-p-${p}`" :value="p">{{ p }}</option>
+                            </select>
+                            <select
+                                v-if="batchEditField === 'invoice_issued'"
+                                v-model="batchEditValue"
+                                class="mobile-selection-dock-control"
+                            >
+                                <option value="">选择发票状态</option>
+                                <option value="1">已入账</option>
+                                <option value="0">待报</option>
+                            </select>
+                            <select
+                                v-if="batchEditField === 'supplier_id'"
+                                v-model="batchEditValue"
+                                class="mobile-selection-dock-control"
+                            >
+                                <option value="">未归属供应商</option>
+                                <option v-for="supplier in supplierOptions" :key="`mobile-batch-supplier-${supplier.id}`" :value="String(supplier.id)">{{ supplier.name }}</option>
+                            </select>
+                        </div>
+                        <div class="mobile-selection-dock-actions">
+                            <button @click="batchUpdate" :disabled="!batchEditField" type="button" class="mobile-selection-dock-primary">应用</button>
+                            <button @click="batchDelete" type="button" class="mobile-selection-dock-danger">删除</button>
+                        </div>
+                    </div>
+
                     <div class="ledger-table-card flex-1 min-h-0 bg-white shadow-sm ring-1 ring-slate-900/5 rounded-xl overflow-hidden flex flex-col">
                         <ledger-table-panel
                             :items="items"
@@ -1380,6 +1437,65 @@
                         {{ mobileLedgerEditSaving ? '处理中...' : '保存' }}
                     </button>
                 </footer>
+            </section>
+        </div>
+
+        <div
+            v-if="showMobileLedgerActionSheet && mobileLedgerActionSheetItem"
+            class="mobile-action-sheet-overlay"
+            @click.self="closeMobileActionSheet"
+        >
+            <section class="mobile-action-sheet" role="dialog" aria-modal="true" aria-label="台账快捷操作">
+                <div class="mobile-action-sheet-handle" aria-hidden="true"></div>
+                <header class="mobile-action-sheet-header">
+                    <div class="min-w-0">
+                        <span>{{ mobileLedgerActionSheetItem.serial_number || `REC-${mobileLedgerActionSheetItem.id}` }}</span>
+                        <strong>{{ mobileLedgerActionSheetItem.item_name || '未命名物品' }}</strong>
+                        <em>{{ mobileLedgerActionSheetItem.department || '未分配部门' }} · {{ mobileLedgerActionSheetItem.handler || '未登记经办人' }}</em>
+                    </div>
+                    <button @click="closeMobileActionSheet" type="button" title="关闭">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M6 18L18 6M6 6l12 12"/></svg>
+                    </button>
+                </header>
+                <div class="mobile-action-sheet-status">
+                    <span :class="statusSelectClass(mobileLedgerActionSheetItem.status)">{{ mobileLedgerActionSheetItem.status || '-' }}</span>
+                    <span>{{ mobileLedgerActionSheetItem.payment_status || '未付款' }}</span>
+                    <span>{{ mobileLedgerActionSheetItem.invoice_issued ? '发票已入账' : '待报票' }}</span>
+                </div>
+                <div class="mobile-action-sheet-actions">
+                    <button
+                        v-if="mobileLedgerPrimaryAction(mobileLedgerActionSheetItem)"
+                        @click="runMobileLedgerActionSheetPrimary(mobileLedgerActionSheetItem)"
+                        :disabled="isMobileLedgerActionSaving(mobileLedgerActionSheetItem, mobileLedgerPrimaryAction(mobileLedgerActionSheetItem).key)"
+                        type="button"
+                        class="mobile-action-sheet-primary"
+                    >
+                        {{ mobileLedgerPrimaryActionText(mobileLedgerActionSheetItem) }}
+                    </button>
+                    <button @click="openMobileLedgerActionSheetEdit(mobileLedgerActionSheetItem)" type="button">
+                        编辑记录
+                    </button>
+                    <button
+                        v-if="mobileLedgerActionSheetItem.purchase_link"
+                        @click="copyMobileLedgerActionSheetLink(mobileLedgerActionSheetItem)"
+                        type="button"
+                    >
+                        复制采购链接
+                    </button>
+                    <a
+                        v-if="mobileLedgerActionSheetItem.purchase_link"
+                        :href="mobileLedgerActionSheetItem.purchase_link"
+                        target="_blank"
+                    >
+                        打开采购链接
+                    </a>
+                    <button @click="openLedgerDetail(mobileLedgerActionSheetItem); closeMobileActionSheet()" type="button">
+                        查看详情与审计
+                    </button>
+                    <button @click="deleteMobileLedgerActionSheetItem(mobileLedgerActionSheetItem)" type="button" class="mobile-action-sheet-danger">
+                        删除记录
+                    </button>
+                </div>
             </section>
         </div>
 
@@ -2740,41 +2856,13 @@
                             >
                                 {{ $root.mobileLedgerPrimaryActionText(item) }}
                             </button>
-                            <details class="ledger-mobile-more-actions">
-                                <summary>更多</summary>
-                                <div>
-                                    <button
-                                        @click="$root.openMobileLedgerEdit(item)"
-                                        type="button"
-                                        class="ledger-mobile-action-button ledger-mobile-action-primary"
-                                    >
-                                        编辑
-                                    </button>
-                                    <button
-                                        v-if="item.purchase_link"
-                                        @click="$root.copyPurchaseLink(item.purchase_link)"
-                                        type="button"
-                                        class="ledger-mobile-action-button"
-                                    >
-                                        复制链接
-                                    </button>
-                                    <a
-                                        v-if="item.purchase_link"
-                                        :href="item.purchase_link"
-                                        target="_blank"
-                                        class="ledger-mobile-action-button"
-                                    >
-                                        打开链接
-                                    </a>
-                                    <button
-                                        @click="$root.deleteItem(item.id)"
-                                        type="button"
-                                        class="ledger-mobile-action-button ledger-mobile-action-danger"
-                                    >
-                                        删除
-                                    </button>
-                                </div>
-                            </details>
+                            <button
+                                @click="$root.openMobileLedgerActionSheet(item)"
+                                type="button"
+                                class="ledger-mobile-action-button ledger-mobile-action-more"
+                            >
+                                更多
+                            </button>
                         </div>
                     </article>
                 </div>
