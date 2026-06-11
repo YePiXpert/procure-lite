@@ -486,7 +486,10 @@
                             <option value="">全部部门</option>
                             <option v-for="department in departments" :key="`board-dep-${department}`" :value="department">{{ department }}</option>
                         </select>
-                        <input type="month" v-model="boardMonth" @change="applyExecutionFilter" class="execution-filter-control">
+                        <label class="execution-filter-month">
+                            <span>月份</span>
+                            <input type="month" v-model="boardMonth" @change="applyExecutionFilter" class="execution-filter-control">
+                        </label>
                         <button @click="applyExecutionFilter" :disabled="executionLoading" class="execution-filter-button execution-filter-primary">刷新看板</button>
                         <button @click="clearExecutionFilter" :disabled="executionLoading || !executionBoardFilterActive" class="execution-filter-button">清除筛选</button>
                     </div>
