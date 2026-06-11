@@ -1,5 +1,7 @@
 from fastapi.testclient import TestClient
 
+from app_metadata import APP_VERSION
+
 
 def _client(monkeypatch):
     monkeypatch.setenv("AUTO_MIGRATE", "0")
@@ -19,7 +21,7 @@ def test_root_exposes_pwa_metadata(monkeypatch):
     assert 'href="/manifest.webmanifest"' in html
     assert 'name="theme-color" content="#2563eb"' in html
     assert 'rel="apple-touch-icon"' in html
-    assert '/static/pwa.js?v=1.2.73' in html
+    assert f'/static/pwa.js?v={APP_VERSION}' in html
 
 
 def test_manifest_contract(monkeypatch):
@@ -52,11 +54,11 @@ def test_service_worker_contract(monkeypatch):
     assert response.headers.get("service-worker-allowed") == "/"
     assert "no-cache" in response.headers.get("cache-control", "")
     body = response.text
-    assert "CACHE_VERSION = '1.2.73'" in body
+    assert f"CACHE_VERSION = '{APP_VERSION}'" in body
     assert "url.pathname.startsWith('/api/')" in body
     assert "network-only" in body
     assert "SKIP_WAITING" in body
-    assert "/static/pwa.js?v=1.2.73" in body
+    assert f"/static/pwa.js?v={APP_VERSION}" in body
 
 
 def test_pwa_icons_are_root_served_pngs(monkeypatch):
@@ -80,4 +82,4 @@ def test_app_metadata_remains_network_api(monkeypatch):
         response = client.get("/api/app/metadata")
 
     assert response.status_code == 200
-    assert response.json()["version"] == "1.2.73"
+    assert response.json()["version"] == APP_VERSION

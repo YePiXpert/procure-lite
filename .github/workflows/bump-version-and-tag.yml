@@ -56,8 +56,8 @@ jobs:
 
       - name: Commit version bump
         run: |
-          git add VERSION static/index.html README.md USAGE.md
-          git commit -m "chore: bump version to v${{ steps.bump.outputs.version }} [skip ci]"
+          git add VERSION static/index.html static/sw.js README.md USAGE.md
+          git commit -m "chore: bump version to v${{ steps.bump.outputs.version }}"
 
       - name: Create release tag
         run: |
