@@ -27,6 +27,12 @@ DEFAULT_AUTO_BACKUP_CONFIG = {
     "last_error": "",
     "last_filename": "",
     "last_size": 0,
+    "last_health_ok": False,
+    "last_health_error": "",
+    "last_checked_at": "",
+    "last_checked_filename": "",
+    "last_checked_item_count": 0,
+    "last_checked_upload_files": 0,
 }
 AUTO_BACKUP_MIN_INTERVAL_HOURS = 1
 AUTO_BACKUP_MAX_INTERVAL_HOURS = 168
@@ -124,6 +130,18 @@ def normalize_auto_backup_config(data: dict | None) -> dict:
         "last_error": str(raw.get("last_error") or "").strip(),
         "last_filename": Path(str(raw.get("last_filename") or "").strip()).name,
         "last_size": max(0, _coerce_int(raw.get("last_size"), 0, 0, 10**15)),
+        "last_health_ok": _coerce_bool(raw.get("last_health_ok"), False),
+        "last_health_error": str(raw.get("last_health_error") or "").strip(),
+        "last_checked_at": str(raw.get("last_checked_at") or "").strip(),
+        "last_checked_filename": Path(
+            str(raw.get("last_checked_filename") or "").strip()
+        ).name,
+        "last_checked_item_count": max(
+            0, _coerce_int(raw.get("last_checked_item_count"), 0, 0, 10**15)
+        ),
+        "last_checked_upload_files": max(
+            0, _coerce_int(raw.get("last_checked_upload_files"), 0, 0, 10**15)
+        ),
     }
     normalized["next_run_at"] = _calculate_next_run_at(normalized)
     normalized["running"] = _AUTO_BACKUP_LOCK.locked()
@@ -170,6 +188,36 @@ def save_auto_backup_config(config: dict) -> dict:
         "keep_backups": payload.get("keep_backups", existing.get("keep_backups")),
     }
     return _write_auto_backup_config(next_config)
+
+
+def _health_success_fields(filename: str, report: dict, checked_at: datetime) -> dict:
+    report_data = report if isinstance(report, dict) else {}
+    db_report = report_data.get("db")
+    if not isinstance(db_report, dict):
+        db_report = {}
+    return {
+        "last_health_ok": True,
+        "last_health_error": "",
+        "last_checked_at": _isoformat(checked_at),
+        "last_checked_filename": Path(filename).name,
+        "last_checked_item_count": max(
+            0, _coerce_int(db_report.get("item_count"), 0, 0, 10**15)
+        ),
+        "last_checked_upload_files": max(
+            0, _coerce_int(report_data.get("upload_files"), 0, 0, 10**15)
+        ),
+    }
+
+
+def _health_failure_fields(filename: str, error: str, checked_at: datetime) -> dict:
+    return {
+        "last_health_ok": False,
+        "last_health_error": str(error or "").strip(),
+        "last_checked_at": _isoformat(checked_at),
+        "last_checked_filename": Path(filename).name,
+        "last_checked_item_count": 0,
+        "last_checked_upload_files": 0,
+    }
 
 
 def is_auto_backup_due(
@@ -291,6 +339,8 @@ def run_auto_backup(force: bool = False) -> dict:
         filename = f"procure_lite_auto_backup_{beijing_filename_timestamp(started_at)}.zip"
         destination = get_local_backup_dir() / filename
         backup_service.build_backup_archive_file(destination)
+        health_report = backup_service.inspect_backup_archive(destination)
+        health_fields = _health_success_fields(filename, health_report, now_beijing())
         size = destination.stat().st_size
         retention = prune_local_backups(attempt_config.get("keep_backups", 7))
 
@@ -301,6 +351,7 @@ def run_auto_backup(force: bool = False) -> dict:
                 "last_error": "",
                 "last_filename": filename,
                 "last_size": size,
+                **health_fields,
             }
         )
         return {
@@ -310,17 +361,26 @@ def run_auto_backup(force: bool = False) -> dict:
             "size": size,
             "retention": retention,
             "config": saved_config,
+            "health": health_report,
         }
     except Exception as exc:
         if destination is not None:
             safe_unlink(destination)
+        failed_filename = destination.name if destination is not None else ""
+        failed_error = backup_service.format_backup_error(
+            exc, prefix="自动备份失败"
+        )
+        failed_health_fields = _health_failure_fields(
+            failed_filename,
+            failed_error,
+            now_beijing(),
+        )
         failed_config = _write_auto_backup_config(
             {
                 **load_auto_backup_config(),
                 "last_run_at": _isoformat(now_beijing()),
-                "last_error": backup_service.format_backup_error(
-                    exc, prefix="自动备份失败"
-                ),
+                "last_error": failed_error,
+                **failed_health_fields,
             }
         )
         return {

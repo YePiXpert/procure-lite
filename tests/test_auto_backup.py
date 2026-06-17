@@ -80,10 +80,23 @@ def test_auto_backup_run_creates_file_and_prunes(monkeypatch):
         destination.write_bytes(b"new-backup")
         return destination
 
+    def _inspect_fake_backup(destination):
+        assert destination.exists()
+        return {
+            "ok": True,
+            "db": {"integrity": "ok", "tables": ["items"], "item_count": 1},
+            "upload_files": 0,
+        }
+
     monkeypatch.setattr(
         auto_backup_service.backup_service,
         "build_backup_archive_file",
         _write_fake_backup,
+    )
+    monkeypatch.setattr(
+        auto_backup_service.backup_service,
+        "inspect_backup_archive",
+        _inspect_fake_backup,
     )
 
     result = auto_backup_service.run_auto_backup(force=False)
@@ -94,6 +107,99 @@ def test_auto_backup_run_creates_file_and_prunes(monkeypatch):
     assert result["filename"].startswith("procure_lite_auto_backup_")
     assert len(backups) == 2
     assert any(item["name"] == result["filename"] for item in backups)
+
+
+def test_auto_backup_run_records_health_metadata(monkeypatch):
+    auto_backup_service._write_auto_backup_config(
+        {
+            "enabled": True,
+            "interval_hours": 1,
+            "keep_backups": 7,
+            "last_success_at": (now_beijing() - timedelta(hours=2)).isoformat(
+                timespec="seconds"
+            ),
+        }
+    )
+
+    def _write_fake_backup(destination):
+        destination.write_bytes(b"new-backup")
+        return destination
+
+    def _inspect_fake_backup(destination):
+        assert destination.exists()
+        return {
+            "ok": True,
+            "db": {"integrity": "ok", "tables": ["items"], "item_count": 3},
+            "upload_files": 2,
+        }
+
+    monkeypatch.setattr(
+        auto_backup_service.backup_service,
+        "build_backup_archive_file",
+        _write_fake_backup,
+    )
+    monkeypatch.setattr(
+        auto_backup_service.backup_service,
+        "inspect_backup_archive",
+        _inspect_fake_backup,
+    )
+
+    result = auto_backup_service.run_auto_backup(force=False)
+    config = result["config"]
+
+    assert result["ok"] is True
+    assert result["health"]["ok"] is True
+    assert config["last_health_ok"] is True
+    assert config["last_health_error"] == ""
+    assert config["last_checked_filename"] == result["filename"]
+    assert config["last_checked_item_count"] == 3
+    assert config["last_checked_upload_files"] == 2
+    assert config["last_checked_at"]
+
+
+def test_auto_backup_run_removes_archive_when_health_check_fails(monkeypatch):
+    auto_backup_service._write_auto_backup_config(
+        {
+            "enabled": True,
+            "interval_hours": 1,
+            "keep_backups": 7,
+            "last_success_at": (now_beijing() - timedelta(hours=2)).isoformat(
+                timespec="seconds"
+            ),
+        }
+    )
+
+    created = {}
+
+    def _write_fake_backup(destination):
+        destination.write_bytes(b"bad-backup")
+        created["path"] = destination
+        return destination
+
+    def _fail_health_check(_destination):
+        raise ValueError("archive is not restorable")
+
+    monkeypatch.setattr(
+        auto_backup_service.backup_service,
+        "build_backup_archive_file",
+        _write_fake_backup,
+    )
+    monkeypatch.setattr(
+        auto_backup_service.backup_service,
+        "inspect_backup_archive",
+        _fail_health_check,
+    )
+
+    result = auto_backup_service.run_auto_backup(force=False)
+    config = result["config"]
+
+    assert result["ok"] is False
+    assert result["skipped"] is False
+    assert "archive is not restorable" in result["error"]
+    assert config["last_health_ok"] is False
+    assert "archive is not restorable" in config["last_health_error"]
+    assert config["last_checked_filename"].startswith("procure_lite_auto_backup_")
+    assert created["path"].exists() is False
 
 
 def test_list_local_backups_includes_legacy_backup_names():
