@@ -4,6 +4,7 @@
 
 - [使用说明](../USAGE.md)
 - [VPS 部署教程](./vps-deployment.md)
+- [Release checklist](./release-checklist.md)
 
 维护者常用入口：
 
