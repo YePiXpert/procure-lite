@@ -39,6 +39,30 @@ def _friendly_task_error_detail(error: Exception) -> str:
     return raw[:300]
 
 
+def _classify_task_error(error: Exception) -> dict:
+    detail = _friendly_task_error_detail(error)
+    raw = str(error or "").strip()
+    lowered = raw.lower()
+    if isinstance(error, TimeoutError):
+        category = "timeout"
+    elif not raw:
+        category = "unknown"
+    elif isinstance(error, (ImportError, ModuleNotFoundError)) or any(
+        token in lowered for token in ("no module named", "importerror", "dependency")
+    ):
+        category = "dependency"
+    elif any(token in lowered for token in ("ocr", "paddle", "model")):
+        category = "ocr_runtime"
+    elif any(
+        token in lowered
+        for token in ("pdf", "image", "document", "unsupported", "unreadable", "corrupt")
+    ):
+        category = "document"
+    else:
+        category = "parse"
+    return {"category": category, "detail": detail}
+
+
 def _normalize_payload_from_fields(
     *,
     serial_number,
@@ -192,11 +216,12 @@ def _run_parse_task(task_id: str, file_path: Path) -> None:
             item_count=len(preview_data["items"]),
         )
     except Exception as exc:
-        detail = _friendly_task_error_detail(exc)
+        failure = _classify_task_error(exc)
+        detail = failure["detail"]
         TASK_REGISTRY.update(
             task_id,
             status="failed",
-            result={"detail": detail},
+            result={"detail": detail, "error_category": failure["category"]},
         )
         update_import_task_run_sync(
             task_id=task_id,
