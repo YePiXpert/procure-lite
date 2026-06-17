@@ -328,17 +328,42 @@ def _webdav_password_decryptable() -> bool:
         return False
 
 
+def _coerce_status_bool(value, default: bool = False) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in {"1", "true", "yes", "on"}:
+            return True
+        if normalized in {"0", "false", "no", "off"}:
+            return False
+    return default
+
+
+def _coerce_health_int(value) -> int:
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return 0
+    return max(0, parsed)
+
+
 def _extract_backup_health(auto_backup_status: dict) -> dict:
     config = auto_backup_status.get("config")
     if not isinstance(config, dict):
         config = {}
+    status_error = str(auto_backup_status.get("error") or "")
     return {
-        "last_health_ok": bool(config.get("last_health_ok", False)),
-        "last_health_error": str(config.get("last_health_error") or ""),
+        "last_health_ok": _coerce_status_bool(config.get("last_health_ok"), False),
+        "last_health_error": str(config.get("last_health_error") or status_error),
         "last_checked_at": str(config.get("last_checked_at") or ""),
         "last_checked_filename": str(config.get("last_checked_filename") or ""),
-        "last_checked_item_count": int(config.get("last_checked_item_count") or 0),
-        "last_checked_upload_files": int(config.get("last_checked_upload_files") or 0),
+        "last_checked_item_count": _coerce_health_int(
+            config.get("last_checked_item_count")
+        ),
+        "last_checked_upload_files": _coerce_health_int(
+            config.get("last_checked_upload_files")
+        ),
     }
 
 
@@ -363,17 +388,39 @@ def _build_system_status() -> dict:
     except OSError:
         pass
 
-    backup_source_size = estimate_backup_source_size()
-    auto_backup_status = get_auto_backup_status()
+    backup_source_size_error = ""
+    try:
+        backup_source_size = estimate_backup_source_size()
+    except Exception as exc:
+        backup_source_size = 0
+        backup_source_size_error = str(exc)
+
+    try:
+        auto_backup_status = get_auto_backup_status()
+    except Exception as exc:
+        auto_backup_status = {
+            "config": {},
+            "backup_dir": "",
+            "count": 0,
+            "total_size": 0,
+            "free_bytes": None,
+            "latest": None,
+            "items": [],
+            "error": str(exc),
+        }
     public_webdav_config = _public_webdav_config(_load_webdav_config())
     webdav_health_config = {
         **public_webdav_config,
         "password_decryptable": _webdav_password_decryptable(),
     }
+    storage_risk = "unknown"
+    if not backup_source_size_error:
+        storage_risk = _calculate_storage_risk(storage, backup_source_size)
     health = {
         "state_dir_writable": _check_state_dir_writable(),
         "database_check": _check_database_readonly(db_path),
-        "storage_risk": _calculate_storage_risk(storage, backup_source_size),
+        "storage_risk": storage_risk,
+        "backup_source_size_error": backup_source_size_error,
         "backup_health": _extract_backup_health(auto_backup_status),
         "webdav_config": webdav_health_config,
         "runtime": {

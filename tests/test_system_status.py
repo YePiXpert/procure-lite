@@ -59,6 +59,53 @@ def test_system_status_reports_critical_storage_risk(monkeypatch, tmp_path):
     assert status["health"]["storage_risk"] == "critical"
 
 
+def test_system_status_best_effort_when_backup_size_estimate_fails(
+    monkeypatch, tmp_path
+):
+    def fail_backup_size():
+        raise OSError("cannot scan backup sources")
+
+    monkeypatch.setattr(system, "APP_STATE_DIR", tmp_path)
+    monkeypatch.setattr(system, "DATA_DIR", tmp_path / "data")
+    monkeypatch.setattr(system, "UPLOAD_DIR", tmp_path / "uploads")
+    monkeypatch.setattr(system, "resolve_db_path", lambda: tmp_path / "missing.db")
+    monkeypatch.setattr(system, "estimate_backup_source_size", fail_backup_size)
+    monkeypatch.setattr(system, "get_auto_backup_status", lambda: {"config": {}})
+    (tmp_path / "data").mkdir()
+    (tmp_path / "uploads").mkdir()
+
+    status = system._build_system_status()
+
+    assert status["backup_source_size"] == 0
+    assert status["health"]["storage_risk"] == "unknown"
+    assert "cannot scan" in status["health"]["backup_source_size_error"]
+
+
+def test_system_status_best_effort_when_auto_backup_status_fails(
+    monkeypatch, tmp_path
+):
+    def fail_auto_backup_status():
+        raise RuntimeError("auto backup config unreadable")
+
+    monkeypatch.setattr(system, "APP_STATE_DIR", tmp_path)
+    monkeypatch.setattr(system, "DATA_DIR", tmp_path / "data")
+    monkeypatch.setattr(system, "UPLOAD_DIR", tmp_path / "uploads")
+    monkeypatch.setattr(system, "resolve_db_path", lambda: tmp_path / "missing.db")
+    monkeypatch.setattr(system, "get_auto_backup_status", fail_auto_backup_status)
+    (tmp_path / "data").mkdir()
+    (tmp_path / "uploads").mkdir()
+
+    status = system._build_system_status()
+
+    assert status["auto_backup"]["config"] == {}
+    assert "auto backup config unreadable" in status["auto_backup"]["error"]
+    assert status["health"]["backup_health"]["last_health_ok"] is False
+    assert (
+        "auto backup config unreadable"
+        in status["health"]["backup_health"]["last_health_error"]
+    )
+
+
 def test_system_status_reports_webdav_password_decrypt_failure(monkeypatch, tmp_path):
     config_path = tmp_path / ".webdav_config.json"
     config_path.write_text(
@@ -91,6 +138,7 @@ def test_system_status_reports_webdav_password_decrypt_failure(monkeypatch, tmp_
 
     assert status["health"]["webdav_config"]["configured"] is True
     assert status["health"]["webdav_config"]["password_decryptable"] is False
+    assert "password" not in status["health"]["webdav_config"]
 
 
 def test_database_check_reports_ok_for_valid_sqlite_database(monkeypatch, tmp_path):
@@ -105,3 +153,23 @@ def test_database_check_reports_ok_for_valid_sqlite_database(monkeypatch, tmp_pa
     assert result["ok"] is True
     assert result["method"] == "PRAGMA quick_check"
     assert result["error"] == ""
+
+
+def test_backup_health_extraction_coerces_malformed_persisted_values():
+    result = system._extract_backup_health(
+        {
+            "config": {
+                "last_health_ok": "false",
+                "last_health_error": "bad archive",
+                "last_checked_at": "2026-06-17T12:00:00+08:00",
+                "last_checked_filename": "backup.zip",
+                "last_checked_item_count": "many",
+                "last_checked_upload_files": None,
+            }
+        }
+    )
+
+    assert result["last_health_ok"] is False
+    assert result["last_health_error"] == "bad archive"
+    assert result["last_checked_item_count"] == 0
+    assert result["last_checked_upload_files"] == 0
