@@ -1031,6 +1031,26 @@
                                     </div>
                                 </div>
 
+                                <div v-if="isCurrentSubview('reports', 'efficiency')" class="report-visual-card action-queue-summary">
+                                    <div class="flex items-center justify-between">
+                                        <h4 class="text-sm font-semibold text-slate-800">行动队列摘要</h4>
+                                        <span class="text-[11px] text-slate-500">共 {{ operationsReport.actionQueueSummary.all }} 项</span>
+                                    </div>
+                                    <div class="mt-4 grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-2">
+                                        <div
+                                            v-for="row in reportActionQueueSummaryRows"
+                                            :key="`action-queue-summary-${row.key}`"
+                                            class="rounded-lg border border-slate-200 bg-slate-50 px-3 py-3"
+                                        >
+                                            <div class="flex items-center justify-between gap-2">
+                                                <span class="truncate text-xs font-medium text-slate-500">{{ row.label }}</span>
+                                                <span class="h-2.5 w-2.5 rounded-full shrink-0" :class="row.badgeClass"></span>
+                                            </div>
+                                            <div class="mt-2 text-lg font-semibold font-mono text-slate-800">{{ row.count }}</div>
+                                        </div>
+                                    </div>
+                                </div>
+
                                 <div v-if="isCurrentSubview('reports', 'efficiency')" class="report-visual-card">
                                     <div class="flex items-center justify-between">
                                         <h4 class="text-sm font-semibold text-slate-800">状态快照（各状态存量）</h4>

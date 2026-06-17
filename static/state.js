@@ -805,6 +805,20 @@
                         _overdue: Number(row?.overdue_count) || 0,
                     }));
                 },
+                reportActionQueueSummaryRows() {
+                    const summary = this.operationsReport?.actionQueueSummary || {};
+                    return [
+                        { key: 'purchase', label: '待采购', badgeClass: 'bg-blue-500' },
+                        { key: 'receipt', label: '待收货', badgeClass: 'bg-emerald-500' },
+                        { key: 'inventory', label: '低库存', badgeClass: 'bg-amber-500' },
+                        { key: 'import', label: '导入异常', badgeClass: 'bg-rose-500' },
+                        { key: 'invoice', label: '发票/报销', badgeClass: 'bg-violet-500' },
+                        { key: 'all', label: '全部待办', badgeClass: 'bg-slate-700' },
+                    ].map((row) => ({
+                        ...row,
+                        count: Number(summary[row.key]) || 0,
+                    }));
+                },
                 reportFunnelRows() {
                     const rows = Array.isArray(this.operationsReport?.funnel)
                         ? this.operationsReport.funnel

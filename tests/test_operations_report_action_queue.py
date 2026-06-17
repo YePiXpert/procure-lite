@@ -290,3 +290,20 @@ def test_operations_report_loader_maps_action_queue_summary():
     assert "actionQueueSummary: {" in api_js
     for key in ACTION_QUEUE_KEYS:
         assert f"{key}: Number(actionQueueSummary.{key}) || 0" in api_js
+
+
+def test_operations_report_computes_action_queue_summary_rows():
+    state_js = read_static("static/state.js")
+
+    assert "reportActionQueueSummaryRows()" in state_js
+    assert "operationsReport?.actionQueueSummary" in state_js
+    for key in ACTION_QUEUE_KEYS:
+        assert f"key: '{key}'" in state_js
+
+
+def test_operations_report_efficiency_view_renders_action_queue_summary():
+    html = read_static("static/index.html")
+
+    assert "action-queue-summary" in html
+    assert "reportActionQueueSummaryRows" in html
+    assert "`action-queue-summary-${row.key}`" in html
