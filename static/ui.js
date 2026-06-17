@@ -2,13 +2,16 @@
     const { createApp } = Vue;
     const appState = global.AppState || {};
     const appApi = global.AppApi || {};
+    const operationsCenterAppApi = global.OperationsCenterAppApi || {};
     const settingsMaintenanceApi = global.SettingsMaintenanceApi || {};
 
     const app = createApp({
         ...appState,
+        ...operationsCenterAppApi,
         ...settingsMaintenanceApi,
         ...appApi,
         methods: {
+            ...(operationsCenterAppApi.methods || {}),
             ...(settingsMaintenanceApi.methods || {}),
             ...(appApi.methods || {}),
         },
