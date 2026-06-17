@@ -6,7 +6,6 @@ from uuid import uuid4
 from fastapi import APIRouter, File, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 from sqlalchemy.exc import IntegrityError as SAIntegrityError
-from sqlalchemy.exc import IntegrityError as SAIntegrityError
 
 from api_utils import safe_unlink, save_upload_file_with_limit
 from db.operations import (
@@ -39,6 +38,12 @@ _ALLOWED_ATTACHMENT_EXTENSIONS = {".pdf", ".png", ".jpg", ".jpeg"}
 _MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024
 
 
+def _require_positive_path_id(value: int, label: str) -> int:
+    if value <= 0:
+        raise HTTPException(status_code=400, detail=f"Invalid {label} id")
+    return value
+
+
 def _build_attachment_path(filename: str) -> Path:
     safe_name = Path(filename or "").name
     if not safe_name:
@@ -57,7 +62,7 @@ async def operations_center():
 @router.post("/suppliers")
 async def create_supplier_endpoint(request: SupplierCreateRequest):
     try:
-        supplier_id =         await create_supplier(request.model_dump())
+        supplier_id = await create_supplier(request.model_dump())
     except SAIntegrityError:
         raise HTTPException(status_code=409, detail="供应商名称已存在")
     except ValueError as exc:
@@ -67,8 +72,7 @@ async def create_supplier_endpoint(request: SupplierCreateRequest):
 
 @router.put("/suppliers/{supplier_id}")
 async def update_supplier_endpoint(supplier_id: int, request: SupplierUpdateRequest):
-    if supplier_id <= 0:
-        raise HTTPException(status_code=400, detail="Invalid supplier id")
+    supplier_id = _require_positive_path_id(supplier_id, "supplier")
     try:
         found = await update_supplier(supplier_id, request.model_dump())
     except SAIntegrityError:
@@ -82,8 +86,7 @@ async def update_supplier_endpoint(supplier_id: int, request: SupplierUpdateRequ
 
 @router.delete("/suppliers/{supplier_id}")
 async def delete_supplier_endpoint(supplier_id: int):
-    if supplier_id <= 0:
-        raise HTTPException(status_code=400, detail="Invalid supplier id")
+    supplier_id = _require_positive_path_id(supplier_id, "supplier")
     found = await delete_supplier(supplier_id)
     if not found:
         raise HTTPException(status_code=404, detail="Supplier not found")
@@ -110,8 +113,7 @@ async def upsert_inventory_profile_endpoint(request: InventoryProfileRequest):
 
 @router.put("/orders/{item_id}")
 async def upsert_purchase_order_endpoint(item_id: int, request: PurchaseOrderUpsertRequest):
-    if item_id <= 0:
-        raise HTTPException(status_code=400, detail="Invalid item id")
+    item_id = _require_positive_path_id(item_id, "item")
     try:
         purchase_order_id = await upsert_purchase_order(item_id, request.model_dump())
     except ValueError as exc:
@@ -121,8 +123,7 @@ async def upsert_purchase_order_endpoint(item_id: int, request: PurchaseOrderUps
 
 @router.put("/receipts/{purchase_order_id}")
 async def upsert_purchase_receipt_endpoint(purchase_order_id: int, request: PurchaseReceiptUpsertRequest):
-    if purchase_order_id <= 0:
-        raise HTTPException(status_code=400, detail="Invalid purchase order id")
+    purchase_order_id = _require_positive_path_id(purchase_order_id, "purchase order")
     try:
         receipt_id = await upsert_purchase_receipt(purchase_order_id, request.model_dump())
     except ValueError as exc:
@@ -132,8 +133,7 @@ async def upsert_purchase_receipt_endpoint(purchase_order_id: int, request: Purc
 
 @router.put("/invoices/{item_id}")
 async def upsert_invoice_record_endpoint(item_id: int, request: InvoiceRecordUpdateRequest):
-    if item_id <= 0:
-        raise HTTPException(status_code=400, detail="Invalid item id")
+    item_id = _require_positive_path_id(item_id, "item")
     try:
         record_id = await upsert_invoice_record(item_id, request.model_dump())
     except ValueError as exc:
@@ -143,8 +143,7 @@ async def upsert_invoice_record_endpoint(item_id: int, request: InvoiceRecordUpd
 
 @router.post("/invoices/{item_id}/attachments")
 async def upload_invoice_attachment(item_id: int, file: UploadFile = File(...)):
-    if item_id <= 0:
-        raise HTTPException(status_code=400, detail="Invalid item id")
+    item_id = _require_positive_path_id(item_id, "item")
     destination = _build_attachment_path(file.filename or "")
     try:
         file_size = save_upload_file_with_limit(
