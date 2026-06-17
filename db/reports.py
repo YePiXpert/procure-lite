@@ -2,7 +2,7 @@ from datetime import date
 from typing import Optional
 
 from .filters import build_item_filters
-from .operations import get_procurement_tracker_report
+from .operations import get_procurement_tracker_report, list_import_task_runs
 from .orm import execute_sql, execute_sql_scalar
 
 
@@ -284,6 +284,20 @@ async def get_operations_report(
     month: Optional[str] = None,
     keyword: Optional[str] = None,
 ) -> dict:
+    import_tasks = await list_import_task_runs(limit=20)
+    tracker_report = await get_procurement_tracker_report(
+        status=status,
+        department=department,
+        month=month,
+        keyword=keyword,
+        import_tasks=import_tasks,
+    )
+    action_queues = tracker_report.get("action_queues") or {}
+    action_queue_summary = {
+        key: len(action_queues.get(key) or [])
+        for key in ("inventory", "purchase", "receipt", "import", "invoice", "all")
+    }
+
     conditions, params = build_item_filters(
         status=status, department=department, month=month, keyword=keyword
     )
@@ -437,6 +451,7 @@ async def get_operations_report(
             }
             for row in trend_rows
         ],
+        "action_queue_summary": action_queue_summary,
     }
 
 

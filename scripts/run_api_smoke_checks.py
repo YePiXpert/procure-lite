@@ -248,6 +248,10 @@ def run_smoke_checks() -> None:
                     raise AssertionError("Operations report status_snapshot should include at least one record")
                 if not isinstance(ops_payload.get("funnel"), list):
                     raise AssertionError("Operations report should include funnel list")
+                action_queue_summary = ops_payload.get("action_queue_summary")
+                if not isinstance(action_queue_summary, dict):
+                    raise AssertionError("Operations report should include action_queue_summary object")
+                int(action_queue_summary.get("all") or 0)
 
                 delete_attachment = client.delete(f"/api/ops/invoice-attachments/{attachment_id}")
                 _expect_status(delete_attachment, 200, "delete invoice attachment")

@@ -1458,6 +1458,7 @@
                         const suppliers = supplierResult.status === 'fulfilled'
                             ? (supplierResult.value?.data || {})
                             : {};
+                        const actionQueueSummary = operations.action_queue_summary || {};
 
                         if (operationsResult.status !== 'fulfilled') {
                             this.showToast('执行分析图加载失败，已展示金额报表', 'error');
@@ -1506,6 +1507,14 @@
                                     recordCount: Number(row.record_count) || 0,
                                 }))
                                 : [],
+                            actionQueueSummary: {
+                                inventory: Number(actionQueueSummary.inventory) || 0,
+                                purchase: Number(actionQueueSummary.purchase) || 0,
+                                receipt: Number(actionQueueSummary.receipt) || 0,
+                                import: Number(actionQueueSummary.import) || 0,
+                                invoice: Number(actionQueueSummary.invoice) || 0,
+                                all: Number(actionQueueSummary.all) || 0,
+                            },
                         };
                         this.supplierReport = {
                             selectedYear: suppliers.selected_year || this.supplierReportYear || '',
