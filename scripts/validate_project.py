@@ -10,6 +10,8 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 EXCLUDED_PARTS = {
     ".git",
+    ".codex-venv",
+    ".venv",
     "__pycache__",
     "venv",
     "build",
@@ -37,8 +39,10 @@ def iter_python_candidates(root: Path) -> list[Path]:
     candidates = [
         root / "venv" / "Scripts" / "python.exe",
         root / ".venv" / "Scripts" / "python.exe",
+        root / ".codex-venv" / "Scripts" / "python.exe",
         root / "venv" / "bin" / "python",
         root / ".venv" / "bin" / "python",
+        root / ".codex-venv" / "bin" / "python",
         Path(sys.executable),
     ]
     unique_candidates: list[Path] = []
