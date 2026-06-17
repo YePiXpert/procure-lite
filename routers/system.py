@@ -2,6 +2,7 @@ import json
 import asyncio
 import secrets
 import shutil
+import sqlite3
 from pathlib import Path
 from uuid import uuid4
 
@@ -25,6 +26,7 @@ from auto_backup_service import (
     save_auto_backup_config,
 )
 from backup_service import (
+    BACKUP_DISK_SPACE_MARGIN_BYTES,
     BACKUP_FILENAME_PREFIX,
     MAX_BACKUP_TOTAL_SIZE,
     build_backup_archive_file,
@@ -254,6 +256,92 @@ def _directory_size(path: Path) -> tuple[int, int]:
     return file_count, total_size
 
 
+def _check_state_dir_writable() -> bool:
+    probe = APP_STATE_DIR / f".health_probe_{uuid4().hex}.tmp"
+    try:
+        APP_STATE_DIR.mkdir(parents=True, exist_ok=True)
+        probe.write_text("ok", encoding="utf-8")
+        return True
+    except OSError:
+        return False
+    finally:
+        safe_unlink(probe)
+
+
+def _check_database_readonly(db_path: Path) -> dict:
+    if not db_path.exists():
+        return {
+            "ok": False,
+            "method": "PRAGMA quick_check",
+            "error": "database file is missing",
+        }
+    conn = None
+    try:
+        conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
+        row = conn.execute("PRAGMA quick_check").fetchone()
+        result = str(row[0] if row and row[0] is not None else "").strip()
+        return {
+            "ok": result.lower() == "ok",
+            "method": "PRAGMA quick_check",
+            "error": "" if result.lower() == "ok" else result,
+        }
+    except (OSError, sqlite3.Error) as exc:
+        return {
+            "ok": False,
+            "method": "PRAGMA quick_check",
+            "error": str(exc),
+        }
+    finally:
+        if conn is not None:
+            conn.close()
+
+
+def _calculate_storage_risk(storage: dict, backup_source_size: int) -> str:
+    free = storage.get("free")
+    if free is None:
+        return "unknown"
+    required = int(backup_source_size or 0) + BACKUP_DISK_SPACE_MARGIN_BYTES
+    warning_threshold = (int(backup_source_size or 0) * 2) + BACKUP_DISK_SPACE_MARGIN_BYTES
+    if int(free) < required:
+        return "critical"
+    if int(free) < warning_threshold:
+        return "warning"
+    return "ok"
+
+
+def _webdav_password_decryptable() -> bool:
+    if not WEBDAV_CONFIG_PATH.exists():
+        return True
+    try:
+        data = json.loads(WEBDAV_CONFIG_PATH.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return False
+    if not isinstance(data, dict):
+        return False
+    encrypted_pw = str(data.get("password") or "")
+    if not encrypted_pw:
+        return True
+    try:
+        _decrypt_webdav_password(encrypted_pw)
+        return True
+    except ValueError:
+        return False
+
+
+def _extract_backup_health(auto_backup_status: dict) -> dict:
+    config = auto_backup_status.get("config")
+    if not isinstance(config, dict):
+        config = {}
+    return {
+        "last_health_ok": bool(config.get("last_health_ok", False)),
+        "last_health_error": str(config.get("last_health_error") or ""),
+        "last_checked_at": str(config.get("last_checked_at") or ""),
+        "last_checked_filename": str(config.get("last_checked_filename") or ""),
+        "last_checked_item_count": int(config.get("last_checked_item_count") or 0),
+        "last_checked_upload_files": int(config.get("last_checked_upload_files") or 0),
+    }
+
+
 def _build_system_status() -> dict:
     db_path = resolve_db_path()
     db_size = 0
@@ -275,6 +363,25 @@ def _build_system_status() -> dict:
     except OSError:
         pass
 
+    backup_source_size = estimate_backup_source_size()
+    auto_backup_status = get_auto_backup_status()
+    public_webdav_config = _public_webdav_config(_load_webdav_config())
+    webdav_health_config = {
+        **public_webdav_config,
+        "password_decryptable": _webdav_password_decryptable(),
+    }
+    health = {
+        "state_dir_writable": _check_state_dir_writable(),
+        "database_check": _check_database_readonly(db_path),
+        "storage_risk": _calculate_storage_risk(storage, backup_source_size),
+        "backup_health": _extract_backup_health(auto_backup_status),
+        "webdav_config": webdav_health_config,
+        "runtime": {
+            "version": APP_VERSION,
+            "maintenance_mode": MAINTENANCE_MODE.is_set(),
+        },
+    }
+
     return {
         "version": APP_VERSION,
         "maintenance_mode": MAINTENANCE_MODE.is_set(),
@@ -293,9 +400,10 @@ def _build_system_status() -> dict:
             "total_size": upload_total_size,
         },
         "storage": storage,
-        "backup_source_size": estimate_backup_source_size(),
-        "auto_backup": get_auto_backup_status(),
-        "webdav": _public_webdav_config(_load_webdav_config()),
+        "backup_source_size": backup_source_size,
+        "auto_backup": auto_backup_status,
+        "webdav": public_webdav_config,
+        "health": health,
     }
 
 
