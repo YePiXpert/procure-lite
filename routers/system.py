@@ -51,7 +51,7 @@ from webdav_service import (
     WEBDAV_AUTH_FAILURE_MESSAGE,
     download_backup_to_file,
     prune_backups,
-    upload_backup_archive,
+    upload_file,
     list_backups,
     normalize_webdav_config,
     test_connection,
@@ -350,6 +350,9 @@ async def backup_data():
     async with DATA_MUTATION_LOCK:
         try:
             await run_in_threadpool(build_backup_archive_file, local_archive_path)
+            await run_in_threadpool(
+                _inspect_generated_backup_archive, local_archive_path
+            )
         except OSError as e:
             safe_unlink(local_archive_path)
             raise HTTPException(status_code=507, detail=format_backup_error(e))
@@ -551,16 +554,24 @@ async def backup_to_webdav():
     config = _require_webdav_config()
     cleanup_temp_backup_archives(".webdav_backup_*.zip")
     retention = {}
+    health = {}
+    local_archive_path = resolve_temp_backup_dir() / f".webdav_backup_{uuid4().hex}.zip"
+    upload_name = f"{BACKUP_FILENAME_PREFIX}_{uuid4().hex[:8]}.zip"
     async with DATA_MUTATION_LOCK:
         try:
-            upload_name = f"{BACKUP_FILENAME_PREFIX}_{uuid4().hex[:8]}.zip"
+            await run_in_threadpool(build_backup_archive_file, local_archive_path)
+            health = await run_in_threadpool(
+                _inspect_generated_backup_archive, local_archive_path
+            )
             remote_url = await run_in_threadpool(
-                upload_backup_archive, config, upload_name
+                upload_file, config, upload_name, local_archive_path
             )
             keep_backups = max(0, int(config.get("keep_backups") or 0))
             retention = await run_in_threadpool(prune_backups, config, keep_backups)
         except Exception as e:
             _handle_webdav_error(e)
+        finally:
+            safe_unlink(local_archive_path)
     deleted_count = len(retention.get("deleted", []))
     retention_errors = retention.get("errors", [])
     message = f"备份已上传到 WebDAV：{upload_name}"
@@ -573,6 +584,7 @@ async def backup_to_webdav():
         "filename": upload_name,
         "remote_url": remote_url,
         "retention": retention,
+        "health": health,
     }
 
 

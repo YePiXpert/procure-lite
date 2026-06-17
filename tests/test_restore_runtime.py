@@ -251,3 +251,85 @@ async def test_restore_from_webdav_rejects_bad_archive_before_releasing_db_handl
     assert fake_engine.dispose_calls == 0
     assert downloaded_archive["path"].exists() is False
     assert system.MAINTENANCE_MODE.is_set() is False
+
+
+@pytest.mark.asyncio
+async def test_backup_download_inspects_generated_archive(monkeypatch, tmp_path):
+    archive_path_seen = {}
+    inspected = {"called": False}
+
+    monkeypatch.setattr(system, "resolve_temp_backup_dir", lambda: tmp_path)
+
+    async def fake_run_in_threadpool(func, *args):
+        if func is system.build_backup_archive_file:
+            archive_path = args[0]
+            archive_path.write_bytes(b"backup")
+            archive_path_seen["path"] = archive_path
+            return archive_path
+        if func is getattr(system, "_inspect_generated_backup_archive", None):
+            assert args[0] == archive_path_seen["path"]
+            inspected["called"] = True
+            return {
+                "ok": True,
+                "db": {"integrity": "ok", "tables": ["items"], "item_count": 1},
+                "upload_files": 0,
+            }
+        raise AssertionError(f"unexpected threadpool function: {func}")
+
+    monkeypatch.setattr(system, "run_in_threadpool", fake_run_in_threadpool)
+
+    response = await system.backup_data()
+
+    assert response.media_type == "application/zip"
+    assert archive_path_seen["path"].exists()
+    assert inspected["called"] is True
+
+
+@pytest.mark.asyncio
+async def test_backup_to_webdav_uses_verified_temp_archive(monkeypatch, tmp_path):
+    calls = []
+    uploaded = {}
+    inspected = {"called": False}
+
+    monkeypatch.setattr(system, "APP_STATE_DIR", tmp_path)
+    monkeypatch.setattr(
+        system,
+        "_require_webdav_config",
+        lambda: {"base_url": "https://example.com/dav", "keep_backups": 2},
+    )
+    monkeypatch.setattr(system, "resolve_temp_backup_dir", lambda: tmp_path)
+
+    async def fake_run_in_threadpool(func, *args):
+        calls.append(func)
+        if func is system.build_backup_archive_file:
+            archive_path = args[0]
+            archive_path.write_bytes(b"backup")
+            return archive_path
+        if func is getattr(system, "_inspect_generated_backup_archive", None):
+            assert args[0].exists()
+            inspected["called"] = True
+            return {
+                "ok": True,
+                "db": {"integrity": "ok", "tables": ["items"], "item_count": 2},
+                "upload_files": 1,
+            }
+        if func is system.upload_file:
+            _config, filename, archive_path = args
+            assert filename.startswith(system.BACKUP_FILENAME_PREFIX)
+            assert archive_path.exists()
+            uploaded["path"] = archive_path
+            return "https://example.com/dav/backup.zip"
+        if func is system.prune_backups:
+            return {"deleted": [], "errors": []}
+        raise AssertionError(f"unexpected threadpool function: {func}")
+
+    monkeypatch.setattr(system, "run_in_threadpool", fake_run_in_threadpool)
+
+    result = await system.backup_to_webdav()
+
+    assert result["remote_url"] == "https://example.com/dav/backup.zip"
+    assert result["health"]["ok"] is True
+    assert system.build_backup_archive_file in calls
+    assert inspected["called"] is True
+    assert system.upload_file in calls
+    assert uploaded["path"].exists() is False
