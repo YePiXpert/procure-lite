@@ -2086,6 +2086,77 @@
                     <strong>{{ $root.formatFileSize($root.systemStatus.storage?.free || 0) }}</strong>
                 </div>
             </div>
+            <div class="system-health-panel">
+                <div class="system-health-panel-header">
+                    <div>
+                        <span>System Health</span>
+                        <strong>运行健康</strong>
+                    </div>
+                    <button @click="$root.loadSystemStatus(true)" :disabled="$root.systemStatusLoading" type="button">
+                        {{ $root.systemStatusLoading ? '刷新中...' : '刷新' }}
+                    </button>
+                </div>
+                <div class="system-health-grid">
+                    <div class="system-health-item">
+                        <div class="system-health-item-head">
+                            <span>数据库检查</span>
+                            <em :class="$root.systemHealthBadgeClass('boolean', $root.systemStatus.health?.database_check?.ok)">
+                                {{ $root.booleanHealthLabel($root.systemStatus.health?.database_check?.ok, '通过', '异常') }}
+                            </em>
+                        </div>
+                        <strong>{{ $root.systemStatus.health?.database_check?.method || 'PRAGMA quick_check' }}</strong>
+                        <p v-if="$root.systemStatus.health?.database_check?.error">{{ $root.systemStatus.health?.database_check?.error }}</p>
+                    </div>
+                    <div class="system-health-item">
+                        <div class="system-health-item-head">
+                            <span>存储风险</span>
+                            <em :class="$root.systemHealthBadgeClass('storage', $root.systemStatus.health?.storage_risk)">
+                                {{ $root.storageRiskLabel($root.systemStatus.health?.storage_risk) }}
+                            </em>
+                        </div>
+                        <strong>可用 {{ $root.formatFileSize($root.systemStatus.storage?.free || 0) }}</strong>
+                        <p>备份源约 {{ $root.formatFileSize($root.systemStatus.backup_source_size || 0) }}</p>
+                    </div>
+                    <div class="system-health-item">
+                        <div class="system-health-item-head">
+                            <span>状态目录</span>
+                            <em :class="$root.systemHealthBadgeClass('boolean', $root.systemStatus.health?.state_dir_writable)">
+                                {{ $root.booleanHealthLabel($root.systemStatus.health?.state_dir_writable, '可写', '不可写') }}
+                            </em>
+                        </div>
+                        <strong>{{ $root.systemStatus.paths?.state_dir || '-' }}</strong>
+                    </div>
+                    <div class="system-health-item">
+                        <div class="system-health-item-head">
+                            <span>自动备份健康</span>
+                            <em :class="$root.systemHealthBadgeClass('boolean', $root.systemStatus.health?.backup_health?.last_health_ok)">
+                                {{ $root.booleanHealthLabel($root.systemStatus.health?.backup_health?.last_health_ok, '通过', '待处理') }}
+                            </em>
+                        </div>
+                        <strong>{{ $root.systemStatus.health?.backup_health?.last_checked_filename || '暂无校验文件' }}</strong>
+                        <p>{{ $root.backupHealthSummary() }}</p>
+                        <small>{{ $root.formatBeijingDateTime($root.systemStatus.health?.backup_health?.last_checked_at, '-') }}</small>
+                    </div>
+                    <div class="system-health-item">
+                        <div class="system-health-item-head">
+                            <span>WebDAV 配置</span>
+                            <em :class="$root.systemHealthBadgeClass('boolean', !$root.systemStatus.health?.webdav_config?.configured || $root.systemStatus.health?.webdav_config?.password_decryptable)">
+                                {{ !$root.systemStatus.health?.webdav_config?.configured ? '未配置' : $root.booleanHealthLabel($root.systemStatus.health?.webdav_config?.password_decryptable, '可解密', '需重配') }}
+                            </em>
+                        </div>
+                        <strong>{{ $root.systemStatus.health?.webdav_config?.configured ? '已配置远程备份' : '未启用远程备份' }}</strong>
+                    </div>
+                    <div class="system-health-item">
+                        <div class="system-health-item-head">
+                            <span>运行时</span>
+                            <em :class="$root.systemHealthBadgeClass('boolean', !$root.systemStatus.health?.runtime?.maintenance_mode)">
+                                {{ $root.systemStatus.health?.runtime?.maintenance_mode ? '维护中' : '正常' }}
+                            </em>
+                        </div>
+                        <strong>v{{ $root.systemStatus.health?.runtime?.version || $root.appVersion || '-' }}</strong>
+                    </div>
+                </div>
+            </div>
             <div class="system-path-panel">
                 <div>
                     <span>状态目录</span>

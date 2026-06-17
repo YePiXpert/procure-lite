@@ -317,6 +317,37 @@
                         running: !!config.running,
                     };
                 },
+                normalizeSystemHealth(data = {}) {
+                    const databaseCheck = data.database_check || {};
+                    const backupHealth = data.backup_health || {};
+                    const webdavConfig = data.webdav_config || {};
+                    const runtime = data.runtime || {};
+                    return {
+                        state_dir_writable: data.state_dir_writable === true,
+                        database_check: {
+                            ok: databaseCheck.ok === true,
+                            method: (databaseCheck.method || '').toString(),
+                            error: (databaseCheck.error || '').toString(),
+                        },
+                        storage_risk: (data.storage_risk || 'unknown').toString(),
+                        backup_health: {
+                            last_health_ok: backupHealth.last_health_ok === true,
+                            last_health_error: (backupHealth.last_health_error || '').toString(),
+                            last_checked_at: (backupHealth.last_checked_at || '').toString(),
+                            last_checked_filename: (backupHealth.last_checked_filename || '').toString(),
+                            last_checked_item_count: Number(backupHealth.last_checked_item_count || 0) || 0,
+                            last_checked_upload_files: Number(backupHealth.last_checked_upload_files || 0) || 0,
+                        },
+                        webdav_config: {
+                            configured: webdavConfig.configured === true,
+                            password_decryptable: webdavConfig.password_decryptable !== false,
+                        },
+                        runtime: {
+                            version: (runtime.version || '').toString(),
+                            maintenance_mode: runtime.maintenance_mode === true,
+                        },
+                    };
+                },
                 applySystemStatus(data = {}) {
                     this.systemStatus = {
                         version: (data.version || '').toString(),
@@ -328,6 +359,7 @@
                         backup_source_size: Number(data.backup_source_size) || 0,
                         auto_backup: data.auto_backup || { config: {}, items: [] },
                         webdav: data.webdav || {},
+                        health: this.normalizeSystemHealth(data.health || {}),
                     };
                     if (this.systemStatus.version) {
                         this.appVersion = this.systemStatus.version;
@@ -453,6 +485,34 @@
                     if (mb < 1024) return `${mb.toFixed(1)} MB`;
                     const gb = mb / 1024;
                     return `${gb.toFixed(2)} GB`;
+                },
+                storageRiskLabel(value) {
+                    const risk = (value || 'unknown').toString();
+                    if (risk === 'ok') return '正常';
+                    if (risk === 'warning') return '偏低';
+                    if (risk === 'critical') return '严重不足';
+                    return '未知';
+                },
+                systemHealthBadgeClass(kind, value) {
+                    if (kind === 'storage') {
+                        const risk = (value || 'unknown').toString();
+                        if (risk === 'ok') return 'system-health-badge system-health-badge--ok';
+                        if (risk === 'critical') return 'system-health-badge system-health-badge--danger';
+                        return 'system-health-badge system-health-badge--warning';
+                    }
+                    if (value === true) return 'system-health-badge system-health-badge--ok';
+                    return 'system-health-badge system-health-badge--danger';
+                },
+                booleanHealthLabel(value, okText = '正常', badText = '异常') {
+                    return value === true ? okText : badText;
+                },
+                backupHealthSummary() {
+                    const health = this.systemStatus?.health?.backup_health || {};
+                    if (health.last_health_error) return health.last_health_error;
+                    if (!health.last_checked_at) return '尚未完成健康校验';
+                    const itemCount = Number(health.last_checked_item_count || 0);
+                    const uploadFiles = Number(health.last_checked_upload_files || 0);
+                    return `已校验 ${itemCount} 条台账、${uploadFiles} 个附件`;
                 },
                 getProcurementStatuses() {
                     return ['待采购', '待到货', '待分发', '已分发'];

@@ -119,6 +119,31 @@
                             items: [],
                         },
                         webdav: {},
+                        health: {
+                            state_dir_writable: false,
+                            database_check: {
+                                ok: false,
+                                method: '',
+                                error: '',
+                            },
+                            storage_risk: 'unknown',
+                            backup_health: {
+                                last_health_ok: false,
+                                last_health_error: '',
+                                last_checked_at: '',
+                                last_checked_filename: '',
+                                last_checked_item_count: 0,
+                                last_checked_upload_files: 0,
+                            },
+                            webdav_config: {
+                                configured: false,
+                                password_decryptable: true,
+                            },
+                            runtime: {
+                                version: '',
+                                maintenance_mode: false,
+                            },
+                        },
                     },
                     autoBackupConfig: {
                         enabled: true,
