@@ -4,7 +4,7 @@
 
 **Goal:** Move settings maintenance frontend behavior out of `static/api.js` into a focused module while preserving the existing UI and API contracts.
 
-**Architecture:** Add `static/settings-maintenance-api.js` as a Vue options fragment exposed on `window.SettingsMaintenanceApi`. Load it before `api.js` and `ui.js`, then merge it into the root `createApp` options in `static/ui.js`. Keep general helpers such as `formatFileSize` in `static/api.js`.
+**Architecture:** Add `static/settings-maintenance-api.js` as a Vue options fragment exposed on `window.SettingsMaintenanceApi`. Load it before `api.js` and `ui.js`, then explicitly merge its nested `methods` into the root `createApp` options in `static/ui.js`. Keep general helpers such as `formatFileSize` in `static/api.js`.
 
 **Tech Stack:** Static Vue options API, browser globals, pytest static source checks, existing FastAPI smoke validation.
 
@@ -14,7 +14,7 @@
 
 - Create `static/settings-maintenance-api.js`: owns maintenance-specific root methods for system status, local backups, auto-backup configuration, and health label helpers.
 - Modify `static/api.js`: remove only the extracted maintenance method block; keep general helpers and unrelated root app methods.
-- Modify `static/ui.js`: merge `global.SettingsMaintenanceApi || {}` into the root Vue app options.
+- Modify `static/ui.js`: merge `global.SettingsMaintenanceApi || {}` into the root Vue app options and explicitly combine `SettingsMaintenanceApi.methods` with `AppApi.methods`.
 - Modify `static/index.html`: load `settings-maintenance-api.js` between `operations-center-api.js` and `api.js`.
 - Create `tests/test_settings_maintenance_api_static.py`: guards the new script order, merge contract, and method ownership.
 
@@ -76,8 +76,12 @@ def test_settings_maintenance_api_script_loads_before_root_app():
 def test_root_app_merges_settings_maintenance_api_options():
     ui = read("static/ui.js")
 
-    assert "...(global.SettingsMaintenanceApi || {})" in ui
-    assert ui.index("...(global.SettingsMaintenanceApi || {})") < ui.index("...global.AppApi")
+    assert "const settingsMaintenanceApi = global.SettingsMaintenanceApi || {};" in ui
+    assert "...settingsMaintenanceApi" in ui
+    assert "...appApi" in ui
+    assert "...(settingsMaintenanceApi.methods || {})" in ui
+    assert "...(appApi.methods || {})" in ui
+    assert ui.index("...(settingsMaintenanceApi.methods || {})") < ui.index("...(appApi.methods || {})")
 
 
 def test_settings_maintenance_methods_live_in_focused_module():
@@ -170,10 +174,18 @@ Insert this script after `operations-center-api.js` and before `api.js`:
 Change the app creation block to:
 
 ```javascript
+const appState = global.AppState || {};
+const appApi = global.AppApi || {};
+const settingsMaintenanceApi = global.SettingsMaintenanceApi || {};
+
 const app = createApp({
-    ...global.AppState,
-    ...(global.SettingsMaintenanceApi || {}),
-    ...global.AppApi,
+    ...appState,
+    ...settingsMaintenanceApi,
+    ...appApi,
+    methods: {
+        ...(settingsMaintenanceApi.methods || {}),
+        ...(appApi.methods || {}),
+    },
 });
 ```
 

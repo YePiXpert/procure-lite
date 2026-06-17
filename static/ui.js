@@ -1,9 +1,17 @@
 (function (global) {
     const { createApp } = Vue;
+    const appState = global.AppState || {};
+    const appApi = global.AppApi || {};
+    const settingsMaintenanceApi = global.SettingsMaintenanceApi || {};
 
     const app = createApp({
-        ...global.AppState,
-        ...global.AppApi,
+        ...appState,
+        ...settingsMaintenanceApi,
+        ...appApi,
+        methods: {
+            ...(settingsMaintenanceApi.methods || {}),
+            ...(appApi.methods || {}),
+        },
     });
 
     if (global.LedgerFilterPanel) {

@@ -12,7 +12,7 @@ This round should make that boundary clearer while keeping the visible product b
 
 ## Recommended Approach
 
-Create `static/settings-maintenance-api.js` that exports `window.SettingsMaintenanceApi` as a Vue options fragment with a `methods` object. `static/ui.js` will merge it into the root app alongside `AppState`, `OperationsCenterApi`, and `AppApi`.
+Create `static/settings-maintenance-api.js` that exports `window.SettingsMaintenanceApi` as a Vue options fragment with a `methods` object. `static/ui.js` will merge it into the root app alongside `AppState` and `AppApi`, with an explicit nested `methods` merge so `AppApi.methods` does not overwrite the maintenance methods.
 
 The extracted methods are:
 
@@ -38,7 +38,7 @@ The extracted methods are:
 
 ## Data Flow
 
-The maintenance panel keeps calling root methods through the existing Vue bindings. The root app receives those methods from `SettingsMaintenanceApi`, so no template or component event contract needs to change.
+The maintenance panel keeps calling root methods through the existing Vue bindings. The root app receives those methods from `SettingsMaintenanceApi`, so no template or component event contract needs to change. Because Vue options are plain objects before `createApp`, `static/ui.js` must explicitly merge `SettingsMaintenanceApi.methods` and `AppApi.methods` into one `methods` object.
 
 Script loading order becomes:
 

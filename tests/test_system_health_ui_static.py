@@ -18,7 +18,7 @@ def test_system_status_state_preserves_health_defaults():
 
 
 def test_system_status_api_normalizes_health_and_helpers():
-    api_js = read_static("static/api.js")
+    api_js = read_static("static/settings-maintenance-api.js")
 
     assert "normalizeSystemHealth(data = {})" in api_js
     assert "health: this.normalizeSystemHealth(data.health || {})" in api_js
