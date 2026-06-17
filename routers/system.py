@@ -568,6 +568,8 @@ async def backup_to_webdav():
             )
             keep_backups = max(0, int(config.get("keep_backups") or 0))
             retention = await run_in_threadpool(prune_backups, config, keep_backups)
+        except OSError as e:
+            raise HTTPException(status_code=507, detail=format_backup_error(e))
         except Exception as e:
             _handle_webdav_error(e)
         finally:

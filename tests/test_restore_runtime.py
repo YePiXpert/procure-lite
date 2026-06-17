@@ -1,3 +1,4 @@
+import errno
 import io
 
 import pytest
@@ -333,3 +334,43 @@ async def test_backup_to_webdav_uses_verified_temp_archive(monkeypatch, tmp_path
     assert inspected["called"] is True
     assert system.upload_file in calls
     assert uploaded["path"].exists() is False
+
+
+@pytest.mark.asyncio
+async def test_backup_to_webdav_maps_local_no_space_to_507_and_cleans_temp(
+    monkeypatch, tmp_path
+):
+    local_archive = {}
+    no_space_error = OSError(errno.ENOSPC, "No space left")
+
+    monkeypatch.setattr(system, "APP_STATE_DIR", tmp_path)
+    monkeypatch.setattr(
+        system,
+        "_require_webdav_config",
+        lambda: {"base_url": "https://example.com/dav", "keep_backups": 2},
+    )
+    monkeypatch.setattr(system, "resolve_temp_backup_dir", lambda: tmp_path)
+
+    async def fake_run_in_threadpool(func, *args):
+        if func is system.build_backup_archive_file:
+            archive_path = args[0]
+            archive_path.write_bytes(b"partial")
+            local_archive["path"] = archive_path
+            raise no_space_error
+        if func in {
+            getattr(system, "_inspect_generated_backup_archive", None),
+            system.upload_file,
+            system.prune_backups,
+        }:
+            raise AssertionError(f"{func.__name__} should not run after build failure")
+        raise AssertionError(f"unexpected threadpool function: {func}")
+
+    monkeypatch.setattr(system, "run_in_threadpool", fake_run_in_threadpool)
+
+    with pytest.raises(system.HTTPException) as exc_info:
+        await system.backup_to_webdav()
+
+    assert exc_info.value.status_code == 507
+    assert exc_info.value.detail == system.format_backup_error(no_space_error)
+    assert "path" in local_archive
+    assert local_archive["path"].exists() is False
