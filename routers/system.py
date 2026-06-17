@@ -236,6 +236,8 @@ def _inspect_backup_archive_for_restore(archive_path: Path) -> dict:
 def _inspect_generated_backup_archive(archive_path: Path) -> dict:
     try:
         return inspect_backup_archive(archive_path)
+    except OSError:
+        raise
     except Exception as exc:
         raise RuntimeError(f"生成的备份未通过健康检查: {exc}") from exc
 
