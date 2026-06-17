@@ -220,6 +220,24 @@ def _handle_webdav_error(error: Exception) -> None:
     raise HTTPException(status_code=500, detail=f"WebDAV 操作失败: {str(error)}")
 
 
+def _inspect_backup_archive_for_restore(archive_path: Path) -> dict:
+    try:
+        return inspect_backup_archive(archive_path)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"备份健康检查失败: {exc}")
+
+
+def _inspect_generated_backup_archive(archive_path: Path) -> dict:
+    try:
+        return inspect_backup_archive(archive_path)
+    except Exception as exc:
+        raise RuntimeError(f"生成的备份未通过健康检查: {exc}") from exc
+
+
 def _directory_size(path: Path) -> tuple[int, int]:
     total_size = 0
     file_count = 0
@@ -371,13 +389,20 @@ async def restore_data(file: UploadFile = File(...)):
     _validate_backup_filename(file.filename or "")
     archive_path = await _save_backup_upload(file, prefix="restore")
 
+    result = {}
+    backup_health = {}
     async with DATA_MUTATION_LOCK:
-        MAINTENANCE_MODE.set()
         try:
+            backup_health = await run_in_threadpool(
+                _inspect_backup_archive_for_restore, archive_path
+            )
+            MAINTENANCE_MODE.set()
             await _release_db_handles_for_restore()
             result = await run_in_threadpool(
                 restore_from_archive, archive_path, _run_init_db_sync
             )
+        except HTTPException:
+            raise
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e))
         except Exception as e:
@@ -389,6 +414,7 @@ async def restore_data(file: UploadFile = File(...)):
     return {
         "message": f"恢复完成（已自动通过健康检查），已恢复数据库与 {result['restored_upload_files']} 个上传文件",
         "restored_upload_files": result["restored_upload_files"],
+        "backup_health": backup_health,
     }
 
 
@@ -447,14 +473,20 @@ async def restore_from_local_backup(request: LocalBackupRestoreRequest):
     if not filename:
         raise HTTPException(status_code=400, detail="filename 不能为空")
     result = {}
+    backup_health = {}
     async with DATA_MUTATION_LOCK:
-        MAINTENANCE_MODE.set()
         try:
             archive_path = await run_in_threadpool(resolve_local_backup_path, filename)
+            backup_health = await run_in_threadpool(
+                _inspect_backup_archive_for_restore, archive_path
+            )
+            MAINTENANCE_MODE.set()
             await _release_db_handles_for_restore()
             result = await run_in_threadpool(
                 restore_from_archive, archive_path, _run_init_db_sync
             )
+        except HTTPException:
+            raise
         except FileNotFoundError as e:
             raise HTTPException(status_code=404, detail=str(e))
         except ValueError as e:
@@ -468,6 +500,7 @@ async def restore_from_local_backup(request: LocalBackupRestoreRequest):
         "message": f"已从本机备份恢复：{filename}（已自动通过健康检查），并恢复 {result['restored_upload_files']} 个上传文件",
         "restored_upload_files": result["restored_upload_files"],
         "filename": filename,
+        "backup_health": backup_health,
     }
 
 
@@ -553,16 +586,22 @@ async def restore_from_webdav(request: WebDAVRestoreRequest):
 
     archive_path = APP_STATE_DIR / f".restore_webdav_{uuid4().hex}.zip"
     result = {}
+    backup_health = {}
     async with DATA_MUTATION_LOCK:
-        MAINTENANCE_MODE.set()
         try:
             await run_in_threadpool(
                 download_backup_to_file, config, filename, archive_path
             )
+            backup_health = await run_in_threadpool(
+                _inspect_backup_archive_for_restore, archive_path
+            )
+            MAINTENANCE_MODE.set()
             await _release_db_handles_for_restore()
             result = await run_in_threadpool(
                 restore_from_archive, archive_path, _run_init_db_sync
             )
+        except HTTPException:
+            raise
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e))
         except Exception as e:
@@ -575,4 +614,5 @@ async def restore_from_webdav(request: WebDAVRestoreRequest):
         "message": f"已从 WebDAV 恢复：{filename}（已自动通过健康检查），并恢复 {result['restored_upload_files']} 个上传文件",
         "restored_upload_files": result["restored_upload_files"],
         "filename": filename,
+        "backup_health": backup_health,
     }
