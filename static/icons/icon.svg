@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+  <title id="title">Procure Lite</title>
+  <desc id="desc">A blue app icon with a procurement checklist and completed items.</desc>
+  <defs>
+    <linearGradient id="bg" x1="64" y1="32" x2="448" y2="480" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#1d4ed8"/>
+      <stop offset="1" stop-color="#2563eb"/>
+    </linearGradient>
+    <linearGradient id="check" x1="120" y1="144" x2="184" y2="336" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#14b8a6"/>
+      <stop offset="1" stop-color="#0d9488"/>
+    </linearGradient>
+    <filter id="shadow" x="48" y="56" width="416" height="408" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse">
+      <feDropShadow dx="0" dy="16" stdDeviation="18" flood-color="#0f172a" flood-opacity=".18"/>
+    </filter>
+  </defs>
+  <rect width="512" height="512" rx="96" fill="url(#bg)"/>
+  <g filter="url(#shadow)">
+    <rect x="70" y="66" width="372" height="380" rx="56" fill="#ffffff"/>
+    <rect x="150" y="102" width="212" height="18" rx="9" fill="#dbeafe"/>
+    <rect x="206" y="158" width="164" height="30" rx="15" fill="#0f172a"/>
+    <rect x="206" y="238" width="164" height="30" rx="15" fill="#0f172a"/>
+    <rect x="206" y="318" width="164" height="30" rx="15" fill="#0f172a"/>
+    <circle cx="144" cy="173" r="25" fill="url(#check)"/>
+    <circle cx="144" cy="253" r="25" fill="url(#check)"/>
+    <circle cx="144" cy="333" r="25" fill="url(#check)"/>
+    <path d="m129 173 10 10 21-25" fill="none" stroke="#ffffff" stroke-linecap="round" stroke-linejoin="round" stroke-width="8"/>
+    <path d="m129 253 10 10 21-25" fill="none" stroke="#ffffff" stroke-linecap="round" stroke-linejoin="round" stroke-width="8"/>
+    <path d="m129 333 10 10 21-25" fill="none" stroke="#ffffff" stroke-linecap="round" stroke-linejoin="round" stroke-width="8"/>
+  </g>
+</svg>

@@ -3,6 +3,14 @@ from fastapi.testclient import TestClient
 from app_metadata import APP_VERSION
 
 
+def _png_size(content: bytes) -> tuple[int, int]:
+    assert content.startswith(b"\x89PNG\r\n\x1a\n")
+    return (
+        int.from_bytes(content[16:20], "big"),
+        int.from_bytes(content[20:24], "big"),
+    )
+
+
 def _client(monkeypatch):
     monkeypatch.setenv("AUTO_MIGRATE", "0")
     from main import app
@@ -21,6 +29,9 @@ def test_root_exposes_pwa_metadata(monkeypatch):
     assert 'rel="manifest"' in html
     assert 'href="/manifest.webmanifest"' in html
     assert 'name="theme-color" content="#2563eb"' in html
+    assert 'rel="icon" href="/favicon.ico"' in html
+    assert 'rel="icon" type="image/svg+xml" href="/icons/icon.svg"' in html
+    assert 'rel="icon" type="image/png" sizes="32x32" href="/icons/favicon-32.png"' in html
     assert 'rel="apple-touch-icon"' in html
     assert f'/static/pwa.js?v={APP_VERSION}' in html
 
@@ -42,8 +53,10 @@ def test_manifest_contract(monkeypatch):
     assert manifest["background_color"] == "#f8fafc"
     assert manifest["lang"] == "zh-CN"
     icon_sizes = {icon["sizes"]: icon for icon in manifest["icons"]}
+    assert "48x48" in icon_sizes
     assert "192x192" in icon_sizes
     assert "512x512" in icon_sizes
+    assert icon_sizes["512x512"]["purpose"] == "any maskable"
     assert any("maskable" in icon.get("purpose", "") for icon in manifest["icons"])
 
 
@@ -122,20 +135,39 @@ def test_mobile_pwa_shell_contract(monkeypatch):
 
 
 def test_pwa_icons_are_root_served_pngs(monkeypatch):
-    icon_paths = [
-        "/icons/icon-180.png",
-        "/icons/icon-192.png",
-        "/icons/icon-512.png",
-        "/icons/maskable-192.png",
-        "/icons/maskable-512.png",
-    ]
+    icon_paths = {
+        "/icons/favicon-16.png": (16, 16),
+        "/icons/favicon-32.png": (32, 32),
+        "/icons/icon-48.png": (48, 48),
+        "/icons/icon-180.png": (180, 180),
+        "/icons/icon-192.png": (192, 192),
+        "/icons/icon-512.png": (512, 512),
+        "/icons/maskable-192.png": (192, 192),
+        "/icons/maskable-512.png": (512, 512),
+    }
     with _client(monkeypatch) as client:
-        for path in icon_paths:
+        for path, size in icon_paths.items():
             response = client.get(path)
             assert response.status_code == 200
             assert "image/png" in response.headers.get("content-type", "")
             assert "no-store" in response.headers.get("cache-control", "")
-            assert response.content.startswith(b"\x89PNG\r\n\x1a\n")
+            assert _png_size(response.content) == size
+
+
+def test_favicon_assets_are_root_served(monkeypatch):
+    with _client(monkeypatch) as client:
+        ico_response = client.get("/favicon.ico")
+        svg_response = client.get("/icons/icon.svg")
+
+    assert ico_response.status_code == 200
+    assert "image/" in ico_response.headers.get("content-type", "")
+    assert "no-store" in ico_response.headers.get("cache-control", "")
+    assert ico_response.content.startswith(b"\x00\x00\x01\x00")
+
+    assert svg_response.status_code == 200
+    assert "image/svg+xml" in svg_response.headers.get("content-type", "")
+    assert "no-store" in svg_response.headers.get("cache-control", "")
+    assert b"<svg" in svg_response.content
 
 
 def test_app_metadata_remains_network_api(monkeypatch):

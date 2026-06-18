@@ -65,11 +65,21 @@ _WEBDAV_ENCRYPTION_SALT = "webdav-password"
 PWA_CACHE_HEADERS = {"Cache-Control": "no-store"}
 PWA_ICON_CACHE_HEADERS = {"Cache-Control": "no-store"}
 PWA_ICON_FILES = {
+    "favicon.ico",
+    "favicon-16.png",
+    "favicon-32.png",
+    "icon.svg",
+    "icon-48.png",
     "icon-180.png",
     "icon-192.png",
     "icon-512.png",
     "maskable-192.png",
     "maskable-512.png",
+}
+PWA_ICON_MEDIA_TYPES = {
+    ".ico": "image/x-icon",
+    ".png": "image/png",
+    ".svg": "image/svg+xml",
 }
 
 
@@ -494,7 +504,20 @@ async def pwa_icon(filename: str):
         raise HTTPException(status_code=404, detail="Icon not found")
     return FileResponse(
         STATIC_DIR / "icons" / safe_name,
-        media_type="image/png",
+        media_type=PWA_ICON_MEDIA_TYPES.get(
+            Path(safe_name).suffix,
+            "application/octet-stream",
+        ),
+        headers=PWA_ICON_CACHE_HEADERS,
+    )
+
+
+@router.get("/favicon.ico")
+async def favicon():
+    """Return the browser fallback favicon from the site root."""
+    return FileResponse(
+        STATIC_DIR / "icons" / "favicon.ico",
+        media_type="image/x-icon",
         headers=PWA_ICON_CACHE_HEADERS,
     )
 
