@@ -292,6 +292,25 @@ def test_operations_report_loader_maps_action_queue_summary():
         assert f"{key}: Number(actionQueueSummary.{key}) || 0" in api_js
 
 
+def test_action_queue_summary_uses_tracker_total_for_all_count():
+    tracker_report = {
+        "summary": {"action_queue_count": 27},
+        "action_queues": {
+            "inventory": [{}],
+            "purchase": [{}, {}],
+            "receipt": [{}],
+            "import": [],
+            "invoice": [{}],
+            "all": [{} for _ in range(20)],
+        },
+    }
+
+    summary = reports._build_action_queue_summary(tracker_report)
+
+    assert summary["purchase"] == 2
+    assert summary["all"] == 27
+
+
 def test_operations_report_computes_action_queue_summary_rows():
     state_js = read_static("static/state.js")
 

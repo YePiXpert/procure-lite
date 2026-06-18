@@ -251,7 +251,14 @@ def run_smoke_checks() -> None:
                 action_queue_summary = ops_payload.get("action_queue_summary")
                 if not isinstance(action_queue_summary, dict):
                     raise AssertionError("Operations report should include action_queue_summary object")
-                int(action_queue_summary.get("all") or 0)
+                if "all" not in action_queue_summary:
+                    raise AssertionError("Operations report action_queue_summary should include all count")
+                try:
+                    action_queue_all_count = int(action_queue_summary["all"])
+                except (TypeError, ValueError) as exc:
+                    raise AssertionError("Operations report action_queue_summary all count should be numeric") from exc
+                if action_queue_all_count < 0:
+                    raise AssertionError("Operations report action_queue_summary all count should be non-negative")
 
                 delete_attachment = client.delete(f"/api/ops/invoice-attachments/{attachment_id}")
                 _expect_status(delete_attachment, 200, "delete invoice attachment")

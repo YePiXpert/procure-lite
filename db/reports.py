@@ -6,6 +6,8 @@ from .operations import get_procurement_tracker_report, list_import_task_runs
 from .orm import execute_sql, execute_sql_scalar
 
 
+ACTION_QUEUE_KEYS = ("inventory", "purchase", "receipt", "import", "invoice", "all")
+
 FLOW_STAGES = (
     ("pending_purchase", "待采购"),
     ("pending_arrival", "待到货"),
@@ -29,6 +31,18 @@ def _safe_int(value) -> int:
         return int(value)
     except (TypeError, ValueError):
         return 0
+
+
+def _build_action_queue_summary(tracker_report: dict) -> dict:
+    action_queues = tracker_report.get("action_queues") or {}
+    summary = {
+        key: len(action_queues.get(key) or [])
+        for key in ACTION_QUEUE_KEYS
+    }
+    tracker_summary = tracker_report.get("summary") or {}
+    if "action_queue_count" in tracker_summary:
+        summary["all"] = _safe_int(tracker_summary.get("action_queue_count"))
+    return summary
 
 
 def _normalize_year_value(year: Optional[str], month: Optional[str]) -> str:
@@ -292,11 +306,7 @@ async def get_operations_report(
         keyword=keyword,
         import_tasks=import_tasks,
     )
-    action_queues = tracker_report.get("action_queues") or {}
-    action_queue_summary = {
-        key: len(action_queues.get(key) or [])
-        for key in ("inventory", "purchase", "receipt", "import", "invoice", "all")
-    }
+    action_queue_summary = _build_action_queue_summary(tracker_report)
 
     conditions, params = build_item_filters(
         status=status, department=department, month=month, keyword=keyword
