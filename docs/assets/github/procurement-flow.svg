@@ -1,0 +1,74 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="420" viewBox="0 0 1200 420" role="img" aria-labelledby="title desc">
+  <title id="title">Procurement workflow</title>
+  <desc id="desc">A process flow for Procure Lite from receipt upload through OCR, ledger confirmation, procurement execution, delivery, reimbursement, audit, and backup.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1200" y2="420" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#eff6ff"/>
+      <stop offset=".55" stop-color="#ffffff"/>
+      <stop offset="1" stop-color="#f0fdfa"/>
+    </linearGradient>
+    <filter id="shadow" x="30" y="40" width="1140" height="330" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse">
+      <feDropShadow dx="0" dy="14" stdDeviation="18" flood-color="#0f172a" flood-opacity=".12"/>
+    </filter>
+    <marker id="arrow" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="12" markerHeight="12" orient="auto">
+      <path d="M2 2l8 4-8 4z" fill="#2563eb"/>
+    </marker>
+    <style>
+      .t{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei",sans-serif;fill:#0f172a}
+      .muted{fill:#64748b}
+      .title{font-size:40px;font-weight:800}
+      .node-title{font-size:20px;font-weight:800}
+      .node-copy{font-size:15px;fill:#64748b}
+    </style>
+  </defs>
+  <rect width="1200" height="420" fill="url(#bg)"/>
+  <text class="t title" x="72" y="70">采购闭环流程</text>
+  <text class="t muted" x="72" y="106" font-size="20">单据进入系统后，Procure Lite 把 OCR、执行跟踪、报销归档和审计备份连成一条线。</text>
+  <g filter="url(#shadow)">
+    <rect x="72" y="146" width="1056" height="202" rx="28" fill="#fff" stroke="#e2e8f0"/>
+  </g>
+  <g transform="translate(105 184)">
+    <g>
+      <circle cx="52" cy="52" r="40" fill="#dbeafe"/>
+      <path d="M39 34h22l12 12v28H39zM61 34v13h12" fill="none" stroke="#2563eb" stroke-width="5" stroke-linejoin="round"/>
+      <text class="t node-title" x="0" y="125">上传单据</text>
+      <text class="t node-copy" x="-14" y="151">PDF / 图片</text>
+    </g>
+    <path d="M111 52h72" stroke="#2563eb" stroke-width="4" marker-end="url(#arrow)"/>
+    <g transform="translate(194)">
+      <circle cx="52" cy="52" r="40" fill="#ccfbf1"/>
+      <path d="M34 52h36M52 34v36M39 39l26 26M65 39 39 65" stroke="#0f766e" stroke-width="5" stroke-linecap="round"/>
+      <text class="t node-title" x="10" y="125">OCR 解析</text>
+      <text class="t node-copy" x="-8" y="151">提取字段</text>
+    </g>
+    <path d="M305 52h72" stroke="#2563eb" stroke-width="4" marker-end="url(#arrow)"/>
+    <g transform="translate(388)">
+      <circle cx="52" cy="52" r="40" fill="#eef2ff"/>
+      <path d="M34 43h36M34 56h36M34 69h24" stroke="#4f46e5" stroke-width="5" stroke-linecap="round"/>
+      <path d="M33 30h38a8 8 0 0 1 8 8v42a8 8 0 0 1-8 8H33a8 8 0 0 1-8-8V38a8 8 0 0 1 8-8z" fill="none" stroke="#4f46e5" stroke-width="5"/>
+      <text class="t node-title" x="0" y="125">确认台账</text>
+      <text class="t node-copy" x="-8" y="151">补齐信息</text>
+    </g>
+    <path d="M499 52h72" stroke="#2563eb" stroke-width="4" marker-end="url(#arrow)"/>
+    <g transform="translate(582)">
+      <circle cx="52" cy="52" r="40" fill="#fef3c7"/>
+      <path d="M30 56h20l8-18 13 32 7-14h12" fill="none" stroke="#d97706" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+      <text class="t node-title" x="0" y="125">执行跟踪</text>
+      <text class="t node-copy" x="-18" y="151">采购 / 到货</text>
+    </g>
+    <path d="M693 52h72" stroke="#2563eb" stroke-width="4" marker-end="url(#arrow)"/>
+    <g transform="translate(776)">
+      <circle cx="52" cy="52" r="40" fill="#dcfce7"/>
+      <path d="M52 25l29 16v31L52 88 23 72V41zM23 41l29 16 29-16M52 57v31" fill="none" stroke="#16a34a" stroke-width="5" stroke-linejoin="round"/>
+      <text class="t node-title" x="0" y="125">分发报销</text>
+      <text class="t node-copy" x="-10" y="151">签收归档</text>
+    </g>
+    <path d="M887 52h72" stroke="#2563eb" stroke-width="4" marker-end="url(#arrow)"/>
+    <g transform="translate(970)">
+      <circle cx="52" cy="52" r="40" fill="#fee2e2"/>
+      <path d="M35 33h34v42H35zM42 44h20M42 55h20M42 66h13" fill="none" stroke="#dc2626" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+      <text class="t node-title" x="0" y="125">审计备份</text>
+      <text class="t node-copy" x="-8" y="151">本地 / WebDAV</text>
+    </g>
+  </g>
+</svg>
