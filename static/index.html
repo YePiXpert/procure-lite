@@ -689,8 +689,38 @@
                                         </div>
                                     </div>
 
-                                    <div v-if="!column.items || !column.items.length" class="execution-column-empty">
-                                        当前列暂无记录
+                                    <div
+                                        v-if="!column.items || !column.items.length"
+                                        class="execution-column-empty"
+                                        :class="{
+                                            'execution-column-empty-rich': executionBoardShownTotal === 0 && columnIdx === 0,
+                                            'execution-column-empty-compact': !(executionBoardShownTotal === 0 && columnIdx === 0)
+                                        }"
+                                    >
+                                        <template v-if="executionBoardShownTotal === 0 && columnIdx === 0">
+                                            <div class="execution-empty-copy">
+                                                <span class="execution-empty-kicker">BOARD READY</span>
+                                                <h3>{{ executionBoardFilterActive ? '当前筛选没有执行卡片' : '暂无执行看板卡片' }}</h3>
+                                                <p>导入或新增采购记录后，待采购、待到货和待分发会在这里形成三段闭环，可直接拖拽流转并补齐关键日期。</p>
+                                                <div class="execution-empty-actions">
+                                                    <button v-if="executionBoardFilterActive" @click="clearExecutionFilter" type="button">清除筛选</button>
+                                                    <button @click="$refs.fileInput && $refs.fileInput.click()" type="button" class="execution-empty-primary">导入采购单据</button>
+                                                    <button @click="openAddModal()" type="button">手动新增记录</button>
+                                                </div>
+                                                <div class="execution-empty-checklist" aria-label="执行看板准备项">
+                                                    <span>待采购</span>
+                                                    <span>待到货</span>
+                                                    <span>待分发</span>
+                                                </div>
+                                            </div>
+                                            <div class="execution-empty-visual" aria-hidden="true">
+                                                <img src="/static/illustrations/execution-board-ready.png" alt="">
+                                            </div>
+                                        </template>
+                                        <template v-else>
+                                            <strong>{{ column.label }}暂无记录</strong>
+                                            <span>记录进入该阶段后，可在这里拖拽流转并补齐关键日期。</span>
+                                        </template>
                                     </div>
                                 </div>
                                 <div v-if="column.count > (column.items ? column.items.length : 0)" class="px-3 py-2 border-t border-slate-200 text-[11px] text-slate-500">
