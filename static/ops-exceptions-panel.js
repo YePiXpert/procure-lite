@@ -18,8 +18,24 @@
                                 </span>
                             </div>
                             <div class="mt-4 space-y-3">
-                                <div v-if="!visiblePriorityNotifications.length" class="rounded-lg border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-sm text-slate-500">
-                                    当前没有需要优先处理的异常。
+                                <div v-if="!visiblePriorityNotifications.length" class="ops-exception-empty-state">
+                                    <div class="ops-exception-empty-copy">
+                                        <span class="ops-exception-empty-kicker">EXCEPTIONS CLEAR</span>
+                                        <h5>异常提醒已清空</h5>
+                                        <p>当前没有超期、导入失败或待报销阻塞，可以继续核对发票闭环和导入任务记录。</p>
+                                        <div class="ops-exception-empty-actions">
+                                            <button @click="openFullFollowup('ops-section-full-invoices')" type="button" class="ops-exception-empty-primary">查看报销闭环</button>
+                                            <button @click="openFullFollowup('ops-section-full-imports')" type="button">导入任务中心</button>
+                                        </div>
+                                        <div class="ops-exception-empty-checklist" aria-label="异常中心巡检项">
+                                            <span>超期预警</span>
+                                            <span>导入失败</span>
+                                            <span>报销跟进</span>
+                                        </div>
+                                    </div>
+                                    <div class="ops-exception-empty-visual" aria-hidden="true">
+                                        <img src="/static/illustrations/ops-exceptions-clear.png" alt="">
+                                    </div>
                                 </div>
                                 <div
                                     v-for="notification in visiblePriorityNotifications"
@@ -73,8 +89,9 @@
                                 </button>
                             </div>
                             <div class="mt-4 space-y-3">
-                                <div v-if="!visiblePendingInvoices.length" class="rounded-lg border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-sm text-slate-500">
-                                    当前没有待跟进的报销条目。
+                                <div v-if="!visiblePendingInvoices.length" class="ops-exception-empty-inline ops-exception-empty-inline-blue">
+                                    <strong>报销队列已清空</strong>
+                                    <span>当前没有待跟进的报销条目；如需复核历史记录，可以展开完整跟进台。</span>
                                 </div>
                                 <div v-for="item in visiblePendingInvoices.slice(0, 6)" :key="'invoice-preview-' + item.item_id" class="rounded-xl border border-slate-200 px-4 py-4">
                                     <div class="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
@@ -121,8 +138,9 @@
                             </button>
                         </div>
                         <div class="mt-4 space-y-2">
-                            <div v-if="!visibleImportRecoveryTasks.length" class="rounded-lg border border-dashed border-slate-200 bg-slate-50 px-4 py-5 text-sm text-slate-500">
-                                当前没有待恢复的导入任务。
+                            <div v-if="!visibleImportRecoveryTasks.length" class="ops-exception-empty-inline ops-exception-empty-inline-amber">
+                                <strong>导入恢复队列为空</strong>
+                                <span>当前没有失败或处理中任务，新的 OCR / AI 导入异常会在这里优先出现。</span>
                             </div>
                             <div v-for="task in visibleImportRecoveryTasks.slice(0, 8)" :key="'recovery-' + task.task_id" class="rounded-lg border border-slate-200 px-4 py-3">
                                 <div class="flex items-start justify-between gap-3">
@@ -155,8 +173,9 @@
                         </span>
                     </div>
                     <div class="mt-4 space-y-2 max-h-80 overflow-y-auto pr-1">
-                        <div v-if="!visibleImportTasks.length" class="rounded-lg border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-sm text-slate-500">
-                            暂无导入任务历史。
+                        <div v-if="!visibleImportTasks.length" class="ops-exception-empty-inline">
+                            <strong>暂无导入任务历史</strong>
+                            <span>上传采购单据后，识别条数、状态和失败原因会沉淀在这里。</span>
                         </div>
                         <div v-for="task in visibleImportTasks" :key="task.task_id" class="rounded-lg border border-slate-200 px-4 py-3">
                             <div class="flex items-start justify-between gap-3">
@@ -197,8 +216,9 @@
                         </span>
                     </div>
                     <div class="mt-4 space-y-3 max-h-[720px] overflow-y-auto pr-1">
-                        <div v-if="!visibleInvoiceQueue.length" class="rounded-lg border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-sm text-slate-500">
-                            暂无待跟进的发票/报销记录。
+                        <div v-if="!visibleInvoiceQueue.length" class="ops-exception-empty-inline ops-exception-empty-inline-blue">
+                            <strong>暂无发票/报销记录</strong>
+                            <span>标记开票或上传附件后，这里会变成可保存报销状态的跟进台。</span>
                         </div>
                         <div v-for="item in visibleInvoiceQueue" :key="'invoice-' + item.item_id" class="rounded-xl border border-slate-200 px-4 py-4">
                             <div class="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
@@ -340,8 +360,9 @@
                         </span>
                     </div>
                     <div class="mt-4 space-y-2 max-h-80 overflow-y-auto pr-1">
-                        <div v-if="!visibleNotificationsAll.length" class="rounded-lg border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-sm text-slate-500">
-                            暂无异常提醒。
+                        <div v-if="!visibleNotificationsAll.length" class="ops-exception-empty-inline ops-exception-empty-inline-green">
+                            <strong>暂无异常提醒</strong>
+                            <span>低库存、执行超期、导入失败和待报销提醒会集中显示在这里。</span>
                         </div>
                         <div
                             v-for="notification in visibleNotificationsAll"

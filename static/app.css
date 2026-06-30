@@ -5886,6 +5886,162 @@ body {
     object-fit: contain;
 }
 
+.ops-exception-empty-state {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(9.5rem, 12rem);
+    gap: 0.9rem;
+    align-items: center;
+    overflow: hidden;
+    border: 1px solid rgba(244, 63, 94, 0.18);
+    border-radius: 0.85rem;
+    background:
+        radial-gradient(circle at 86% 8%, rgba(20, 184, 166, 0.16), transparent 34%),
+        linear-gradient(145deg, #fff7ed 0%, #ffffff 48%, #f0fdfa 100%);
+    padding: 0.95rem;
+}
+
+.ops-exception-empty-copy {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    align-items: flex-start;
+}
+
+.ops-exception-empty-kicker {
+    display: inline-flex;
+    align-items: center;
+    height: 1.4rem;
+    padding: 0 0.5rem;
+    border-radius: 999px;
+    background: rgba(190, 18, 60, 0.1);
+    color: #be123c;
+    font-size: 0.66rem;
+    font-weight: 900;
+    letter-spacing: 0;
+}
+
+.ops-exception-empty-state h5 {
+    margin: 0.6rem 0 0;
+    color: #0f172a;
+    font-size: 1rem;
+    font-weight: 900;
+    line-height: 1.3;
+}
+
+.ops-exception-empty-state p {
+    margin: 0.38rem 0 0;
+    color: #64748b;
+    font-size: 0.76rem;
+    line-height: 1.65;
+}
+
+.ops-exception-empty-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.45rem;
+    width: 100%;
+    margin-top: 0.8rem;
+}
+
+.ops-exception-empty-actions button {
+    display: inline-flex;
+    flex: 1 1 7.3rem;
+    align-items: center;
+    justify-content: center;
+    min-height: 2.1rem;
+    border: 1px solid rgba(226, 232, 240, 0.95);
+    border-radius: 0.55rem;
+    background: rgba(255, 255, 255, 0.9);
+    padding: 0 0.7rem;
+    color: #334155;
+    font-size: 0.72rem;
+    font-weight: 900;
+    white-space: nowrap;
+    transition: transform 0.16s ease, border-color 0.16s ease, box-shadow 0.16s ease;
+}
+
+.ops-exception-empty-actions button:hover {
+    border-color: #0f766e;
+    box-shadow: 0 14px 28px -24px rgba(15, 118, 110, 0.76);
+    transform: translateY(-1px);
+}
+
+.ops-exception-empty-actions .ops-exception-empty-primary {
+    border-color: #0f766e;
+    background: #0f766e;
+    color: #ffffff;
+}
+
+.ops-exception-empty-checklist {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+    margin-top: 0.68rem;
+}
+
+.ops-exception-empty-checklist span {
+    display: inline-flex;
+    align-items: center;
+    min-height: 1.38rem;
+    padding: 0 0.48rem;
+    border-radius: 999px;
+    background: rgba(254, 226, 226, 0.72);
+    color: #9f1239;
+    font-size: 0.66rem;
+    font-weight: 800;
+}
+
+.ops-exception-empty-visual {
+    width: min(100%, 12rem);
+    aspect-ratio: 1;
+    justify-self: center;
+    overflow: hidden;
+}
+
+.ops-exception-empty-visual img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+}
+
+.ops-exception-empty-inline {
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+    border: 1px dashed rgba(148, 163, 184, 0.38);
+    border-radius: 0.7rem;
+    background: rgba(248, 250, 252, 0.82);
+    padding: 0.8rem;
+}
+
+.ops-exception-empty-inline strong {
+    color: #0f172a;
+    font-size: 0.78rem;
+    font-weight: 900;
+}
+
+.ops-exception-empty-inline span {
+    color: #64748b;
+    font-size: 0.72rem;
+    line-height: 1.55;
+}
+
+.ops-exception-empty-inline-blue {
+    border-color: rgba(37, 99, 235, 0.26);
+    background: rgba(239, 246, 255, 0.78);
+}
+
+.ops-exception-empty-inline-amber {
+    border-color: rgba(245, 158, 11, 0.28);
+    background: rgba(255, 251, 235, 0.82);
+}
+
+.ops-exception-empty-inline-green {
+    border-color: rgba(13, 148, 136, 0.25);
+    background: rgba(240, 253, 250, 0.82);
+}
+
 .ops-mini-stat {
     min-height: 5rem;
     border-radius: 0.75rem;
@@ -6680,6 +6836,20 @@ body {
     }
 
     .ops-empty-actions button {
+        flex-basis: 100%;
+    }
+
+    .ops-exception-empty-state {
+        grid-template-columns: 1fr;
+        gap: 0.7rem;
+        padding: 0.85rem;
+    }
+
+    .ops-exception-empty-visual {
+        width: min(100%, 10rem);
+    }
+
+    .ops-exception-empty-actions button {
         flex-basis: 100%;
     }
 
