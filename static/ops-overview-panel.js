@@ -43,8 +43,25 @@
                         </div>
 
                         <div class="mt-4 space-y-2">
-                            <div v-if="!todayActionRows.length" class="ops-empty-state">
-                                当前没有必须马上处理的待办。可以去采购跟进检查在途订单，或维护供应商和价格资料。
+                            <div v-if="!todayActionRows.length" class="ops-empty-state ops-empty-state-rich">
+                                <div class="ops-empty-copy">
+                                    <span class="ops-empty-kicker">OPERATIONS CLEAR</span>
+                                    <h4>今日行动队列已清空</h4>
+                                    <p>当前没有必须马上处理的超期、下单、收货或报销事项。可以继续检查在途订单，或沉淀供应商和价格资料。</p>
+                                    <div class="ops-empty-actions">
+                                        <button @click="$root.switchSubView('procurement')" type="button" class="ops-empty-primary">进入采购跟进</button>
+                                        <button @click="$root.switchSubView('master-data')" type="button">维护资料库</button>
+                                        <button @click="$root.goToViewSubview('reports', 'suppliers')" type="button">供应商报表</button>
+                                    </div>
+                                    <div class="ops-empty-checklist" aria-label="行动队列清空后的建议">
+                                        <span>在途订单</span>
+                                        <span>价格记忆</span>
+                                        <span>报销闭环</span>
+                                    </div>
+                                </div>
+                                <div class="ops-empty-visual" aria-hidden="true">
+                                    <img src="/static/illustrations/operations-clear.png" alt="">
+                                </div>
                             </div>
                             <article
                                 v-for="row in todayActionRows"
