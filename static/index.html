@@ -209,6 +209,44 @@
                         </div>
                     </div>
 
+                    <section v-if="!itemsLoading && Number(stats.total || 0) === 0" class="dashboard-first-run" aria-label="首次使用引导">
+                        <div class="dashboard-first-run-copy">
+                            <span class="dashboard-command-kicker dashboard-first-run-kicker">GET STARTED</span>
+                            <h2>从第一张采购单开始建立闭环</h2>
+                            <p>Procure Lite 会把单据识别、台账确认、执行跟踪和备份恢复连成一条线。首次部署后，可以按这四步把流程跑通。</p>
+                            <div class="dashboard-first-run-actions">
+                                <button @click="$refs.fileInput && $refs.fileInput.click()" type="button" class="dashboard-first-run-action dashboard-first-run-action-primary">导入第一张单据</button>
+                                <button @click="openAddModal" type="button" class="dashboard-first-run-action">手动新增记录</button>
+                                <button @click="switchView('settings')" type="button" class="dashboard-first-run-action">设置备份</button>
+                            </div>
+                        </div>
+                        <ol class="dashboard-first-run-steps">
+                            <li>
+                                <span>01</span>
+                                <strong>导入第一张采购单</strong>
+                                <em>上传 PDF 或图片，让 OCR 先提取基础字段。</em>
+                            </li>
+                            <li>
+                                <span>02</span>
+                                <strong>确认台账字段</strong>
+                                <em>补齐部门、经办人、供应商和数量。</em>
+                            </li>
+                            <li>
+                                <span>03</span>
+                                <strong>跟踪采购闭环</strong>
+                                <em>按待采购、待到货、待分发和待报销推进。</em>
+                            </li>
+                            <li>
+                                <span>04</span>
+                                <strong>设置备份策略</strong>
+                                <em>配置本地自动备份或 WebDAV 云备份。</em>
+                            </li>
+                        </ol>
+                        <div class="dashboard-first-run-visual" aria-hidden="true">
+                            <img src="/static/illustrations/first-run-onboarding.png" alt="">
+                        </div>
+                    </section>
+
                     <div class="dashboard-metrics-row">
                         <button @click="switchView('ledger'); applyLedgerSnapshot({ ...ledgerFilterSnapshot, status: '待采购', paymentStatus: '', month: '' })" type="button" class="dashboard-metric-card dashboard-metric-blue">
                             <span class="dashboard-metric-icon" aria-hidden="true">
