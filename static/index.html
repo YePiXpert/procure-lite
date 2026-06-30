@@ -2491,7 +2491,27 @@
                                             </td>
                                         </tr>
                                         <tr v-if="!$root.recycleBinItems.length">
-                                            <td colspan="5" class="py-12 text-center text-slate-500 text-sm">回收站为空</td>
+                                            <td colspan="5" class="p-4">
+                                                <div class="recycle-empty-state">
+                                                    <div class="recycle-empty-copy">
+                                                        <span class="recycle-empty-kicker">SAFE DELETE</span>
+                                                        <h4>回收站为空</h4>
+                                                        <p>误删记录会先在这里暂存，确认无误后再彻底删除，减少日常维护时的误操作成本。</p>
+                                                        <div class="recycle-empty-actions">
+                                                            <button @click="$root.loadRecycleBin()" type="button" class="recycle-empty-primary">刷新回收站</button>
+                                                            <button @click="$root.closeRecycleBinModal(); $root.switchView('ledger')" type="button">回到台账</button>
+                                                        </div>
+                                                        <div class="recycle-empty-checklist" aria-label="回收站安全策略">
+                                                            <span>支持恢复</span>
+                                                            <span>保留删除时间</span>
+                                                            <span>彻底删除前请二次确认</span>
+                                                        </div>
+                                                    </div>
+                                                    <div class="recycle-empty-visual" aria-hidden="true">
+                                                        <img src="/static/illustrations/recycle-safe.png" alt="">
+                                                    </div>
+                                                </div>
+                                            </td>
                                         </tr>
                                     </template>
                                 </tbody>
