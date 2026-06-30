@@ -2408,7 +2408,27 @@
                                     </td>
                                 </tr>
                                 <tr v-if="!$root.historyItems.length">
-                                    <td colspan="5" class="py-16 text-center text-sm text-slate-500">暂无审计日志</td>
+                                    <td colspan="5" class="p-4">
+                                        <div class="audit-empty-state">
+                                            <div class="audit-empty-copy">
+                                                <span class="audit-empty-kicker">AUDIT TRAIL</span>
+                                                <h3>暂无审计日志</h3>
+                                                <p>系统会在创建、字段变更、删除和回滚时自动沉淀轨迹，方便后续核对责任、恢复数据和复盘流程。</p>
+                                                <div class="audit-empty-actions">
+                                                    <button @click="$root.clearHistoryFilters()" type="button" class="audit-empty-primary">清空筛选</button>
+                                                    <button @click="$root.switchView('ledger')" type="button">回到台账</button>
+                                                </div>
+                                                <div class="audit-empty-checklist" aria-label="审计日志覆盖范围">
+                                                    <span>自动记录创建、变更和删除</span>
+                                                    <span>字段变更可追溯</span>
+                                                    <span>恢复与回滚先看这里</span>
+                                                </div>
+                                            </div>
+                                            <div class="audit-empty-visual" aria-hidden="true">
+                                                <img src="/static/illustrations/audit-trail.png" alt="">
+                                            </div>
+                                        </div>
+                                    </td>
                                 </tr>
                             </template>
                         </tbody>
