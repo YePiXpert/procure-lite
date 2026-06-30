@@ -2536,7 +2536,21 @@
                                 <span class="font-semibold font-mono">{{ count }}</span>
                             </span>
                         </div>
-                        <div v-else class="text-xs text-slate-400">暂无问题</div>
+                        <div v-else class="data-quality-clear-state">
+                            <div class="data-quality-clear-copy">
+                                <span class="data-quality-clear-kicker">QUALITY CHECK</span>
+                                <h4>数据质量良好</h4>
+                                <p>未发现重复键、缺失金额或异常字段，可以继续进入报表分析和采购跟进。</p>
+                                <div class="data-quality-clear-checklist" aria-label="数据质量通过范围">
+                                    <span>重复键组</span>
+                                    <span>字段完整性</span>
+                                    <span>价格覆盖</span>
+                                </div>
+                            </div>
+                            <div class="data-quality-clear-visual" aria-hidden="true">
+                                <img src="/static/illustrations/data-quality-clear.png" alt="">
+                            </div>
+                        </div>
                     </div>
                     <div class="border border-slate-200 rounded-lg overflow-hidden">
                         <div class="bg-slate-50 px-3 py-2 border-b border-slate-200 text-xs font-semibold text-slate-500 uppercase">问题明细</div>

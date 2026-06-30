@@ -2951,6 +2951,93 @@ body {
     object-position: center;
 }
 
+.data-quality-clear-state {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(150px, 0.28fr);
+    align-items: center;
+    gap: 1rem;
+    min-height: 11rem;
+    border-radius: 0.9rem;
+    border: 1px solid rgba(203, 213, 225, 0.82);
+    background:
+        radial-gradient(circle at top right, rgba(20, 184, 166, 0.1), transparent 34%),
+        linear-gradient(180deg, #ffffff 0%, #f8fbfb 100%);
+    padding: 1rem;
+}
+
+.data-quality-clear-copy {
+    min-width: 0;
+}
+
+.data-quality-clear-kicker {
+    display: inline-flex;
+    align-items: center;
+    width: fit-content;
+    min-height: 1.45rem;
+    padding: 0 0.52rem;
+    border-radius: 999px;
+    border: 1px solid rgba(15, 118, 110, 0.18);
+    background: rgba(204, 251, 241, 0.45);
+    color: #0f766e;
+    font-size: 0.62rem;
+    font-weight: 850;
+    letter-spacing: 0.08em;
+}
+
+.data-quality-clear-state h4 {
+    margin-top: 0.65rem;
+    color: #0f172a;
+    font-size: 1.08rem;
+    line-height: 1.2;
+    font-weight: 850;
+}
+
+.data-quality-clear-state p {
+    margin-top: 0.42rem;
+    max-width: 36rem;
+    color: #64748b;
+    font-size: 0.82rem;
+    line-height: 1.55;
+}
+
+.data-quality-clear-checklist {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.45rem;
+    margin-top: 0.8rem;
+}
+
+.data-quality-clear-checklist span {
+    display: inline-flex;
+    align-items: center;
+    min-height: 1.65rem;
+    padding: 0 0.58rem;
+    border-radius: 999px;
+    border: 1px solid rgba(203, 213, 225, 0.86);
+    background: rgba(248, 250, 252, 0.86);
+    color: #475569;
+    font-size: 0.7rem;
+    font-weight: 700;
+}
+
+.data-quality-clear-visual {
+    position: relative;
+    aspect-ratio: 1;
+    min-height: 8.5rem;
+    overflow: hidden;
+    border-radius: 0.78rem;
+    border: 1px solid rgba(203, 213, 225, 0.76);
+    background: #eef7f5;
+}
+
+.data-quality-clear-visual img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    object-position: center;
+}
+
 .report-visual-card {
     padding: 1rem;
     border-radius: 1rem;
@@ -3428,6 +3515,7 @@ body {
     .system-status-grid,
     .reports-empty-state,
     .audit-empty-state,
+    .data-quality-clear-state,
     .report-kpi-grid {
         grid-template-columns: 1fr;
     }
@@ -3461,6 +3549,11 @@ body {
     .audit-empty-visual {
         min-height: 12rem;
         max-height: 16rem;
+    }
+
+    .data-quality-clear-visual {
+        min-height: 10rem;
+        max-height: 14rem;
     }
 }
 
