@@ -39,8 +39,24 @@
                             <span class="text-[11px] text-slate-500">用于采购分析回填与比价参考</span>
                         </div>
                         <div class="mt-3 space-y-2">
-                            <div v-if="!visibleRecentPriceRecords.length" class="rounded-lg border border-dashed border-slate-200 bg-slate-50 px-4 py-5 text-sm text-slate-500">
-                                暂无价格记录，建议先补常用品的最近成交价。
+                            <div v-if="!visibleRecentPriceRecords.length" class="ops-master-empty-state">
+                                <div class="ops-master-empty-copy">
+                                    <span class="ops-master-empty-kicker">SUPPLIER BASELINE</span>
+                                    <h5>先建立供应商与价格基线</h5>
+                                    <p>补一批常用供应商和最近成交价，后续下单、月报和供应商分析就能直接复用这些资料。</p>
+                                    <div class="ops-master-empty-actions">
+                                        <button type="button" @click="openMasterData('ops-section-master-sourcing')" class="ops-master-empty-primary">展开资料维护</button>
+                                        <button type="button" @click="$root.switchView('ledger')">去台账补归属</button>
+                                    </div>
+                                    <div class="ops-master-empty-checklist" aria-label="供应商价格库准备项">
+                                        <span>供应商档案</span>
+                                        <span>最近成交价</span>
+                                        <span>采购链接</span>
+                                    </div>
+                                </div>
+                                <div class="ops-master-empty-visual" aria-hidden="true">
+                                    <img src="/static/illustrations/supplier-price-library.png" alt="">
+                                </div>
                             </div>
                             <div v-for="record in visibleRecentPriceRecords" :key="'recent-price-' + record.id" class="rounded-lg border border-slate-200 px-4 py-3">
                                 <div class="flex items-start justify-between gap-3">
@@ -98,8 +114,9 @@
                         </form>
 
                         <div class="mt-4 space-y-2 max-h-60 overflow-y-auto pr-1">
-                            <div v-if="!visibleSuppliers.length" class="rounded-lg border border-dashed border-slate-200 bg-slate-50 px-4 py-5 text-sm text-slate-500">
-                                暂无供应商档案。
+                            <div v-if="!visibleSuppliers.length" class="ops-master-empty-inline">
+                                <strong>暂无供应商档案</strong>
+                                <span>先录入常用供应商名称、联系人和联系方式，台账归属和报表分析会更准确。</span>
                             </div>
                             <div v-for="supplier in visibleSuppliers" :key="'supplier-' + supplier.id" class="rounded-lg border border-slate-200 px-4 py-3 transition-all duration-200">
                                 <template v-if="$root.editingSupplier && $root.editingSupplier.id === supplier.id">
@@ -178,8 +195,9 @@
                         </form>
 
                         <div class="mt-4 space-y-2 max-h-60 overflow-y-auto pr-1">
-                            <div v-if="!visiblePriceRecords.length" class="rounded-lg border border-dashed border-slate-200 bg-slate-50 px-4 py-5 text-sm text-slate-500">
-                                暂无价格记录。
+                            <div v-if="!visiblePriceRecords.length" class="ops-master-empty-inline ops-master-empty-inline-blue">
+                                <strong>暂无价格记录</strong>
+                                <span>保存常用品最近成交价、交期和采购链接，后续待采购跟进可直接套用。</span>
                             </div>
                             <div v-for="record in visiblePriceRecords" :key="'price-' + record.id" class="rounded-lg border border-slate-200 px-4 py-3">
                                 <div class="flex items-start justify-between gap-3">

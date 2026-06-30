@@ -5864,6 +5864,152 @@ body {
     line-height: 1.55;
 }
 
+.ops-master-empty-state {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(9.5rem, 12rem);
+    gap: 0.9rem;
+    align-items: center;
+    overflow: hidden;
+    border: 1px solid rgba(14, 165, 233, 0.2);
+    border-radius: 0.85rem;
+    background:
+        radial-gradient(circle at 84% 10%, rgba(14, 165, 233, 0.15), transparent 34%),
+        linear-gradient(145deg, #f8fafc 0%, #ffffff 52%, #f0f9ff 100%);
+    padding: 0.95rem;
+}
+
+.ops-master-empty-copy {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    align-items: flex-start;
+}
+
+.ops-master-empty-kicker {
+    display: inline-flex;
+    align-items: center;
+    height: 1.4rem;
+    padding: 0 0.5rem;
+    border-radius: 999px;
+    background: rgba(2, 132, 199, 0.11);
+    color: #0369a1;
+    font-size: 0.66rem;
+    font-weight: 900;
+    letter-spacing: 0;
+}
+
+.ops-master-empty-state h5 {
+    margin: 0.6rem 0 0;
+    color: #0f172a;
+    font-size: 1rem;
+    font-weight: 900;
+    line-height: 1.3;
+}
+
+.ops-master-empty-state p {
+    margin: 0.38rem 0 0;
+    color: #64748b;
+    font-size: 0.76rem;
+    line-height: 1.65;
+}
+
+.ops-master-empty-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.45rem;
+    width: 100%;
+    margin-top: 0.8rem;
+}
+
+.ops-master-empty-actions button {
+    display: inline-flex;
+    flex: 1 1 7.2rem;
+    align-items: center;
+    justify-content: center;
+    min-height: 2.1rem;
+    border: 1px solid rgba(186, 230, 253, 0.92);
+    border-radius: 0.55rem;
+    background: rgba(255, 255, 255, 0.9);
+    padding: 0 0.7rem;
+    color: #075985;
+    font-size: 0.72rem;
+    font-weight: 900;
+    white-space: nowrap;
+    transition: transform 0.16s ease, border-color 0.16s ease, box-shadow 0.16s ease;
+}
+
+.ops-master-empty-actions button:hover {
+    border-color: #0284c7;
+    box-shadow: 0 14px 28px -24px rgba(2, 132, 199, 0.72);
+    transform: translateY(-1px);
+}
+
+.ops-master-empty-actions .ops-master-empty-primary {
+    border-color: #0284c7;
+    background: #0284c7;
+    color: #ffffff;
+}
+
+.ops-master-empty-checklist {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+    margin-top: 0.68rem;
+}
+
+.ops-master-empty-checklist span {
+    display: inline-flex;
+    align-items: center;
+    min-height: 1.38rem;
+    padding: 0 0.48rem;
+    border-radius: 999px;
+    background: rgba(219, 234, 254, 0.82);
+    color: #1e40af;
+    font-size: 0.66rem;
+    font-weight: 800;
+}
+
+.ops-master-empty-visual {
+    width: min(100%, 12rem);
+    aspect-ratio: 1;
+    justify-self: center;
+    overflow: hidden;
+}
+
+.ops-master-empty-visual img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+}
+
+.ops-master-empty-inline {
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+    border: 1px dashed rgba(14, 165, 233, 0.34);
+    border-radius: 0.7rem;
+    background: rgba(240, 249, 255, 0.72);
+    padding: 0.8rem;
+}
+
+.ops-master-empty-inline strong {
+    color: #0f172a;
+    font-size: 0.78rem;
+    font-weight: 900;
+}
+
+.ops-master-empty-inline span {
+    color: #64748b;
+    font-size: 0.72rem;
+    line-height: 1.55;
+}
+
+.ops-master-empty-inline-blue {
+    border-color: rgba(37, 99, 235, 0.26);
+    background: rgba(239, 246, 255, 0.78);
+}
+
 .ops-procurement-field {
     display: grid;
     gap: 0.35rem;
@@ -6158,6 +6304,20 @@ body {
     }
 
     .ops-empty-actions button {
+        flex-basis: 100%;
+    }
+
+    .ops-master-empty-state {
+        grid-template-columns: 1fr;
+        gap: 0.7rem;
+        padding: 0.85rem;
+    }
+
+    .ops-master-empty-visual {
+        width: min(100%, 10rem);
+    }
+
+    .ops-master-empty-actions button {
         flex-basis: 100%;
     }
 
