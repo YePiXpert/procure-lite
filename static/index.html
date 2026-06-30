@@ -2345,7 +2345,25 @@
                                 </div>
                                 <button @click="$root.restoreFromWebdav(file.name)" :disabled="loading" class="text-blue-600 hover:text-blue-800 text-[10px] font-bold transition-all duration-200 ease-in-out disabled:opacity-60">恢复此备份</button>
                             </div>
-                            <div v-if="!backups.length" class="text-center py-8 text-slate-300 font-mono text-xs uppercase">没有找到云端备份</div>
+                            <div v-if="!backups.length" class="webdav-empty-state">
+                                <div class="webdav-empty-copy">
+                                    <span class="webdav-empty-kicker">CLOUD COPY</span>
+                                    <h4>没有找到云端备份</h4>
+                                    <p>先保存配置并测试连接；上传后会在这里显示远端副本，方便从云端恢复。</p>
+                                    <div class="webdav-empty-actions">
+                                        <button @click="$root.uploadBackupToWebdav()" :disabled="loading" type="button" class="webdav-empty-primary">立即上传备份</button>
+                                        <button @click="$root.loadWebdavBackups()" :disabled="loading" type="button">刷新列表</button>
+                                    </div>
+                                    <div class="webdav-empty-checklist" aria-label="云端备份准备步骤">
+                                        <span>保存配置</span>
+                                        <span>测试连接</span>
+                                        <span>上传后自动列出副本</span>
+                                    </div>
+                                </div>
+                                <div class="webdav-empty-visual" aria-hidden="true">
+                                    <img src="/static/illustrations/webdav-cloud-safe.png" alt="">
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
