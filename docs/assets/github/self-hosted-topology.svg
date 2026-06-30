@@ -1,0 +1,104 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="560" viewBox="0 0 1200 560" role="img" aria-labelledby="title desc">
+  <title id="title">Procure Lite self-hosted topology</title>
+  <desc id="desc">A GitHub README topology diagram showing browser and mobile PWA clients connecting through HTTPS to a VPS Docker deployment with FastAPI, SQLite, uploads, backups, and WebDAV sync.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1200" y2="560" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#f8fafc"/>
+      <stop offset=".5" stop-color="#ffffff"/>
+      <stop offset="1" stop-color="#eff6ff"/>
+    </linearGradient>
+    <filter id="shadow" x="30" y="50" width="1140" height="430" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse">
+      <feDropShadow dx="0" dy="18" stdDeviation="20" flood-color="#0f172a" flood-opacity=".12"/>
+    </filter>
+    <marker id="arrow" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="11" markerHeight="11" orient="auto">
+      <path d="M2 2l8 4-8 4z" fill="#2563eb"/>
+    </marker>
+    <style>
+      .t{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei",sans-serif;fill:#0f172a}
+      .muted{fill:#64748b}
+      .title{font-size:40px;font-weight:800}
+      .section{font-size:22px;font-weight:800}
+      .copy{font-size:16px;fill:#64748b}
+      .mini{font-size:14px;fill:#64748b}
+      .card{fill:#fff;stroke:#e2e8f0;stroke-width:1.5}
+    </style>
+  </defs>
+  <rect width="1200" height="560" fill="url(#bg)"/>
+  <text class="t title" x="70" y="70">自托管部署拓扑</text>
+  <text class="t muted" x="70" y="106" font-size="20">一台 VPS 承载应用、数据库、上传文件和备份目录；桌面与手机通过同一个 HTTPS 地址访问。</text>
+
+  <g filter="url(#shadow)">
+    <rect x="70" y="150" width="1060" height="330" rx="30" fill="#fff" stroke="#e2e8f0"/>
+  </g>
+
+  <g transform="translate(110 200)">
+    <rect class="card" x="0" y="0" width="220" height="94" rx="22"/>
+    <circle cx="48" cy="47" r="26" fill="#dbeafe"/>
+    <path d="M32 42h32M38 33h20M36 55h24" stroke="#2563eb" stroke-width="5" stroke-linecap="round"/>
+    <text class="t section" x="86" y="42">桌面浏览器</text>
+    <text class="t copy" x="86" y="66">录入、筛选、报表</text>
+  </g>
+  <g transform="translate(110 324)">
+    <rect class="card" x="0" y="0" width="220" height="94" rx="22"/>
+    <circle cx="48" cy="47" r="26" fill="#ccfbf1"/>
+    <rect x="35" y="25" width="26" height="44" rx="7" fill="none" stroke="#0f766e" stroke-width="4"/>
+    <path d="M42 57h12" stroke="#0f766e" stroke-width="4" stroke-linecap="round"/>
+    <text class="t section" x="86" y="42">移动 PWA</text>
+    <text class="t copy" x="86" y="66">途中查看与更新</text>
+  </g>
+
+  <path d="M350 246h96" stroke="#2563eb" stroke-width="4" marker-end="url(#arrow)"/>
+  <path d="M350 370h96" stroke="#2563eb" stroke-width="4" marker-end="url(#arrow)"/>
+
+  <g transform="translate(458 215)">
+    <rect x="0" y="0" width="168" height="188" rx="24" fill="#eff6ff" stroke="#bfdbfe" stroke-width="1.5"/>
+    <circle cx="84" cy="55" r="31" fill="#dbeafe"/>
+    <path d="M65 56h38M84 37v38" stroke="#2563eb" stroke-width="5" stroke-linecap="round"/>
+    <text class="t section" x="40" y="118">HTTPS</text>
+    <text class="t copy" x="32" y="146">域名 / 反代</text>
+    <text class="t mini" x="38" y="171">Caddy 或 Nginx</text>
+  </g>
+
+  <path d="M638 309h72" stroke="#2563eb" stroke-width="4" marker-end="url(#arrow)"/>
+
+  <g transform="translate(720 190)">
+    <rect x="0" y="0" width="330" height="238" rx="26" fill="#f8fafc" stroke="#cbd5e1" stroke-width="1.5"/>
+    <text class="t section" x="28" y="42">VPS Docker Compose</text>
+    <text class="t copy" x="28" y="68">单容器应用 + 持久化目录</text>
+
+    <g transform="translate(28 94)">
+      <rect class="card" x="0" y="0" width="126" height="92" rx="18"/>
+      <circle cx="32" cy="32" r="18" fill="#dbeafe"/>
+      <path d="M23 32h18M32 23v18" stroke="#2563eb" stroke-width="4" stroke-linecap="round"/>
+      <text class="t" x="20" y="65" font-size="17" font-weight="800">FastAPI</text>
+      <text class="t mini" x="18" y="82">静态 UI / API</text>
+    </g>
+    <g transform="translate(176 94)">
+      <rect class="card" x="0" y="0" width="126" height="92" rx="18"/>
+      <circle cx="32" cy="32" r="18" fill="#dcfce7"/>
+      <path d="M18 31c0-8 28-8 28 0v21c0 8-28 8-28 0zM18 31c0 8 28 8 28 0" fill="none" stroke="#16a34a" stroke-width="4"/>
+      <text class="t" x="18" y="65" font-size="17" font-weight="800">SQLite</text>
+      <text class="t mini" x="18" y="82">台账数据库</text>
+    </g>
+  </g>
+
+  <path d="M885 438v48" stroke="#2563eb" stroke-width="4" marker-end="url(#arrow)"/>
+
+  <g transform="translate(673 498)">
+    <rect class="card" x="0" y="-62" width="422" height="82" rx="22"/>
+    <g transform="translate(28 -40)">
+      <path d="M0 18h24l9 11h54v39H0z" fill="#fef3c7" stroke="#d97706" stroke-width="4" stroke-linejoin="round"/>
+    </g>
+    <text class="t section" x="134" y="-24">procure-lite-state/</text>
+    <text class="t copy" x="134" y="1">数据库、上传文件、日志、自动备份、WebDAV 配置</text>
+  </g>
+
+  <path d="M1048 309h54" stroke="#2563eb" stroke-width="4" marker-end="url(#arrow)"/>
+  <g transform="translate(1066 238)">
+    <rect class="card" x="0" y="0" width="118" height="142" rx="22"/>
+    <circle cx="59" cy="43" r="24" fill="#e0f2fe"/>
+    <path d="M43 45a18 18 0 1 0 6-14M43 27v18h18" fill="none" stroke="#0284c7" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+    <text class="t" x="26" y="90" font-size="18" font-weight="800">备份</text>
+    <text class="t mini" x="22" y="114">zip / WebDAV</text>
+  </g>
+</svg>
