@@ -1952,7 +1952,7 @@ body {
 
 .backup-hero {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(220px, 0.34fr);
+    grid-template-columns: minmax(0, 1fr) minmax(280px, 0.42fr);
     gap: 1rem;
     padding: 1.25rem;
     border-radius: 1.25rem;
@@ -1963,12 +1963,66 @@ body {
     box-shadow: 0 20px 45px -28px rgba(15, 23, 42, 0.55);
 }
 
+.backup-hero > .min-w-0 {
+    align-self: center;
+}
+
+.backup-hero-visual {
+    display: grid;
+    gap: 0.72rem;
+    min-width: 0;
+}
+
+.backup-visual-frame {
+    position: relative;
+    aspect-ratio: 4 / 3;
+    min-height: 12rem;
+    overflow: hidden;
+    border-radius: 1.05rem;
+    border: 1px solid rgba(255, 255, 255, 0.16);
+    background: rgba(255, 255, 255, 0.1);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.16);
+}
+
+.backup-visual-frame img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    object-position: center;
+    filter: saturate(0.94) contrast(1.02);
+}
+
 .backup-status-card {
     padding: 1rem;
     border-radius: 1rem;
     background: rgba(255, 255, 255, 0.12);
     border: 1px solid rgba(255, 255, 255, 0.16);
     backdrop-filter: blur(10px);
+}
+
+.backup-visual-meta {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    padding: 0.72rem 0.85rem;
+    border-radius: 0.9rem;
+    border: 1px solid rgba(204, 251, 241, 0.16);
+    background: rgba(15, 23, 42, 0.22);
+    color: rgba(240, 253, 250, 0.82);
+    font-size: 0.76rem;
+}
+
+.backup-visual-meta span {
+    min-width: 0;
+}
+
+.backup-visual-meta strong {
+    color: #ffffff;
+    font-size: 0.82rem;
+    font-weight: 850;
+    white-space: nowrap;
 }
 
 .backup-action-grid {
@@ -3983,6 +4037,21 @@ body {
         font-size: 1.42rem;
         line-height: 1.12;
         letter-spacing: 0;
+    }
+
+    .backup-hero-visual {
+        gap: 0.55rem;
+    }
+
+    .backup-visual-frame {
+        min-height: 10rem;
+        border-radius: 0.78rem;
+    }
+
+    .backup-status-card,
+    .backup-visual-meta {
+        border-radius: 0.72rem;
+        padding: 0.68rem;
     }
 
     .dashboard-hero-description,
