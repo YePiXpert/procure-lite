@@ -15,8 +15,24 @@
                             </span>
                         </div>
                         <div class="mt-4 space-y-3">
-                            <div v-if="!visiblePurchaseQueue.length" class="rounded-lg border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-sm text-slate-500">
-                                当前没有待采购跟进条目。
+                            <div v-if="!visiblePurchaseQueue.length" class="ops-procurement-empty-state">
+                                <div class="ops-procurement-empty-copy">
+                                    <span class="ops-procurement-empty-kicker">PROCUREMENT READY</span>
+                                    <h5>暂无待采购跟进</h5>
+                                    <p>导入或新增采购申请后，这里会沉淀供应商、预计到货、采购链接和价格记忆，方便直接转成采购单。</p>
+                                    <div class="ops-procurement-empty-actions">
+                                        <button @click="$root.$refs.fileInput && $root.$refs.fileInput.click()" type="button" class="ops-procurement-empty-primary">导入采购单据</button>
+                                        <button @click="$root.openAddModal()" type="button">手动新增记录</button>
+                                    </div>
+                                    <div class="ops-procurement-empty-checklist" aria-label="采购跟进准备项">
+                                        <span>供应商</span>
+                                        <span>预计到货</span>
+                                        <span>价格记忆</span>
+                                    </div>
+                                </div>
+                                <div class="ops-procurement-empty-visual" aria-hidden="true">
+                                    <img src="/static/illustrations/procurement-followup-ready.png" alt="">
+                                </div>
                             </div>
                             <div v-for="item in visiblePurchaseQueue.slice(0, 6)" :key="'purchase-' + item.item_id" class="rounded-xl border border-slate-200 px-4 py-4">
                                 <div class="flex items-start justify-between gap-3">
@@ -193,8 +209,9 @@
                             </span>
                         </div>
                         <div class="mt-4 space-y-3">
-                            <div v-if="!visibleReceiptQueue.length" class="rounded-lg border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-sm text-slate-500">
-                                当前没有待收货条目。
+                            <div v-if="!visibleReceiptQueue.length" class="ops-procurement-empty-inline ops-procurement-empty-inline-blue">
+                                <strong>暂无待收货条目</strong>
+                                <span>采购单保存为“已下单”后会进入这里，便于跟进预计到货、签收数量和异常说明。</span>
                             </div>
                             <div v-for="item in visibleReceiptQueue.slice(0, 6)" :key="'receipt-' + item.purchase_order_id" class="rounded-xl border border-slate-200 px-4 py-4">
                                 <div class="flex items-start justify-between gap-3">
@@ -273,8 +290,9 @@
                             </span>
                         </div>
                         <div class="mt-4 space-y-3">
-                            <div v-if="!visibleReplenishmentRecommendations.length" class="rounded-lg border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-sm text-slate-500">
-                                当前没有低库存补货建议。
+                            <div v-if="!visibleReplenishmentRecommendations.length" class="ops-procurement-empty-inline ops-procurement-empty-inline-green">
+                                <strong>暂无低库存补货建议</strong>
+                                <span>当库存档案、低库存阈值和供应商偏好具备后，系统会在这里给出补货数量和推荐供应商。</span>
                             </div>
                             <div v-for="item in visibleReplenishmentRecommendations.slice(0, 6)" :key="'replenishment-' + item.item_name" class="rounded-xl border border-slate-200 px-4 py-4">
                                 <div class="flex items-start justify-between gap-3">
