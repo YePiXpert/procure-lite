@@ -25,7 +25,7 @@
 
 ![Procure Lite 自托管采购工作台](./docs/assets/github/procure-lite-hero.png)
 
-当前版本：`1.2.100`
+当前版本：`1.2.101`
 
 Procure Lite 是一个面向个人、小团队和办公室场景的轻量采购台账工具，支持 PDF/图片单据 OCR 导入、采购执行跟踪、移动端卡片视图、统计报表、数据质检、审计日志和本地/WebDAV 备份。
 
