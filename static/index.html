@@ -369,10 +369,23 @@
                                         <strong>{{ card.count }}</strong>
                                     </button>
                                 </div>
-                                <div v-if="!dashboardTodoTotal" class="dashboard-todo-empty compact">
-                                    <div>
+                                <div v-if="!dashboardTodoTotal" class="dashboard-todo-empty dashboard-todo-empty-rich">
+                                    <div class="dashboard-todo-empty-copy">
+                                        <span class="dashboard-todo-empty-kicker">TODAY CLEAR</span>
                                         <strong>今日待办已清空</strong>
-                                        <span>采购闭环目前没有阻塞项。</span>
+                                        <span>采购闭环目前没有阻塞项，可以继续巡检执行看板或查看运营中心。</span>
+                                        <div class="dashboard-todo-empty-actions">
+                                            <button @click="switchView('execution')" type="button" class="dashboard-todo-empty-primary">执行看板</button>
+                                            <button @click="goToViewSubview('operations', 'overview')" type="button">运营中心</button>
+                                        </div>
+                                        <div class="dashboard-todo-empty-checklist" aria-label="今日待办清空后检查项">
+                                            <em>待采购</em>
+                                            <em>待到货</em>
+                                            <em>待报销</em>
+                                        </div>
+                                    </div>
+                                    <div class="dashboard-todo-empty-visual" aria-hidden="true">
+                                        <img src="/static/illustrations/dashboard-todo-clear.png" alt="">
                                     </div>
                                 </div>
                             </section>
