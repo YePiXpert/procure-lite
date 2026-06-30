@@ -3054,20 +3054,39 @@
                         </div>
                     </article>
                 </div>
-                <div v-if="items.length === 0" class="ledger-empty-state flex flex-col items-center justify-center py-24 px-6 text-center">
-                    <div class="inline-flex h-14 w-14 items-center justify-center rounded-xl bg-slate-100 text-slate-400">
-                        <svg class="h-7 w-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M3 7.5A2.5 2.5 0 015.5 5h13A2.5 2.5 0 0121 7.5v9A2.5 2.5 0 0118.5 19h-13A2.5 2.5 0 013 16.5v-9zM8 9h8M8 12h8M8 15h5"/>
-                        </svg>
-                    </div>
+                <div v-if="items.length === 0" class="ledger-empty-state">
                     <template v-if="$root.ledgerFilterChips.length">
-                        <p class="mt-4 text-base font-semibold text-slate-700">没有匹配当前筛选的台账记录</p>
-                        <p class="mt-1 text-sm text-slate-500">{{ $root.ledgerFilterSummary }}</p>
-                        <button @click="$root.clearFilters()" type="button" class="ledger-empty-state-action">一键清空筛选</button>
+                        <div class="ledger-empty-filter">
+                            <div class="inline-flex h-14 w-14 items-center justify-center rounded-xl bg-slate-100 text-slate-400">
+                                <svg class="h-7 w-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M3 7.5A2.5 2.5 0 015.5 5h13A2.5 2.5 0 0121 7.5v9A2.5 2.5 0 0118.5 19h-13A2.5 2.5 0 013 16.5v-9zM8 9h8M8 12h8M8 15h5"/>
+                                </svg>
+                            </div>
+                            <p class="mt-4 text-base font-semibold text-slate-700">没有匹配当前筛选的台账记录</p>
+                            <p class="mt-1 text-sm text-slate-500">{{ $root.ledgerFilterSummary }}</p>
+                            <button @click="$root.clearFilters()" type="button" class="ledger-empty-state-action">一键清空筛选</button>
+                        </div>
                     </template>
                     <template v-else>
-                        <p class="mt-4 text-base font-semibold text-slate-700">暂无采购数据</p>
-                        <p class="mt-1 text-sm text-slate-500">请点击上方“手动新增”或“导入单据”开始录入</p>
+                        <div class="ledger-empty-onboarding">
+                            <div class="ledger-empty-copy">
+                                <span class="ledger-empty-kicker">LEDGER WORKBENCH</span>
+                                <h3>暂无采购数据</h3>
+                                <p>先导入采购单据，或手动新增第一条记录；后续可在同一台账里跟踪状态、发票付款和附件。</p>
+                                <div class="ledger-empty-actions">
+                                    <button @click="$root.$refs.fileInput && $root.$refs.fileInput.click()" type="button" class="ledger-empty-primary">导入采购单据</button>
+                                    <button @click="$root.openAddModal()" type="button">手动新增记录</button>
+                                </div>
+                                <div class="ledger-empty-checklist" aria-label="台账记录跟踪点">
+                                    <span>采购状态</span>
+                                    <span>发票付款</span>
+                                    <span>附件链接</span>
+                                </div>
+                            </div>
+                            <div class="ledger-empty-visual" aria-hidden="true">
+                                <img src="/static/illustrations/ledger-workbench.png" alt="">
+                            </div>
+                        </div>
                     </template>
                 </div>
             </div>
