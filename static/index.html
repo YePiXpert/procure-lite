@@ -1627,13 +1627,38 @@
         </template>
 
         <template v-else>
-            <div class="flex-1 min-h-0 w-full bg-gradient-to-br from-slate-100 via-blue-50 to-slate-200 flex items-center justify-center p-6">
-                <div class="w-full max-w-md bg-white border border-slate-200 shadow-xl rounded-2xl overflow-hidden">
-                    <div class="px-6 py-5 border-b border-slate-200 bg-slate-50">
-                        <h2 class="text-lg font-semibold text-slate-900">Procure Lite · 管理员安全入口</h2>
-                        <p class="mt-1 text-xs text-slate-500">单管理员本地安全模型（30 分钟闲置自动退出）</p>
+            <div class="auth-shell">
+                <section class="auth-brand-panel">
+                    <div class="auth-brand-copy">
+                        <span class="auth-kicker">SELF-HOSTED PROCUREMENT</span>
+                        <h2>Procure Lite · 管理员安全入口</h2>
+                        <p>单管理员本地安全模型，把采购台账、附件和备份留在你的 VPS 上。</p>
                     </div>
-                    <div class="p-6 space-y-4">
+                    <div class="auth-illustration" aria-hidden="true">
+                        <img src="/static/illustrations/auth-security.png" alt="">
+                    </div>
+                    <div class="auth-security-list">
+                        <div>
+                            <strong>数据保存在你的 VPS</strong>
+                            <span>SQLite、上传文件和备份目录都在自托管环境中。</span>
+                        </div>
+                        <div>
+                            <strong>恢复码只显示一次</strong>
+                            <span>首次初始化后请离线保存，用于忘记密码时找回。</span>
+                        </div>
+                        <div>
+                            <strong>30 分钟闲置自动退出</strong>
+                            <span>降低共享设备或移动端长时间停留的风险。</span>
+                        </div>
+                    </div>
+                </section>
+
+                <section class="auth-form-panel">
+                    <div class="auth-form-header">
+                        <h2>管理员安全入口</h2>
+                        <p>单管理员本地安全模型（30 分钟闲置自动退出）</p>
+                    </div>
+                    <div class="auth-form-body">
                         <div v-if="authView === 'loading'" class="py-10 text-center text-sm text-slate-500">正在检查系统安全状态...</div>
 
                         <template v-else-if="authView === 'setup'">
@@ -1672,7 +1697,7 @@
                             {{ authMessage }}
                         </div>
                     </div>
-                </div>
+                </section>
             </div>
         </template>
 
