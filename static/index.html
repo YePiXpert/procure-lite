@@ -749,9 +749,24 @@
                                 </div>
                             </div>
 
-                            <div v-if="!amountReport.summary.totalRecords" class="mt-6 rounded-xl border border-slate-200 bg-slate-50/70 py-16 text-center">
-                                <p class="text-sm font-medium text-slate-600">暂无可统计数据</p>
-                                <p class="mt-1 text-xs text-slate-500">请先在台账页录入或导入采购记录</p>
+                            <div v-if="!amountReport.summary.totalRecords" class="reports-empty-state">
+                                <div class="reports-empty-copy">
+                                    <span class="reports-empty-kicker">REPORTING READY</span>
+                                    <h3>暂无可统计数据</h3>
+                                    <p>导入采购单据或在台账补齐记录后，这里会汇总费用、部门、供应商和执行效率。</p>
+                                    <div class="reports-empty-actions">
+                                        <button @click="$refs.fileInput && $refs.fileInput.click()" type="button" class="reports-empty-primary">导入采购单据</button>
+                                        <button @click="switchView('ledger')" type="button">查看台账</button>
+                                    </div>
+                                    <div class="reports-empty-checklist" aria-label="报表生成前的数据准备">
+                                        <span>补齐采购记录</span>
+                                        <span>填写单价金额</span>
+                                        <span>绑定供应商归属</span>
+                                    </div>
+                                </div>
+                                <div class="reports-empty-visual" aria-hidden="true">
+                                    <img src="/static/illustrations/reports-insight.png" alt="">
+                                </div>
                             </div>
 
                             <div v-if="amountReport.summary.totalRecords" class="mt-6 space-y-6">
