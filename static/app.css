@@ -2484,11 +2484,130 @@ body {
     white-space: nowrap;
 }
 
-.local-backup-meta,
-.local-backup-empty {
+.local-backup-meta {
     margin-top: 0.18rem;
     color: #64748b;
     font-size: 0.68rem;
+}
+
+.local-backup-empty-state {
+    display: grid;
+    gap: 0.85rem;
+    padding: 0.85rem;
+    overflow: hidden;
+    border-radius: 0.7rem;
+    background:
+        radial-gradient(circle at 86% 12%, rgba(20, 184, 166, 0.14), transparent 34%),
+        linear-gradient(160deg, #f8fafc 0%, #ffffff 54%, #eff6ff 100%);
+}
+
+.local-backup-empty-copy {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    align-items: flex-start;
+}
+
+.local-backup-empty-kicker {
+    display: inline-flex;
+    align-items: center;
+    height: 1.35rem;
+    padding: 0 0.45rem;
+    border-radius: 999px;
+    background: rgba(15, 118, 110, 0.1);
+    color: #0f766e;
+    font-size: 0.64rem;
+    font-weight: 900;
+    letter-spacing: 0;
+}
+
+.local-backup-empty-state h4 {
+    margin: 0.55rem 0 0;
+    color: #0f172a;
+    font-size: 0.98rem;
+    font-weight: 900;
+}
+
+.local-backup-empty-state p {
+    margin: 0.38rem 0 0;
+    color: #64748b;
+    font-size: 0.74rem;
+    line-height: 1.6;
+}
+
+.local-backup-empty-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.45rem;
+    width: 100%;
+    margin-top: 0.75rem;
+}
+
+.local-backup-empty-actions button {
+    display: inline-flex;
+    flex: 1 1 6.5rem;
+    align-items: center;
+    justify-content: center;
+    min-height: 2rem;
+    padding: 0 0.7rem;
+    border: 1px solid rgba(203, 213, 225, 0.86);
+    border-radius: 0.55rem;
+    background: rgba(255, 255, 255, 0.86);
+    color: #334155;
+    font-size: 0.72rem;
+    font-weight: 900;
+    white-space: nowrap;
+    transition: transform 0.16s ease, border-color 0.16s ease, box-shadow 0.16s ease;
+}
+
+.local-backup-empty-actions button:hover:not(:disabled) {
+    border-color: #0f766e;
+    box-shadow: 0 12px 26px -22px rgba(15, 118, 110, 0.72);
+    transform: translateY(-1px);
+}
+
+.local-backup-empty-actions button:disabled {
+    cursor: not-allowed;
+    opacity: 0.58;
+}
+
+.local-backup-empty-actions .local-backup-empty-primary {
+    border-color: #0f766e;
+    background: #0f766e;
+    color: #ffffff;
+}
+
+.local-backup-empty-checklist {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+    margin-top: 0.65rem;
+}
+
+.local-backup-empty-checklist span {
+    display: inline-flex;
+    align-items: center;
+    min-height: 1.35rem;
+    padding: 0 0.45rem;
+    border-radius: 999px;
+    background: rgba(226, 232, 240, 0.72);
+    color: #475569;
+    font-size: 0.64rem;
+    font-weight: 800;
+}
+
+.local-backup-empty-visual {
+    width: min(100%, 11rem);
+    aspect-ratio: 1;
+    justify-self: center;
+    overflow: hidden;
+}
+
+.local-backup-empty-visual img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
 }
 
 .local-backup-item button {
@@ -5099,6 +5218,14 @@ body {
 
     .local-backup-list-header {
         padding: 0.75rem;
+    }
+
+    .local-backup-empty-state {
+        padding: 0.75rem;
+    }
+
+    .local-backup-empty-visual {
+        width: min(100%, 9.5rem);
     }
 
     .mobile-ledger-edit-overlay {
