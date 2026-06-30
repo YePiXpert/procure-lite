@@ -1,4 +1,4 @@
-const CACHE_VERSION = '1.2.87';
+const CACHE_VERSION = '1.2.88';
 const CACHE_PREFIXES = [
     'procure-lite-shell-',
 ];
