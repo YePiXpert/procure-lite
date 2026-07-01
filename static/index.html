@@ -312,7 +312,7 @@
                             </div>
 
                             <div class="dashboard-ledger-table-wrap">
-                                <table class="dashboard-ledger-table">
+                                <table v-if="latestItems.length" class="dashboard-ledger-table">
                                     <thead>
                                         <tr>
                                             <th>流水号</th>
@@ -324,7 +324,7 @@
                                             <th>供应商</th>
                                         </tr>
                                     </thead>
-                                    <tbody v-if="latestItems.length">
+                                    <tbody>
                                         <tr v-for="item in latestItems" :key="`dashboard-ledger-row-${item.id}`" @click="openLedgerDetail(item)">
                                             <td>{{ item.serial_number || `REC-${item.id}` }}</td>
                                             <td>{{ item.department || '-' }}</td>
@@ -340,10 +340,24 @@
                                         </tr>
                                     </tbody>
                                 </table>
-                                <div v-if="!latestItems.length" class="dashboard-ledger-empty">
-                                    <strong>暂无采购数据</strong>
-                                    <span>可以先导入单据，或手动新增采购申请。</span>
-                                    <button @click="$refs.fileInput && $refs.fileInput.click()" type="button">导入采购单据</button>
+                                <div v-if="!latestItems.length" class="dashboard-ledger-empty dashboard-ledger-empty-rich">
+                                    <div class="dashboard-ledger-empty-copy">
+                                        <span class="dashboard-ledger-empty-kicker">LEDGER START</span>
+                                        <strong>暂无采购数据</strong>
+                                        <span>先导入采购单据建立第一批记录，之后首页会展示最近流转、供应商和状态变化。</span>
+                                        <div class="dashboard-ledger-empty-actions">
+                                            <button @click="$refs.fileInput && $refs.fileInput.click()" type="button" class="dashboard-ledger-empty-primary">导入采购单据</button>
+                                            <button @click="switchView('ledger')" type="button">打开完整台账</button>
+                                        </div>
+                                        <div class="dashboard-ledger-empty-checklist" aria-label="首页台账起步项">
+                                            <em>流水号</em>
+                                            <em>供应商</em>
+                                            <em>状态流转</em>
+                                        </div>
+                                    </div>
+                                    <div class="dashboard-ledger-empty-visual" aria-hidden="true">
+                                        <img src="/static/illustrations/dashboard-ledger-start.png" alt="">
+                                    </div>
                                 </div>
                             </div>
                         </section>
