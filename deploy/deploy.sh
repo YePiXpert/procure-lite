@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
-# Procure Lite 首次部署脚本（在 VPS 的仓库根目录执行）
-# 用法：bash deploy/deploy.sh [端口]
+# Procure Lite 首次部署脚本（默认部署到 /opt/procure-lite）
+# 用法：bash deploy/deploy.sh [端口] [部署目录]；也支持 curl | bash
+# 自定义目录：第二个参数或 PROCURE_REPO 环境变量
 # 镜像默认从 GHCR 拉取（CI 自动构建）；拉取失败时回退本地构建。
 set -euo pipefail
 
-cd "$(dirname "$0")/.."
+REPO_DIR="${2:-${PROCURE_REPO:-/opt/procure-lite}}"
 WEB_PORT="${1:-8080}"
 GHCR_OWNER="yepixpert"
 
@@ -21,6 +22,17 @@ if ! docker compose version >/dev/null 2>&1; then
   die "缺少 docker compose 插件（Docker 20.10+ 自带）"
 fi
 docker info >/dev/null 2>&1 || die "docker 守护进程未运行或当前用户无权限（试试 sudo）"
+
+# ---------- 准备部署目录 ----------
+# 源码可以位于 /workspace；部署始终使用显式目录或 /opt 默认目录。
+if [ ! -e "$REPO_DIR" ]; then
+  info "克隆仓库到 $REPO_DIR …"
+  git clone https://github.com/YePiXpert/procure-lite.git "$REPO_DIR"
+fi
+[ -d "$REPO_DIR/.git" ] && [ -f "$REPO_DIR/docker-compose.yml" ] \
+  || die "部署目录不是有效仓库：$REPO_DIR；请指定空的新路径或已有 Procure Lite 仓库"
+cd "$REPO_DIR"
+info "部署目录：$(pwd)"
 
 # ---------- 生成配置 ----------
 if [ ! -f .env ]; then
@@ -94,4 +106,4 @@ info "常用命令："
 info "  docker compose logs -f          # 看日志"
 info "  docker compose restart server   # 重启 API"
 info "  curl -fsSL https://raw.githubusercontent.com/YePiXpert/procure-lite/main/deploy/upgrade.sh | bash"
-info "                                  # 一行升级（任意目录；仓库不在 ~/procure-lite 时用 bash -s -- <目录> 指定）"
+info "                                  # 一行升级（任意目录；默认 /opt/procure-lite；其他目录用 bash -s -- <目录> 指定）"

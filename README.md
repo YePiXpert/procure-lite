@@ -69,22 +69,25 @@ cd apps/ocr && pytest   # 解析器单测 + API 集成（无需 paddle）
 
 > GHCR 包默认私有。首次发布后到 GitHub → 你的 Packages → 各镜像 → Settings → Change visibility 改为 **Public**（公开仓库无敏感信息）；或保持私有并在 VPS 上 `docker login ghcr.io`（PAT 勾选 `read:packages`）。
 
-**首次部署**（服务器上装好 git 与 docker 后）：
+**首次部署**（服务器上装好 git 与 docker，并以 root 或具有目标目录写权限的用户运行）：
 
 ```bash
-git clone https://github.com/YePiXpert/procure-lite.git && cd procure-lite
-bash deploy/deploy.sh          # 默认 8080 端口；自定义：bash deploy/deploy.sh 9000
+curl -fsSL https://raw.githubusercontent.com/YePiXpert/procure-lite/main/deploy/deploy.sh | bash
+# 自定义端口：同一命令末尾改为 bash -s -- 9000
+# 自定义目录：同一命令末尾改为 bash -s -- 8080 /srv/procure-lite
 ```
+
+默认部署目录为 `/opt/procure-lite`，不存在时自动克隆；已有仓库和 `.env` 会复用。源码开发副本可放在 `/workspace/procure-lite`，不会被脚本自动选为部署目标。目录优先级为显式参数 → `PROCURE_REPO` → `/opt/procure-lite`。
 
 脚本自动完成：生成 `.env`（随机 OCR_API_KEY）→ 从 GHCR 拉镜像并启动（拉取失败自动回退本地构建）→ 健康检查。首次访问 `http://<服务器IP>:8080` 设置管理员密码。
 
-**版本升级**（一行命令，任意目录执行；自动定位 `/opt/procure-lite` 或 `~/procure-lite`）：
+**版本升级**（一行命令，任意目录执行；默认操作 `/opt/procure-lite`）：
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/YePiXpert/procure-lite/main/deploy/upgrade.sh | bash
 ```
 
-仓库在其他位置时指定目录（`PROCURE_REPO` 环境变量也行）；在仓库内则直接 `bash deploy/upgrade.sh`，两者等价：
+旧部署或自定义部署在其他位置时，必须显式指定目录（`PROCURE_REPO` 环境变量也行）。即使从开发仓库运行脚本，默认目标仍是 `/opt/procure-lite`：
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/YePiXpert/procure-lite/main/deploy/upgrade.sh | bash -s -- /path/to/procure-lite

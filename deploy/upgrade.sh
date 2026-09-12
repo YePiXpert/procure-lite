@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # Procure Lite 升级脚本：拉代码 → 拉新镜像 → 备份数据 → 滚动升级 → 健康检查
 # 用法（任意目录均可执行）：
-#   bash deploy/upgrade.sh             # 仓库内执行（按脚本位置定位仓库根）
+#   bash deploy/upgrade.sh             # 默认操作 /opt/procure-lite
 #   curl -fsSL https://raw.githubusercontent.com/YePiXpert/procure-lite/main/deploy/upgrade.sh | bash
-#                                      # 一行升级：自动找 /opt/procure-lite、~/procure-lite
+#                                      # 一行升级：默认 /opt/procure-lite
 #   curl -fsSL …/upgrade.sh | bash -s -- /path/to/repo
 #                                      # 仓库在别处时指定目录（或用环境变量 PROCURE_REPO）
 # 可选参数：--build 本地构建（--full 连 OCR 一起）；--no-pull 跳过 git pull
@@ -13,22 +13,16 @@ info() { printf '\033[1;34m[升级]\033[0m %s\n' "$*"; }
 warn() { printf '\033[1;33m[警告]\033[0m %s\n' "$*"; }
 die()  { printf '\033[1;31m[错误]\033[0m %s\n' "$*" >&2; exit 1; }
 
-# ---------- 定位仓库目录 ----------
-# 优先级：首个非 -- 参数 > 环境变量 PROCURE_REPO > 脚本自身位置（curl|bash 时 $0 是 bash，自动跳过）> 常规安装路径
-REPO_DIR="${PROCURE_REPO:-}"
+# ---------- 定位部署目录 ----------
+# 优先级：首个非 -- 参数 > PROCURE_REPO > /opt/procure-lite。
+# 不根据脚本位置或当前工作目录选择仓库，以免覆盖 /workspace 开发副本。
+REPO_DIR="${PROCURE_REPO:-/opt/procure-lite}"
 if [ $# -gt 0 ] && [ "${1:0:2}" != "--" ]; then REPO_DIR="$1"; shift; fi
-if [ -z "$REPO_DIR" ] && [ -f "$0" ] && [ -f "$(dirname "$0")/../docker-compose.yml" ]; then
-  REPO_DIR="$(cd "$(dirname "$0")/.." && pwd)"
-fi
-if [ -z "$REPO_DIR" ]; then
-  for d in /opt/procure-lite "$HOME/procure-lite"; do
-    if [ -f "$d/docker-compose.yml" ]; then REPO_DIR="$d"; break; fi
-  done
-fi
-[ -n "$REPO_DIR" ] || die "找不到仓库目录：用参数指定（curl … | bash -s -- /path/to/procure-lite），或设置环境变量 PROCURE_REPO"
-[ -d "$REPO_DIR" ] || die "仓库目录不存在：$REPO_DIR"
+[ -d "$REPO_DIR" ] || die "部署目录不存在：$REPO_DIR；请先部署，或用参数 / PROCURE_REPO 指定已有目录"
+[ -d "$REPO_DIR/.git" ] && [ -f "$REPO_DIR/docker-compose.yml" ] \
+  || die "部署目录不是有效仓库：$REPO_DIR"
 cd "$REPO_DIR"
-info "仓库目录：$REPO_DIR"
+info "部署目录：$(pwd)"
 
 BUILD=0
 FULL=0
