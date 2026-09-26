@@ -28,7 +28,6 @@ import {
   LEDGER_SORT_LABELS,
   PAYMENT_STATUSES,
   PAYMENT_STATUS_LABELS,
-  type ItemStatus,
   type LedgerSort,
   type PaymentStatus,
 } from '@procure-lite/shared';
@@ -181,13 +180,10 @@ function goPage(p: number): void {
 /** 单条改动都带撤销：行内下拉误触的代价太低，必须给退路 */
 async function quickChange(
   item: ItemRow,
-  patch: { status?: ItemStatus; paymentStatus?: PaymentStatus },
+  patch: { paymentStatus: PaymentStatus },
   label: string,
 ): Promise<void> {
-  const previous = {
-    ...(patch.status ? { status: item.status as ItemStatus } : {}),
-    ...(patch.paymentStatus ? { paymentStatus: item.paymentStatus as PaymentStatus } : {}),
-  };
+  const previous = { paymentStatus: item.paymentStatus as PaymentStatus };
   try {
     await itemsApi.update(item.id, patch);
     toast.success(`「${item.itemName}」已标记为${label}`, {
@@ -376,14 +372,6 @@ async function exportXlsx(): Promise<void> {
           <NativeSelect
             size="sm"
             :model-value="''"
-            :options="statusOptions"
-            placeholder="批量改状态…"
-            aria-label="批量修改状态"
-            @update:model-value="(v) => v && askBatch({ status: v }, `状态改为「${ITEM_STATUS_LABELS[v as ItemStatus]}」`)"
-          />
-          <NativeSelect
-            size="sm"
-            :model-value="''"
             :options="paymentOptions"
             placeholder="批量改付款…"
             aria-label="批量修改付款状态"
@@ -498,17 +486,8 @@ async function exportXlsx(): Promise<void> {
                   <p v-if="row.unitPrice != null" class="text-meta text-faint">单价 {{ formatCurrency(row.unitPrice) }}</p>
                 </td>
                 <td class="text-xs">{{ row.supplierName ?? '—' }}</td>
-                <td>
-                  <NativeSelect
-                    v-if="tab === 'active'"
-                    size="sm"
-                    :model-value="row.status"
-                    :options="statusOptions"
-                    :aria-label="`修改 ${row.itemName} 状态`"
-                    @update:model-value="(v) => quickChange(row, { status: v as ItemStatus }, `「${ITEM_STATUS_LABELS[v as ItemStatus]}」`)"
-                  />
-                  <StatusBadge v-else :status="row.status" />
-                </td>
+                <!-- 状态只随工作台 / 发放 / 入库动作变化，台账里只读，避免与库存、发放记录脱节 -->
+                <td><StatusBadge :status="row.status" /></td>
                 <td>
                   <NativeSelect
                     v-if="tab === 'active'"

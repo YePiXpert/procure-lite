@@ -22,6 +22,7 @@ import type {
   ReportQuery,
   SupplierUpsertInput,
   BatchUpdateInput,
+  PurchaseRegisterInput,
 } from '@procure-lite/shared';
 
 /* ------------------------------- 通用分页结构 ------------------------------ */
@@ -70,6 +71,9 @@ export const itemsApi = {
   history: (id: number) => http.get(`/items/${id}/history`).then((r) => r.data),
   rollback: (id: number, historyId: number) => http.post(`/items/${id}/rollback`, { historyId }).then((r) => r.data),
   batchUpdate: (body: BatchUpdateInput) => http.post('/items/batch-update', body).then((r) => r.data),
+  /** 下单登记（整单或部分明细共用供应商） */
+  purchase: (body: PurchaseRegisterInput) =>
+    http.post<{ updated: number; ordered: number }>('/items/purchase', body).then((r) => r.data),
   batchDelete: (ids: number[]) =>
     http.post<{ deleted: number }>('/items/batch-delete', { ids }).then((r) => r.data),
   batchRestore: (ids: number[]) =>
@@ -206,6 +210,8 @@ export const inventoryApi = {
   createMovement: (body: MovementCreateInput) => http.post('/inventory/movements', body).then((r) => r.data),
   removeMovement: (id: number) => http.delete(`/inventory/movements/${id}`).then((r) => r.data),
   stockIn: (itemId: number) => http.post(`/inventory/stock-in/${itemId}`).then((r) => r.data),
+  stockInMany: (itemIds: number[]) =>
+    http.post<{ stocked: number }>('/inventory/stock-in', { itemIds }).then((r) => r.data),
 };
 
 /* --------------------------------- 供应商 ---------------------------------- */

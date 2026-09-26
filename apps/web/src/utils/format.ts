@@ -5,21 +5,10 @@ const CURRENCY = new Intl.NumberFormat('zh-CN', {
   maximumFractionDigits: 2,
 });
 
-const CURRENCY_COMPACT = new Intl.NumberFormat('zh-CN', {
-  minimumFractionDigits: 0,
-  maximumFractionDigits: 0,
-});
-
 /** ¥1,234.50；空值返回占位符 */
 export function formatCurrency(value: number | null | undefined, placeholder = '—'): string {
   if (value == null || !Number.isFinite(value)) return placeholder;
   return `¥${CURRENCY.format(value)}`;
-}
-
-/** ¥1,235（概览大数字用，省掉小数噪音） */
-export function formatCurrencyCompact(value: number | null | undefined, placeholder = '—'): string {
-  if (value == null || !Number.isFinite(value)) return placeholder;
-  return `¥${CURRENCY_COMPACT.format(value)}`;
 }
 
 /** 单价 × 数量；任一缺失返回占位符 */

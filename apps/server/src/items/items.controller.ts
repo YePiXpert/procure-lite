@@ -23,10 +23,12 @@ import {
   itemCreateSchema,
   itemQuerySchema,
   itemUpdateSchema,
+  purchaseRegisterSchema,
   type BatchUpdateInput,
   type ItemCreateInput,
   type ItemQuery,
   type ItemUpdateInput,
+  type PurchaseRegisterInput,
 } from '@procure-lite/shared';
 
 @Controller('items')
@@ -74,6 +76,16 @@ export class ItemsController {
     @Req() req: FastifyRequest,
   ) {
     return this.items.batchUpdate(body, clientIp(req));
+  }
+
+  /** 工作台下单登记（整单或部分明细） */
+  @Post('purchase')
+  @HttpCode(200)
+  purchase(
+    @Body(new ZodValidationPipe(purchaseRegisterSchema)) body: PurchaseRegisterInput,
+    @Req() req: FastifyRequest,
+  ) {
+    return this.items.registerPurchase(body, clientIp(req));
   }
 
   @Post('batch-restore')

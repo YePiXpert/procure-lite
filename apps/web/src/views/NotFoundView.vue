@@ -15,7 +15,7 @@ const router = useRouter();
     </div>
     <div class="flex gap-2">
       <Button variant="secondary" @click="router.back()">返回上一页</Button>
-      <Button variant="primary" @click="router.push('/dashboard')">回到概览</Button>
+      <Button variant="primary" @click="router.push('/workbench')">回到工作台</Button>
     </div>
   </div>
 </template>

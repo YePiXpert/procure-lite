@@ -65,6 +65,7 @@ const ACTION_LABELS: Record<string, string> = {
   CREATE: '创建',
   UPDATE: '修改',
   BATCH_UPDATE: '批量修改',
+  PURCHASE: '下单登记',
   IMPORT_CREATE: '导入创建',
   IMPORT_MERGE: '导入合并数量',
   DISTRIBUTE: '发放',

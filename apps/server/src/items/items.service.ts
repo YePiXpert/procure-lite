@@ -11,11 +11,16 @@ import { config } from '../config';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { AiSearchService } from '../ai/ai-search.service';
-import type {
-  BatchUpdateInput,
-  ItemCreateInput,
-  ItemQuery,
-  ItemUpdateInput,
+import {
+  ITEM_STATUS_LABELS,
+  canChangeStatusManually,
+  isFinalStatus,
+  type BatchUpdateInput,
+  type ItemCreateInput,
+  type ItemQuery,
+  type ItemStatus,
+  type ItemUpdateInput,
+  type PurchaseRegisterInput,
 } from '@procure-lite/shared';
 
 /** 参与快照/比对/回滚的字段 */
@@ -41,6 +46,27 @@ const SNAPSHOT_FIELDS = [
 ] as const;
 
 type Snapshot = Record<(typeof SNAPSHOT_FIELDS)[number], unknown>;
+
+/** 终态记录已对应发放记录/库存流水，这些字段一改账就对不上 */
+const FINAL_LOCKED_FIELDS = ['itemName', 'quantity'] as const;
+
+function statusLabel(status: string): string {
+  return ITEM_STATUS_LABELS[status as ItemStatus] ?? status;
+}
+
+/**
+ * 手工改状态只允许在执行中三态之间；终态必须经发放/入库产生，也不能手工改回。
+ * 返回错误文案，允许则返回 null。
+ */
+function manualStatusError(item: { itemName: string; status: string }, to: string | undefined): string | null {
+  if (!to || canChangeStatusManually(item.status, to)) return null;
+  if (isFinalStatus(item.status)) {
+    return item.status === 'DISTRIBUTED'
+      ? `「${item.itemName}」已发放，状态不能手工改回；如需撤销请在领用发放中作废对应发放单`
+      : `「${item.itemName}」已入库，状态不能手工改回；库存差异请在库存管理中做盘点调整`;
+  }
+  return `「${item.itemName}」不能直接改为「${statusLabel(to)}」：请在工作台用「发放」或「入库」完成，才会同步生成发放记录和库存流水`;
+}
 
 function snapshotOf(item: Record<string, unknown>): Snapshot {
   const snap: Record<string, unknown> = {};
@@ -182,6 +208,17 @@ export class ItemsService {
     const before = await this.prisma.item.findFirst({ where: { id, deletedAt: null } });
     if (!before) throw new NotFoundException('记录不存在');
 
+    const statusError = manualStatusError(before, input.status);
+    if (statusError) throw new BadRequestException(statusError);
+    if (isFinalStatus(before.status)) {
+      const locked = FINAL_LOCKED_FIELDS.filter((f) => input[f] !== undefined && input[f] !== before[f]);
+      if (locked.length > 0) {
+        throw new BadRequestException(
+          `「${before.itemName}」已${statusLabel(before.status)}，品名和数量已与发放/库存记录绑定，不能再修改`,
+        );
+      }
+    }
+
     const patch: Prisma.ItemUpdateInput = { ...input };
     if ('supplierId' in input) {
       patch.supplierName = await this.lookupSupplierName(input.supplierId ?? null);
@@ -215,12 +252,24 @@ export class ItemsService {
   }
 
   async batchUpdate(input: BatchUpdateInput, ip?: string) {
-    const { ids, patch } = input;
+    const { ids } = input;
+    const patch: Prisma.ItemUncheckedUpdateInput = { ...input.patch };
+    if ('supplierId' in input.patch) {
+      // 只改 supplierId 会让冗余的 supplierName 停留在旧供应商
+      patch.supplierName = await this.lookupSupplierName(input.patch.supplierId ?? null);
+    }
     const result = await this.prisma.$transaction(async (tx) => {
+      const targets = await tx.item.findMany({ where: { id: { in: ids }, deletedAt: null } });
+      // 先整体校验再写：一条不合法就整批拒绝，不留半截
+      const errors = targets.map((t) => manualStatusError(t, input.patch.status)).filter((e): e is string => !!e);
+      if (errors.length > 0) {
+        throw new BadRequestException(
+          errors.length === 1 ? errors[0] : `${errors.length} 条记录的状态不能这样修改，例如：${errors[0]}`,
+        );
+      }
       let updated = 0;
-      for (const id of ids) {
-        const before = await tx.item.findFirst({ where: { id, deletedAt: null } });
-        if (!before) continue;
+      for (const before of targets) {
+        const id = before.id;
         const after = await tx.item.update({ where: { id }, data: patch });
         const changed = diffSnapshots(snapshotOf(before), snapshotOf(after));
         if (Object.keys(changed).length > 0) {
@@ -244,6 +293,76 @@ export class ItemsService {
       ip,
     });
     return { updated: result };
+  }
+
+  /**
+   * 下单登记（整单或部分明细）：写供应商 / 成交价 / 链接，可选推进到「待到货」并记入比价库。
+   * 同一事务：任一条不在「待采购 / 待到货」就整批拒绝。
+   */
+  async registerPurchase(input: PurchaseRegisterInput, ip?: string) {
+    const ids = input.lines.map((l) => l.id);
+    if (new Set(ids).size !== ids.length) throw new BadRequestException('明细重复');
+    const supplierTouched = input.supplierId !== undefined;
+    const supplierName = supplierTouched ? await this.lookupSupplierName(input.supplierId) : undefined;
+
+    const results = await this.prisma.$transaction(async (tx) => {
+      const items = await tx.item.findMany({ where: { id: { in: ids }, deletedAt: null } });
+      if (items.length !== ids.length) throw new NotFoundException('部分台账记录不存在或已删除');
+      const blocked = items.find((i) => i.status !== 'PENDING_PURCHASE' && i.status !== 'PENDING_ARRIVAL');
+      if (blocked) {
+        throw new BadRequestException(`「${blocked.itemName}」当前为「${statusLabel(blocked.status)}」，不能再登记下单`);
+      }
+
+      const byId = new Map(items.map((i) => [i.id, i]));
+      const out: { id: number; ordered: boolean }[] = [];
+      for (const line of input.lines) {
+        const before = byId.get(line.id)!;
+        const data: Prisma.ItemUpdateInput = {};
+        if (supplierTouched) {
+          data.supplier = input.supplierId ? { connect: { id: input.supplierId } } : { disconnect: true };
+          data.supplierName = supplierName;
+        }
+        if (line.unitPrice !== undefined) data.unitPrice = line.unitPrice;
+        if (line.purchaseLink !== undefined) data.purchaseLink = line.purchaseLink || null;
+        const ordered = input.markOrdered && before.status === 'PENDING_PURCHASE';
+        if (ordered) data.status = 'PENDING_ARRIVAL';
+
+        const after = await tx.item.update({ where: { id: line.id }, data });
+        const changed = diffSnapshots(snapshotOf(before), snapshotOf(after));
+        if (Object.keys(changed).length > 0) {
+          await tx.itemHistory.create({
+            data: {
+              itemId: line.id,
+              action: 'PURCHASE',
+              changedFields: JSON.stringify(changed),
+              beforeData: JSON.stringify(snapshotOf(before)),
+              afterData: JSON.stringify(snapshotOf(after)),
+            },
+          });
+        }
+        const price = after.unitPrice;
+        if (input.rememberPrice && input.supplierId && price != null && price > 0) {
+          await tx.supplierPriceRecord.create({
+            data: {
+              supplierId: input.supplierId,
+              itemName: after.itemName,
+              unitPrice: price,
+              purchaseLink: after.purchaseLink ?? undefined,
+            },
+          });
+        }
+        out.push({ id: line.id, ordered });
+      }
+      return out;
+    });
+
+    const ordered = results.filter((r) => r.ordered).length;
+    await this.audit.log('ITEM_PURCHASE', {
+      entity: 'item',
+      detail: { ids, supplierId: input.supplierId ?? null, ordered },
+      ip,
+    });
+    return { updated: results.length, ordered };
   }
 
   async softDelete(ids: number[], ip?: string) {
@@ -352,6 +471,8 @@ export class ItemsService {
     const target = JSON.parse(record.afterData) as Snapshot;
     const before = await this.prisma.item.findFirst({ where: { id } });
     if (!before) throw new NotFoundException('记录不存在');
+    const statusError = manualStatusError(before, String(target.status ?? before.status));
+    if (statusError) throw new BadRequestException(`不能回滚到该版本：${statusError}`);
 
     const patch: Record<string, unknown> = {};
     for (const field of SNAPSHOT_FIELDS) {
@@ -386,7 +507,7 @@ export class ItemsService {
 
   /* --------------------------------- 导出 --------------------------------- */
 
-  /** 供报表/看板复用的列表查询（不分页限制） */
+  /** 供报表/导出复用的列表查询（不分页限制） */
   async findManyForExport(query: ItemQuery) {
     const where = await this.buildWhere({ ...query, deleted: query.deleted ?? undefined, page: 1, pageSize: 1 });
     return this.prisma.item.findMany({

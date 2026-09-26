@@ -24,29 +24,23 @@ interface NavItem {
   icon: string;
 }
 
+/**
+ * 主导航只放日常要去的地方。导入走顶栏主按钮；供应商、审计日志收进「系统设置」。
+ */
 const groups: { label: string; items: NavItem[] }[] = [
   {
-    label: '工作区',
+    label: '日常',
     items: [
-      { path: '/dashboard', title: '概览', icon: 'dashboard' },
+      { path: '/workbench', title: '工作台', icon: 'kanban' },
       { path: '/ledger', title: '采购台账', icon: 'ledger' },
-      { path: '/kanban', title: '执行看板', icon: 'kanban' },
-      { path: '/import', title: '导入单据', icon: 'import' },
       { path: '/distributions', title: '领用发放', icon: 'distribution' },
       { path: '/inventory', title: '库存管理', icon: 'inventory' },
     ],
   },
   {
-    label: '分析',
+    label: '管理',
     items: [
       { path: '/reports', title: '统计报表', icon: 'report' },
-      { path: '/suppliers', title: '供应商', icon: 'supplier' },
-    ],
-  },
-  {
-    label: '系统',
-    items: [
-      { path: '/audit', title: '审计日志', icon: 'audit' },
       { path: '/settings', title: '系统设置', icon: 'settings' },
     ],
   },
@@ -56,10 +50,10 @@ const allItems = computed(() => groups.flatMap((g) => g.items));
 
 /** 移动端底部四项 + 更多 */
 const mobileItems: NavItem[] = [
-  { path: '/dashboard', title: '概览', icon: 'dashboard' },
+  { path: '/workbench', title: '工作台', icon: 'kanban' },
   { path: '/ledger', title: '台账', icon: 'ledger' },
-  { path: '/kanban', title: '看板', icon: 'kanban' },
   { path: '/distributions', title: '发放', icon: 'distribution' },
+  { path: '/inventory', title: '库存', icon: 'inventory' },
 ];
 
 /** 「更多」里只列底部导航放不下的，避免重复 */

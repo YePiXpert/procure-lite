@@ -46,7 +46,7 @@ export default defineConfig({
     chunkSizeWarningLimit: 600,
     rollupOptions: {
       output: {
-        // 拆大依赖：echarts 只被 Dashboard/Reports 的异步路由引用，单独成 chunk 不拖累首屏；
+        // 拆大依赖：echarts 只被 Reports 的异步路由引用，单独成 chunk 不拖累首屏；
         // vue 生态是入口常驻依赖，成 vendor chunk 利于长缓存（内容 hash 不变就不失效）
         manualChunks(id: string): string | undefined {
           if (!id.includes('node_modules')) return undefined;

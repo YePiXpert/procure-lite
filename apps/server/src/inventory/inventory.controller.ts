@@ -3,6 +3,7 @@ import {
   Controller,
   Delete,
   Get,
+  HttpCode,
   Param,
   ParseIntPipe,
   Post,
@@ -18,9 +19,11 @@ import {
   movementCreateSchema,
   movementQuerySchema,
   productUpsertSchema,
+  stockInBatchSchema,
   type MovementCreateInput,
   type MovementQuery,
   type ProductUpsertInput,
+  type StockInBatchInput,
 } from '@procure-lite/shared';
 
 @Controller('inventory')
@@ -61,6 +64,15 @@ export class InventoryController {
   }
 
   /** 台账记录整单入库 */
+  @Post('stock-in')
+  @HttpCode(200)
+  stockInMany(
+    @Body(new ZodValidationPipe(stockInBatchSchema)) body: StockInBatchInput,
+    @Req() req: FastifyRequest,
+  ) {
+    return this.inventory.stockInMany(body.itemIds, clientIp(req));
+  }
+
   @Post('stock-in/:itemId')
   stockIn(
     @Param('itemId', ParseIntPipe) itemId: number,

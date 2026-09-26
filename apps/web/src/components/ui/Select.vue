@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { computed } from 'vue';
 import {
   SelectContent,
   SelectItem,
@@ -14,7 +15,7 @@ import {
 import Icon from './Icon.vue';
 import type { SelectOption } from './types';
 
-withDefaults(
+const props = withDefaults(
   defineProps<{
     modelValue?: string | null;
     options: SelectOption[];
@@ -29,6 +30,19 @@ withDefaults(
   { placeholder: '请选择' },
 );
 const emit = defineEmits<{ 'update:modelValue': [value: string] }>();
+
+/**
+ * reka 的 SelectItem 不接受空串值（空串保留给「清空 → 显示占位」），渲染时直接抛错。
+ * 调用方常用 { label: '未指定', value: '' } 表示「不选」：这里把它转成占位文字，
+ * 清空仍走 clearable 按钮。
+ */
+const items = computed(() => props.options.filter((o) => o.value !== ''));
+const placeholderText = computed(() => props.options.find((o) => o.value === '')?.label ?? props.placeholder);
+/**
+ * 选中项文字自己算：reka 的 SelectValue 要等选项挂载注册后才知道 label，
+ * 弹层未打开时（如编辑表单回填、URL 带筛选进入）会一直显示占位文字。
+ */
+const selectedLabel = computed(() => items.value.find((o) => o.value === props.modelValue)?.label);
 </script>
 
 <template>
@@ -55,7 +69,7 @@ const emit = defineEmits<{ 'update:modelValue': [value: string] }>();
           :aria-invalid="error ? 'true' : undefined"
         >
           <span class="truncate">
-            <SelectValue :placeholder="placeholder" />
+            <SelectValue :placeholder="placeholderText">{{ selectedLabel ?? placeholderText }}</SelectValue>
           </span>
           <Icon name="chevron-down" :size="14" class="shrink-0 text-muted" />
         </SelectTrigger>
@@ -80,7 +94,7 @@ const emit = defineEmits<{ 'update:modelValue': [value: string] }>();
           <SelectScrollUpButton class="flex h-6 items-center justify-center text-muted"><Icon name="chevron-down" :size="12" class="rotate-180" /></SelectScrollUpButton>
           <SelectViewport class="p-1">
             <SelectItem
-              v-for="opt in options"
+              v-for="opt in items"
               :key="opt.value"
               :value="opt.value"
               class="relative flex items-center h-8 px-7 pr-3 text-sm rounded-md cursor-pointer data-[highlighted]:bg-primary-soft data-[highlighted]:text-primary data-[state=checked]:font-semibold"

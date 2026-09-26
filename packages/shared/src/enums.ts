@@ -16,12 +16,32 @@ export const ITEM_STATUS_LABELS: Record<ItemStatus, string> = {
   STOCKED: '已入库',
 };
 
-/** 看板列只展示执行中的三个状态 */
-export const KANBAN_STATUSES: readonly ItemStatus[] = [
+/** 执行中的三个状态：彼此之间可手工流转（不产生库存/发放记录），工作台按列展示 */
+export const ACTIVE_ITEM_STATUSES = [
   'PENDING_PURCHASE',
   'PENDING_ARRIVAL',
   'PENDING_DISTRIBUTION',
-];
+] as const satisfies readonly ItemStatus[];
+export type ActiveItemStatus = (typeof ACTIVE_ITEM_STATUSES)[number];
+
+/** 工作台列（同执行中状态） */
+export const KANBAN_STATUSES: readonly ItemStatus[] = ACTIVE_ITEM_STATUSES;
+
+/**
+ * 终态只能由业务动作产生：「已发放」来自发放单，「已入库」来自整单入库，
+ * 两者都会同步写发放记录 / 库存流水。手工改成终态或从终态改回，
+ * 台账就会与库存、发放记录对不上。
+ */
+export function isFinalStatus(status: string): boolean {
+  return status === 'DISTRIBUTED' || status === 'STOCKED';
+}
+
+/** 手工（编辑 / 批量 / 工作台推进）能否把状态从 from 改为 to */
+export function canChangeStatusManually(from: string, to: string): boolean {
+  if (from === to) return true;
+  const active: readonly string[] = ACTIVE_ITEM_STATUSES;
+  return active.includes(from) && active.includes(to);
+}
 
 /** 付款状态 */
 export const PAYMENT_STATUSES = ['UNPAID', 'PAID', 'REIMBURSED'] as const;

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { formatAmount, formatBytes, formatCurrency, formatCurrencyCompact, formatNumber } from './format';
+import { formatAmount, formatBytes, formatCurrency, formatNumber } from './format';
 
 describe('金额格式化', () => {
   it('固定两位小数并加千分位', () => {
@@ -13,10 +13,6 @@ describe('金额格式化', () => {
     expect(formatCurrency(undefined)).toBe('—');
     expect(formatCurrency(Number.NaN)).toBe('—');
     expect(formatCurrency(null, '未填')).toBe('未填');
-  });
-
-  it('概览用的紧凑格式去掉小数', () => {
-    expect(formatCurrencyCompact(1234.56)).toBe('¥1,235');
   });
 
   it('单价 × 数量，缺任一项都是占位符', () => {

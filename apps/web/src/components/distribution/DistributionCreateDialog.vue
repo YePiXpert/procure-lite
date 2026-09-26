@@ -15,7 +15,7 @@ import { todayString } from '@/utils/datetime';
 const props = withDefaults(
   defineProps<{
     open: boolean;
-    /** 预选的待分发台账记录（从看板进入时传入） */
+    /** 预选的待分发台账记录（从工作台进入时传入） */
     presetItems?: ItemRow[];
   }>(),
   { presetItems: () => [] },
@@ -250,10 +250,10 @@ async function submit(): Promise<void> {
       </div>
 
       <p v-if="mode === 'DIRECT' && pendingItems.length === 0" class="mb-3 text-xs text-faint">
-        当前没有「待分发」状态的台账记录。可以先在看板里确认到货，或改用「从库存发放」。
+        当前没有「待分发」状态的台账记录。可以先在工作台确认到货，或改用「从库存发放」。
       </p>
       <p v-if="mode === 'STOCK' && products.length === 0" class="mb-3 text-xs text-faint">
-        库存里暂时没有可发放的物品。可以在库存页登记入库，或从看板把采购单整单入库。
+        库存里暂时没有可发放的物品。可以在库存页登记入库，或在工作台把采购单整单入库。
       </p>
 
       <!-- 明细行 -->

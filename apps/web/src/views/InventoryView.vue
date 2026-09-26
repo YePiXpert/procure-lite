@@ -359,6 +359,7 @@ function toggleLow(): void {
           <Select
             v-model="state.movementType"
             :options="[{ label: '全部类型', value: '' }, ...Object.entries(MOVEMENT_TYPE_LABELS).map(([v, l]) => ({ label: l, value: v }))]"
+            clearable
             class="w-36"
             @update:model-value="state.movementPage = 1; loadMovements()"
           />
@@ -439,7 +440,7 @@ function toggleLow(): void {
           type="number"
           min="0"
           step="any"
-          hint="库存 ≤ 该值时在概览提示"
+          hint="库存 ≤ 该值时在工作台提示"
           :error="productErrors.lowStockThreshold"
         />
       </div>

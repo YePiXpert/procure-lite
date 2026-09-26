@@ -9,17 +9,27 @@ export const router = createRouter({
       path: '/',
       component: () => import('@/components/layout/AppShell.vue'),
       children: [
-        { path: '', redirect: '/dashboard' },
-        { path: 'dashboard', name: 'dashboard', component: () => import('@/views/DashboardView.vue'), meta: { title: '概览', icon: 'dashboard' } },
+        { path: '', redirect: '/workbench' },
+        { path: 'workbench', name: 'workbench', component: () => import('@/views/WorkbenchView.vue'), meta: { title: '工作台', icon: 'kanban' } },
         { path: 'ledger', name: 'ledger', component: () => import('@/views/LedgerView.vue'), meta: { title: '采购台账', icon: 'ledger' } },
-        { path: 'kanban', name: 'kanban', component: () => import('@/views/KanbanView.vue'), meta: { title: '执行看板', icon: 'kanban' } },
         { path: 'import', name: 'import', component: () => import('@/views/ImportView.vue'), meta: { title: '导入单据', icon: 'import' } },
         { path: 'distributions', name: 'distributions', component: () => import('@/views/DistributionsView.vue'), meta: { title: '领用发放', icon: 'distribution' } },
         { path: 'inventory', name: 'inventory', component: () => import('@/views/InventoryView.vue'), meta: { title: '库存管理', icon: 'inventory' } },
         { path: 'reports', name: 'reports', component: () => import('@/views/ReportsView.vue'), meta: { title: '统计报表', icon: 'report' } },
-        { path: 'suppliers', name: 'suppliers', component: () => import('@/views/SuppliersView.vue'), meta: { title: '供应商', icon: 'supplier' } },
-        { path: 'audit', name: 'audit', component: () => import('@/views/AuditView.vue'), meta: { title: '审计日志', icon: 'audit' } },
-        { path: 'settings', name: 'settings', component: () => import('@/views/SettingsView.vue'), meta: { title: '系统设置', icon: 'settings' } },
+        {
+          path: 'settings',
+          component: () => import('@/components/layout/SettingsLayout.vue'),
+          children: [
+            { path: '', name: 'settings', component: () => import('@/views/SettingsView.vue'), meta: { title: '系统设置', icon: 'settings' } },
+            { path: 'suppliers', name: 'suppliers', component: () => import('@/views/SuppliersView.vue'), meta: { title: '供应商与比价', icon: 'supplier' } },
+            { path: 'audit', name: 'audit', component: () => import('@/views/AuditView.vue'), meta: { title: '审计日志', icon: 'audit' } },
+          ],
+        },
+        // 旧地址：书签与外部链接继续可用
+        { path: 'dashboard', redirect: '/workbench' },
+        { path: 'kanban', redirect: '/workbench' },
+        { path: 'suppliers', redirect: '/settings/suppliers' },
+        { path: 'audit', redirect: '/settings/audit' },
       ],
     },
     { path: '/:pathMatch(.*)*', name: 'not-found', component: () => import('@/views/NotFoundView.vue'), meta: { public: true } },
@@ -36,7 +46,7 @@ router.beforeEach(async (to) => {
   if (auth.unreachable) return to.path === '/login' ? true : { path: '/login' };
 
   if (to.meta.public) {
-    return auth.loggedIn && to.path === '/login' ? { path: '/dashboard' } : true;
+    return auth.loggedIn && to.path === '/login' ? { path: '/workbench' } : true;
   }
   // 未初始化时强制先走初始化流程；已初始化但未登录 → 登录页
   if (!auth.isInitialized) return { path: '/login' };

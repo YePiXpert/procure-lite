@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import {
+  ACTIVE_ITEM_STATUSES,
   DISTRIBUTION_SOURCES,
   ITEM_STATUSES,
   MOVEMENT_TYPES,
@@ -28,8 +29,8 @@ export const itemCreateSchema = z.object({
   purchaseLink: z.string().trim().max(500).optional(),
   unitPrice: nonNegativeNumber.optional(),
   supplierId: z.coerce.number().int().positive().optional().nullable(),
-  /** 初始状态（默认待采购） */
-  status: z.enum(ITEM_STATUSES).optional(),
+  /** 初始状态（默认待采购）；终态只能由发放/入库产生，不能直接创建 */
+  status: z.enum(ACTIVE_ITEM_STATUSES).optional(),
   note: z.string().trim().max(500).optional(),
 });
 export type ItemCreateInput = z.infer<typeof itemCreateSchema>;
@@ -40,6 +41,8 @@ export type ItemCreateInput = z.infer<typeof itemCreateSchema>;
  * Prisma 会当成「不改」而静默丢弃这次修改。
  */
 export const itemUpdateSchema = itemCreateSchema.partial().extend({
+  /** 允许回传当前终态（编辑表单整表提交）；能否变更由服务端按 canChangeStatusManually 判定 */
+  status: z.enum(ITEM_STATUSES).optional(),
   unit: z.string().trim().max(16).nullish(),
   purchaseLink: z.string().trim().max(500).nullish(),
   unitPrice: nonNegativeNumber.nullish(),
@@ -81,14 +84,38 @@ export type ItemQuery = z.infer<typeof itemQuerySchema>;
 export const batchUpdateSchema = z.object({
   ids: z.array(z.coerce.number().int().positive()).min(1, '请选择记录'),
   patch: z.object({
-    status: z.enum(ITEM_STATUSES).optional(),
+    status: z.enum(ACTIVE_ITEM_STATUSES).optional(),
     paymentStatus: z.enum(PAYMENT_STATUSES).optional(),
     invoiceIssued: z.boolean().optional(),
-    arrivalDate: dateString.optional(),
+    /** null = 清空（工作台撤销「到货」时用） */
+    arrivalDate: dateString.nullish(),
     supplierId: z.coerce.number().int().positive().nullable().optional(),
   }),
 });
 export type BatchUpdateInput = z.infer<typeof batchUpdateSchema>;
+
+/**
+ * 下单登记：一张单据的多条明细共用一个供应商，逐条填成交价/链接。
+ * 单价、链接缺省 = 不改；显式 null = 清空。
+ */
+export const purchaseRegisterSchema = z.object({
+  supplierId: z.coerce.number().int().positive().nullable().optional(),
+  lines: z
+    .array(
+      z.object({
+        id: z.coerce.number().int().positive(),
+        unitPrice: nonNegativeNumber.nullish(),
+        purchaseLink: z.string().trim().max(500).nullish(),
+      }),
+    )
+    .min(1, '请选择明细')
+    .max(200),
+  /** 同时把「待采购」的明细推进到「待到货」 */
+  markOrdered: z.boolean().default(true),
+  /** 单价记入供应商比价库 */
+  rememberPrice: z.boolean().default(true),
+});
+export type PurchaseRegisterInput = z.infer<typeof purchaseRegisterSchema>;
 
 /* ---------------------------------- 发放 ---------------------------------- */
 
@@ -135,6 +162,12 @@ export const productUpsertSchema = z.object({
   lowStockThreshold: nonNegativeNumber.optional(),
 });
 export type ProductUpsertInput = z.infer<typeof productUpsertSchema>;
+
+/** 批量整单入库：同一事务，任一条不满足条件则整批回滚 */
+export const stockInBatchSchema = z.object({
+  itemIds: z.array(z.coerce.number().int().positive()).min(1, '请选择记录').max(200),
+});
+export type StockInBatchInput = z.infer<typeof stockInBatchSchema>;
 
 export const movementCreateSchema = z.object({
   productId: z.coerce.number().int().positive(),

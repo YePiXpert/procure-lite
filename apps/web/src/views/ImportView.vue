@@ -14,7 +14,7 @@ import { useToastStore } from '@/stores/toast';
 import { useCatalogStore } from '@/stores/catalog';
 import { apiError } from '@/api/client';
 import { formatBytes, formatCurrency } from '@/utils/format';
-import type { AiOcrReviewResult, DuplicatePreview } from '@procure-lite/shared';
+import { ITEM_STATUS_LABELS, isFinalStatus, type AiOcrReviewResult, type DuplicatePreview, type ItemStatus } from '@procure-lite/shared';
 
 type Step = 'upload' | 'parsing' | 'review' | 'done';
 
@@ -253,8 +253,13 @@ const skipCount = computed(() => dupLines.value.filter((l) => l.action === 'skip
 const mergeCount = computed(() => dupLines.value.filter((l) => l.action === 'merge').length);
 const newCount = computed(() => lines.value.length - dupLines.value.length);
 
+/** 已发放 / 已入库的记录数量已落到发放记录与库存，只能跳过（服务端同样拒绝） */
+function canMerge(line: DraftLine): boolean {
+  return !!line.duplicate && !isFinalStatus(line.duplicate.matchedStatus);
+}
+
 function setAllDuplicateActions(action: 'skip' | 'merge'): void {
-  dupLines.value.forEach((l) => (l.action = action));
+  dupLines.value.forEach((l) => (l.action = action === 'merge' && !canMerge(l) ? 'skip' : action));
 }
 
 /* --------------------------------- AI 校对 -------------------------------- */
@@ -468,7 +473,7 @@ const currentStepIndex = computed(() => STEPS.findIndex((s) => s.key === step.va
 
       <div class="mt-6 pt-4 border-t border-line text-xs text-faint leading-relaxed">
         <p class="font-semibold text-muted mb-1">解析说明</p>
-        <p>PDF 优先读取文本层；截图/扫描件自动走本地 PaddleOCR（首次解析需加载模型，稍慢）。识别结果可逐项校对后入库，与已有台账重复的行可以选择跳过或把数量合并进去。入库后原始单据会作为附件留在每条台账上，随时可以回看。</p>
+        <p>PDF 优先读取文本层；截图/扫描件自动走本地 PaddleOCR（首次解析需加载模型，稍慢）。识别结果可逐项校对后导入台账，与已有台账重复的行可以选择跳过或把数量合并进去。导入后原始单据会作为附件留在每条台账上，随时可以回看。</p>
       </div>
     </div>
 
@@ -590,7 +595,10 @@ const currentStepIndex = computed(() => STEPS.findIndex((s) => s.key === step.va
             <div v-if="line.purchaseLink || line.duplicate" class="col-span-12 flex items-center gap-2 flex-wrap">
               <a v-if="line.purchaseLink" :href="line.purchaseLink" target="_blank" rel="noopener" class="text-meta text-primary hover:underline truncate max-w-72">{{ line.purchaseLink }}</a>
               <template v-if="line.duplicate">
-                <Badge tone="amber">台账 #{{ line.duplicate.matchedId }} 已有 ×{{ line.duplicate.matchedQuantity }}</Badge>
+                <Badge tone="amber">
+                  台账 #{{ line.duplicate.matchedId }} 已有 ×{{ line.duplicate.matchedQuantity }}
+                  · {{ ITEM_STATUS_LABELS[line.duplicate.matchedStatus as ItemStatus] ?? line.duplicate.matchedStatus }}
+                </Badge>
                 <div class="inline-flex rounded-md border border-line-strong overflow-hidden text-meta">
                   <button
                     class="h-6 px-2 cursor-pointer transition-colors"
@@ -600,8 +608,10 @@ const currentStepIndex = computed(() => STEPS.findIndex((s) => s.key === step.va
                     跳过
                   </button>
                   <button
-                    class="h-6 px-2 cursor-pointer transition-colors border-l border-line-strong"
+                    class="h-6 px-2 cursor-pointer transition-colors border-l border-line-strong disabled:cursor-not-allowed disabled:opacity-50"
                     :class="line.action === 'merge' ? 'bg-ink text-surface' : 'bg-surface text-muted hover:text-primary'"
+                    :disabled="!canMerge(line)"
+                    :title="canMerge(line) ? '' : '已发放或已入库的记录不能再合并数量'"
                     @click="line.action = 'merge'"
                   >
                     合并（→ {{ line.duplicate.matchedQuantity + (Number(line.quantity) || 0) }}）
@@ -634,7 +644,7 @@ const currentStepIndex = computed(() => STEPS.findIndex((s) => s.key === step.va
             <template v-if="skipCount > 0"> · 跳过 <b class="text-ink num">{{ skipCount }}</b> 条</template>
           </p>
           <Button variant="ghost" @click="reset">放弃导入</Button>
-          <Button variant="primary" :loading="confirming" @click="confirm">确认入库</Button>
+          <Button variant="primary" :loading="confirming" @click="confirm">导入台账</Button>
         </div>
       </div>
     </template>
@@ -655,7 +665,7 @@ const currentStepIndex = computed(() => STEPS.findIndex((s) => s.key === step.va
       </p>
       <div class="mt-3 flex gap-2">
         <Button variant="primary" @click="router.push('/ledger')">查看台账</Button>
-        <Button variant="secondary" @click="router.push('/kanban')">去看板下单</Button>
+        <Button variant="secondary" @click="router.push('/workbench')">去工作台下单</Button>
         <Button variant="ghost" @click="reset">继续导入下一单</Button>
       </div>
     </div>

@@ -184,51 +184,63 @@ export class InventoryService {
 
   /** 台账物品到货后整单入库：记录转「已入库」，库存增加 */
   async stockIn(itemId: number, ip?: string) {
-    const after = await this.prisma.$transaction(async (tx) => {
-      const item = await tx.item.findFirst({ where: { id: itemId, deletedAt: null } });
-      if (!item) throw new NotFoundException('台账记录不存在');
-      if (item.status !== 'PENDING_DISTRIBUTION') {
-        throw new BadRequestException('只有「待分发」状态的记录可以入库（请先确认到货）');
-      }
-
-      let product = await tx.product.findUnique({ where: { name: item.itemName } });
-      if (!product) {
-        product = await tx.product.create({
-          data: { name: item.itemName, unit: item.unit ?? undefined },
-        });
-      }
-
-      await tx.inventoryMovement.create({
-        data: {
-          productId: product.id,
-          quantity: item.quantity,
-          type: 'INBOUND',
-          relatedItemId: item.id,
-          note: `采购入库：${item.serialNumber}`,
-        },
-      });
-      await tx.product.update({
-        where: { id: product.id },
-        data: { stockQty: { increment: item.quantity } },
-      });
-
-      const after = await tx.item.update({
-        where: { id: item.id },
-        data: {
-          status: 'STOCKED',
-          arrivalDate: item.arrivalDate ?? todayString(),
-        },
-      });
-      await tx.itemHistory.create({
-        data: {
-          itemId: item.id,
-          action: 'STOCK_IN',
-          changedFields: JSON.stringify({ status: [item.status, 'STOCKED'] }),
-        },
-      });
-      return after;
-    });
+    const after = await this.prisma.$transaction((tx) => this.stockInTx(tx, itemId));
     await this.audit.log('ITEM_STOCK_IN', { entity: 'item', entityId: itemId, ip });
+    return after;
+  }
+
+  /** 工作台整单入库：多条明细同一事务，任一条不满足条件整批回滚 */
+  async stockInMany(itemIds: number[], ip?: string) {
+    const ids = [...new Set(itemIds)];
+    await this.prisma.$transaction(async (tx) => {
+      for (const id of ids) await this.stockInTx(tx, id);
+    });
+    await this.audit.log('ITEM_STOCK_IN', { entity: 'item', detail: { ids }, ip });
+    return { stocked: ids.length };
+  }
+
+  private async stockInTx(tx: Prisma.TransactionClient, itemId: number) {
+    const item = await tx.item.findFirst({ where: { id: itemId, deletedAt: null } });
+    if (!item) throw new NotFoundException('台账记录不存在');
+    if (item.status !== 'PENDING_DISTRIBUTION') {
+      throw new BadRequestException(`「${item.itemName}」不是「待分发」状态，不能入库（请先确认到货）`);
+    }
+
+    let product = await tx.product.findUnique({ where: { name: item.itemName } });
+    if (!product) {
+      product = await tx.product.create({
+        data: { name: item.itemName, unit: item.unit ?? undefined },
+      });
+    }
+
+    await tx.inventoryMovement.create({
+      data: {
+        productId: product.id,
+        quantity: item.quantity,
+        type: 'INBOUND',
+        relatedItemId: item.id,
+        note: `采购入库：${item.serialNumber}`,
+      },
+    });
+    await tx.product.update({
+      where: { id: product.id },
+      data: { stockQty: { increment: item.quantity } },
+    });
+
+    const after = await tx.item.update({
+      where: { id: item.id },
+      data: {
+        status: 'STOCKED',
+        arrivalDate: item.arrivalDate ?? todayString(),
+      },
+    });
+    await tx.itemHistory.create({
+      data: {
+        itemId: item.id,
+        action: 'STOCK_IN',
+        changedFields: JSON.stringify({ status: [item.status, 'STOCKED'] }),
+      },
+    });
     return after;
   }
 }

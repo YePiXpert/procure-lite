@@ -275,7 +275,7 @@ function exportStats(): void {
           v-else-if="rows.length === 0"
           :illustration="hasFilters ? 'search' : 'empty'"
           :title="hasFilters ? '没有符合条件的发放单' : '还没有发放记录'"
-          :description="hasFilters ? '试试放宽筛选条件' : '在看板或本页发起发放登记'"
+          :description="hasFilters ? '试试放宽筛选条件' : '在工作台或本页发起发放登记'"
         />
 
         <ul v-else class="divide-y divide-line">

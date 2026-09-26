@@ -42,6 +42,7 @@ const ACTION_LABELS: Record<string, { label: string; tone: 'blue' | 'teal' | 'am
   ITEM_CREATE: { label: '新增台账', tone: 'blue', group: '台账' },
   ITEM_UPDATE: { label: '修改台账', tone: 'blue', group: '台账' },
   ITEM_BATCH_UPDATE: { label: '批量修改', tone: 'blue', group: '台账' },
+  ITEM_PURCHASE: { label: '下单登记', tone: 'blue', group: '台账' },
   ITEM_DELETE: { label: '删除台账', tone: 'red', group: '台账' },
   ITEM_RESTORE: { label: '恢复台账', tone: 'teal', group: '台账' },
   ITEM_PURGE: { label: '彻底删除', tone: 'red', group: '台账' },

@@ -14,10 +14,12 @@ import { todayString } from '@/utils/datetime';
 import { formatCurrency } from '@/utils/format';
 import { debounce } from '@/utils/request';
 import {
-  ITEM_STATUSES,
+  ACTIVE_ITEM_STATUSES,
   ITEM_STATUS_LABELS,
   PAYMENT_STATUSES,
   PAYMENT_STATUS_LABELS,
+  isFinalStatus,
+  type ActiveItemStatus,
   type ItemStatus,
   type PaymentStatus,
 } from '@procure-lite/shared';
@@ -92,7 +94,16 @@ const supplierOptions = computed(() => [
   { label: '未指定', value: '' },
   ...catalog.suppliers.map((s) => ({ label: s.name, value: String(s.id) })),
 ]);
-const statusOptions = ITEM_STATUSES.map((s) => ({ label: ITEM_STATUS_LABELS[s], value: s }));
+/**
+ * 已发放 / 已入库由发放单、入库动作产生，并已落到发放记录与库存：
+ * 编辑时状态、品名、数量只读；其余记录只能在执行中三态之间改。
+ */
+const finalLocked = computed(() => isEdit.value && isFinalStatus(props.item?.status ?? ''));
+const statusOptions = computed(() =>
+  finalLocked.value
+    ? [{ label: ITEM_STATUS_LABELS[form.status], value: form.status }]
+    : ACTIVE_ITEM_STATUSES.map((s) => ({ label: ITEM_STATUS_LABELS[s], value: s })),
+);
 const paymentOptions = PAYMENT_STATUSES.map((s) => ({ label: PAYMENT_STATUS_LABELS[s], value: s }));
 
 /* ------------------------------- 历史报价建议 ------------------------------ */
@@ -211,6 +222,8 @@ async function save(): Promise<void> {
         purchaseLink: payload.purchaseLink ?? undefined,
         unitPrice: payload.unitPrice ?? undefined,
         note: payload.note ?? undefined,
+        // 新建时下拉只提供执行中三态
+        status: payload.status as ActiveItemStatus,
       });
       toast.success('已新增台账记录');
     }
@@ -274,6 +287,7 @@ async function save(): Promise<void> {
           v-model="form.itemName"
           label="品名"
           required
+          :disabled="finalLocked"
           placeholder="如：A4 复印纸"
           :error="errors.itemName"
           @update:model-value="fetchSuggestions($event)"
@@ -308,6 +322,8 @@ async function save(): Promise<void> {
         min="0"
         step="any"
         required
+        :disabled="finalLocked"
+        :hint="finalLocked ? '已与发放 / 库存记录绑定，不能修改' : undefined"
         :error="errors.quantity"
         @blur="validateField('quantity')"
       />
@@ -326,7 +342,7 @@ async function save(): Promise<void> {
       <div class="sm:col-span-2">
         <Input v-model="form.purchaseLink" label="采购链接" placeholder="https://…（可空）" />
       </div>
-      <Select v-model="form.status" label="状态" :options="statusOptions" />
+      <Select v-model="form.status" label="状态" :options="statusOptions" :disabled="finalLocked" />
       <Select v-model="form.paymentStatus" label="付款状态" :options="paymentOptions" />
       <Input v-model="form.arrivalDate" label="到货日期" type="date" hint="留空表示未到货" />
       <label class="flex items-center gap-2 mt-6 text-sm text-muted cursor-pointer select-none">

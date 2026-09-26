@@ -12,7 +12,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { OcrClient } from './ocr.client';
 import { config } from '../config';
-import type { ImportConfirmInput, ParseResult } from '@procure-lite/shared';
+import { isFinalStatus, type ImportConfirmInput, type ParseResult } from '@procure-lite/shared';
 
 const ALLOWED_EXTS = ['.pdf', '.png', '.jpg', '.jpeg', '.webp', '.bmp'];
 
@@ -191,6 +191,10 @@ export class ImportsService implements OnModuleInit {
 
         if (existing) {
           if (line.duplicateAction === 'merge') {
+            // 已发放/已入库的数量已落到发放记录与库存，再累加只会让台账凭空多出一截
+            if (isFinalStatus(existing.status)) {
+              throw new BadRequestException(`「${existing.itemName}」已发放或已入库，不能合并数量；请选择跳过`);
+            }
             const newQty = existing.quantity + line.quantity;
             const after = await tx.item.update({
               where: { id: existing.id },

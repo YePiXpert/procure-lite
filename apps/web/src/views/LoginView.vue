@@ -60,7 +60,7 @@ async function submit(): Promise<void> {
     } else {
       await auth.login(password.value);
       toast.success('登录成功');
-      const redirect = (route.query.redirect as string) || '/dashboard';
+      const redirect = (route.query.redirect as string) || '/workbench';
       void router.push(redirect);
     }
   } catch (e) {
@@ -99,7 +99,7 @@ async function copyCode(): Promise<void> {
 
 function finishSetup(): void {
   recoveryCodeIssued.value = '';
-  void router.push('/dashboard');
+  void router.push('/workbench');
 }
 
 const heading = computed(() =>
