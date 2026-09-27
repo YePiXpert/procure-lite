@@ -517,7 +517,7 @@ const totalBackupSize = computed(() => backups.value.reduce((sum, b) => sum + b.
     </section>
 
     <!-- AI 助手 -->
-    <section class="card p-5 lg:col-span-2">
+    <section class="card p-5">
       <div class="flex items-center gap-2 mb-1">
         <span
           class="flex items-center justify-center size-7 rounded-lg bg-primary-soft text-primary"
@@ -526,139 +526,174 @@ const totalBackupSize = computed(() => backups.value.reduce((sum, b) => sum + b.
         </span>
         <h2 class="text-sm font-semibold text-ink">AI 助手</h2>
       </div>
-      <p class="text-xs text-faint mb-4">
-        配置支持 Responses 的 GPT 服务，检测能力后开启每单自动识别。
-      </p>
-      <div class="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
-        <label
-          class="flex items-center gap-2 text-sm sm:col-span-2 lg:col-span-4 cursor-pointer select-none w-fit"
-        >
-          <input v-model="aiForm.enabled" type="checkbox" class="size-4 accent-primary" />
-          启用 AI 能力（问答 / 智能搜索 / OCR 校对）
-        </label>
-        <Input
-          v-model="aiForm.baseUrl"
-          label="接口地址"
-          placeholder="https://服务商地址/v1"
-          :error="aiErrors.baseUrl"
-        />
-        <div v-if="aiKeySet && !aiChangeKey" class="text-sm self-center">
-          <p>
-            {{
-              aiKeySource === 'server' ? '服务器已配置 Key，无需填写' : 'Key 已保存，无需重复填写'
-            }}
-          </p>
-          <button
-            v-if="aiKeySource !== 'server'"
-            type="button"
-            class="text-primary text-xs mt-1"
-            @click="aiChangeKey = true"
+      <p class="text-xs text-faint mb-5">连接一次服务，选好模型即可使用。</p>
+      <div class="max-w-2xl space-y-5">
+        <details :open="!aiKeySet" class="rounded-(--radius-control) border border-line px-4 py-3">
+          <summary class="cursor-pointer text-sm font-medium text-ink">
+            {{ aiKeySet ? '服务已配置 · 修改连接' : '连接 AI 服务' }}
+          </summary>
+          <div class="grid sm:grid-cols-2 gap-3 mt-4">
+            <Input
+              v-model="aiForm.baseUrl"
+              label="接口地址"
+              placeholder="https://服务商地址/v1"
+              :error="aiErrors.baseUrl"
+            />
+            <div v-if="aiKeySet && !aiChangeKey" class="text-sm self-center text-muted">
+              <p>
+                {{
+                  aiKeySource === 'server'
+                    ? '服务器已配置 Key，无需填写'
+                    : 'Key 已保存，无需重复填写'
+                }}
+              </p>
+              <button
+                v-if="aiKeySource !== 'server'"
+                type="button"
+                class="text-primary text-xs mt-1"
+                @click="aiChangeKey = true"
+              >
+                更换密钥
+              </button>
+            </div>
+            <Input
+              v-else
+              v-model="aiForm.apiKey"
+              type="password"
+              label="API Key"
+              :placeholder="aiKeySet ? '留空保留已保存的密钥' : '只需填写一次'"
+              autocomplete="new-password"
+              :error="aiErrors.apiKey"
+            />
+          </div>
+        </details>
+
+        <div class="flex items-start gap-3">
+          <ModelSelect
+            class="flex-1 min-w-0"
+            v-model="aiForm.model"
+            label="主模型"
+            :models="availableModels"
+            :error="aiErrors.model"
+          />
+          <Button
+            class="mt-6"
+            variant="secondary"
+            size="sm"
+            :loading="aiModelsLoading"
+            :disabled="aiConnectionDirty || !aiKeySet || aiSaving || aiTesting"
+            @click="loadAiModels"
+            >获取模型列表</Button
           >
-            更换密钥
-          </button>
         </div>
-        <Input
-          v-else
-          v-model="aiForm.apiKey"
-          type="password"
-          label="API Key"
-          :placeholder="aiKeySet ? '留空保留已保存的密钥' : '首次配置时填写一次'"
-          autocomplete="new-password"
-          :error="aiErrors.apiKey"
-        />
-        <ModelSelect
-          v-model="aiForm.model"
-          label="主模型"
-          :models="availableModels"
-          :error="aiErrors.model"
-        />
-        <label
-          class="flex items-center gap-2 text-sm cursor-pointer select-none self-end pb-2 w-fit"
-        >
-          <input v-model="aiForm.semanticSearch" type="checkbox" class="size-4 accent-primary" />
-          搜索时启用同义词扩展
-        </label>
-        <ModelSelect
-          v-model="aiForm.importModel"
-          label="单据识别模型"
-          :models="availableModels"
-          inherit
-        />
-        <ModelSelect
-          v-model="aiForm.askModel"
-          label="台账问答模型"
-          :models="availableModels"
-          inherit
-        />
-        <ModelSelect
-          v-model="aiForm.searchModel"
-          label="搜索扩展模型"
-          :models="availableModels"
-          inherit
-        />
-        <Input
-          v-model="aiForm.inputPrice"
-          label="每百万输入 tokens 单价"
-          type="number"
-          step="any"
-          placeholder="可空，服务商计价"
-        />
-        <Input
-          v-model="aiForm.outputPrice"
-          label="每百万输出 tokens 单价"
-          type="number"
-          step="any"
-          placeholder="可空，服务商计价"
-        />
-        <Input
-          v-model="aiForm.monthlyBudget"
-          label="月导入预算阈值"
-          type="number"
-          step="any"
-          placeholder="留空不限制；与单价同币种"
-        />
-        <p class="text-xs text-muted sm:col-span-2 lg:col-span-4">
-          按已记录的导入估算费用停止后续请求；不含问答、搜索，单页请求可能跨过阈值。用量未知时暂停预算控制下的自动导入。
+        <p v-if="aiConnectionDirty" class="text-xs text-muted">
+          连接信息已修改，保存后即可获取模型。
         </p>
-        <label class="sm:col-span-2 text-sm"
-          ><input v-model="aiForm.autoImport" type="checkbox" /> 每张新单据自动调用
-          GPT（先完成能力检测）</label
-        >
+        <p v-if="aiModelsError" role="status" class="text-xs text-amber">{{ aiModelsError }}</p>
+
+        <div class="space-y-3">
+          <label class="flex items-center gap-2 text-sm cursor-pointer w-fit">
+            <input v-model="aiForm.enabled" type="checkbox" class="size-4 accent-primary" />启用 AI
+            助手
+          </label>
+          <label class="flex items-center gap-2 text-sm cursor-pointer w-fit">
+            <input
+              v-model="aiForm.autoImport"
+              type="checkbox"
+              class="size-4 accent-primary"
+            />上传后自动识别单据
+          </label>
+          <p class="text-xs text-muted">自动识别会将原件发送给所选服务商，入账仍需你确认。</p>
+        </div>
+
+        <div class="flex flex-wrap items-center gap-2">
+          <Button
+            variant="primary"
+            size="sm"
+            :loading="aiSaving"
+            :disabled="aiTesting"
+            @click="saveAiConfig"
+            >保存</Button
+          >
+          <Button
+            variant="secondary"
+            size="sm"
+            :loading="aiTesting"
+            :disabled="aiSaving"
+            @click="testAi"
+            >检测连接</Button
+          >
+          <span v-if="aiCapabilities" class="text-xs text-muted">{{
+            aiCapabilities.image && aiCapabilities.structured
+              ? '已通过识别检测'
+              : '检测未通过，请检查连接或模型'
+          }}</span>
+          <span v-else class="text-xs text-muted">首次开启自动识别前，请先检测连接。</span>
+        </div>
+
+        <details class="border-t border-line pt-3">
+          <summary class="text-xs text-muted cursor-pointer w-fit">高级设置</summary>
+          <div class="grid sm:grid-cols-2 gap-3 mt-4">
+            <p class="text-xs text-faint sm:col-span-2">以下均为可选项，不设置时统一使用主模型。</p>
+            <ModelSelect
+              v-model="aiForm.importModel"
+              label="单据识别模型"
+              :models="availableModels"
+              inherit
+            />
+            <ModelSelect
+              v-model="aiForm.askModel"
+              label="台账问答模型"
+              :models="availableModels"
+              inherit
+            />
+            <ModelSelect
+              v-model="aiForm.searchModel"
+              label="搜索扩展模型"
+              :models="availableModels"
+              inherit
+            />
+            <label class="flex items-center gap-2 text-sm cursor-pointer self-center">
+              <input
+                v-model="aiForm.semanticSearch"
+                type="checkbox"
+                class="size-4 accent-primary"
+              />搜索时扩展同义词
+            </label>
+            <Input
+              v-model="aiForm.inputPrice"
+              label="每百万输入 tokens 单价"
+              type="number"
+              step="any"
+              placeholder="可空，服务商计价"
+            />
+            <Input
+              v-model="aiForm.outputPrice"
+              label="每百万输出 tokens 单价"
+              type="number"
+              step="any"
+              placeholder="可空，服务商计价"
+            />
+            <Input
+              v-model="aiForm.monthlyBudget"
+              label="月导入预算阈值"
+              type="number"
+              step="any"
+              placeholder="留空不限制"
+            />
+            <p class="text-xs text-muted sm:col-span-2">
+              预算仅统计导入估算费用，不含问答和搜索；与单价同币种。用量未知时暂停预算控制下的自动导入，单次调用可能超出阈值。
+            </p>
+            <p v-if="aiCapabilities" class="text-xs text-muted sm:col-span-2">
+              检测时间 {{ aiCapabilities.checkedAt }} · 文本
+              {{ aiCapabilities.text ? '通过' : '失败' }} · 图像
+              {{ aiCapabilities.image ? '通过' : '失败' }} · 结构化输出
+              {{ aiCapabilities.structured ? '通过' : '失败' }} · 工具往返
+              {{ aiCapabilities.tools ? '通过' : '失败' }}
+            </p>
+          </div>
+        </details>
       </div>
-      <div class="flex flex-wrap items-center gap-2 mt-4">
-        <Button
-          variant="secondary"
-          size="sm"
-          :loading="aiModelsLoading"
-          :disabled="aiConnectionDirty || !aiKeySet || aiSaving || aiTesting"
-          @click="loadAiModels"
-          >获取模型列表</Button
-        >
-        <Button variant="primary" size="sm" :loading="aiSaving" @click="saveAiConfig">保存</Button>
-        <Button variant="secondary" size="sm" :loading="aiTesting" @click="testAi">
-          <Icon name="refresh" :size="13" /> 保存并检测 Responses 能力
-        </Button>
-      </div>
-      <p class="text-xs text-muted mt-3">
-        {{
-          aiConnectionDirty
-            ? '服务地址或密钥已修改，请先保存，再获取模型列表。'
-            : '模型列表来自已保存的服务。选好模型后保存；是否支持识别与工具调用，仍需能力检测。'
-        }}
-      </p>
-      <p v-if="aiModelsError" role="status" class="text-xs text-amber mt-2">{{ aiModelsError }}</p>
-      <p v-if="aiCapabilities" class="text-xs mt-3">
-        检测时间 {{ aiCapabilities.checkedAt }} · 文本 {{ aiCapabilities.text ? '通过' : '失败' }} ·
-        图像 {{ aiCapabilities.image ? '通过' : '失败' }} · 结构化输出
-        {{ aiCapabilities.structured ? '通过' : '失败' }} · 工具往返
-        {{ aiCapabilities.tools ? '通过' : '失败' }}
-      </p>
-      <p
-        class="mt-3 px-3 py-2 bg-amber-soft border border-amber/25 rounded-(--radius-control) text-xs text-amber"
-      >
-        开启自动导入后，单据原件会发送给配置的服务商。store:false
-        不代表第三方零留存。密钥优先读取服务器配置；在本页面保存的密钥仍存于本机数据库。
-      </p>
     </section>
 
     <!-- 自动备份 -->
