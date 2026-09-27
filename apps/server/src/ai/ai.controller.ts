@@ -1,3 +1,4 @@
+import { capabilityImage } from './capability-image';
 import { Body, Controller, Get, HttpCode, Post, Put, Req } from '@nestjs/common';
 import type { FastifyRequest } from 'fastify';
 import {
@@ -44,11 +45,105 @@ export class AiController {
     return { ok: await this.llm.ping(cfg.baseUrl, cfg.apiKey, cfg.model) };
   }
 
+  @Post('capabilities')
+  async capabilities() {
+    const cfg = await this.aiConfig.getConfig();
+    const result = {
+      checkedAt: new Date().toISOString(),
+      text: false,
+      image: false,
+      structured: false,
+      tools: false,
+    };
+    const base = {
+      baseUrl: cfg.baseUrl,
+      apiKey: cfg.apiKey,
+      model: cfg.importModel || cfg.model,
+      maxTokens: 512,
+      timeoutMs: 30000,
+    };
+    result.text = await this.llm.ping(cfg.baseUrl, cfg.apiKey, cfg.model);
+    try {
+      const image = await this.llm.chat({
+        ...base,
+        messages: [
+          {
+            role: 'user',
+            content:
+              'Name the left and right colors. Reply RED_BLUE if left is red and right is blue.',
+            image: capabilityImage(),
+          },
+        ],
+      });
+      result.image = image.content?.trim() === 'RED_BLUE';
+    } catch {
+      /* each capability is independently reported */
+    }
+    try {
+      const schema = {
+        type: 'object',
+        properties: { value: { type: 'integer', enum: [7] } },
+        required: ['value'],
+        additionalProperties: false,
+      };
+      const values = await Promise.all(
+        [...new Set([cfg.importModel || cfg.model, cfg.searchModel || cfg.model])].map((model) =>
+          this.llm.chat({
+            ...base,
+            model,
+            schema,
+            messages: [{ role: 'user', content: 'Return value 7.' }],
+          }),
+        ),
+      );
+      result.structured = values.every(
+        (v) => JSON.stringify(JSON.parse(v.content || '{}')) === '{"value":7}',
+      );
+    } catch {
+      /* report unsupported schema */
+    }
+    try {
+      const opts = { ...base, model: cfg.askModel || cfg.model };
+      const first = await this.llm.chat({
+        ...opts,
+        messages: [{ role: 'user' as const, content: 'Call capability_check with value 7.' }],
+        tools: [
+          {
+            type: 'function',
+            function: {
+              name: 'capability_check',
+              description: 'Required capability test',
+              parameters: {
+                type: 'object',
+                properties: { value: { type: 'integer' } },
+                required: ['value'],
+                additionalProperties: false,
+              },
+            },
+          },
+        ],
+      });
+      const call = first.toolCalls[0];
+      if (call?.name === 'capability_check' && (call.args as { value?: number }).value === 7) {
+        const second = await this.llm.chat({
+          ...opts,
+          messages: [
+            { role: 'user', content: 'Call capability_check and repeat its result exactly.' },
+            { role: 'assistant', content: null, responseItems: first.outputItems },
+            { role: 'tool', tool_call_id: call.id, content: 'CAPABILITY_OK' },
+          ],
+        });
+        result.tools = second.content?.trim() === 'CAPABILITY_OK';
+      }
+    } catch {
+      /* report incomplete tool roundtrip */
+    }
+    await this.aiConfig.saveCapabilities(cfg, result);
+    return result;
+  }
+
   @Post('ask')
-  ask(
-    @Body(new ZodValidationPipe(aiAskSchema)) body: AiAskInput,
-    @Req() req: FastifyRequest,
-  ) {
+  ask(@Body(new ZodValidationPipe(aiAskSchema)) body: AiAskInput, @Req() req: FastifyRequest) {
     return this.ai.ask(body, clientIp(req));
   }
 

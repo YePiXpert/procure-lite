@@ -1,3 +1,4 @@
+import { maintenance } from './common/maintenance';
 import type { NestFastifyApplication } from '@nestjs/platform-fastify';
 import type { FastifyPluginCallback } from 'fastify';
 import type { FastifyCookieOptions } from '@fastify/cookie';
@@ -19,5 +20,29 @@ export async function configureApp(app: NestFastifyApplication): Promise<void> {
   await app.register(fastifyMultipart as FastifyPluginCallback<FastifyMultipartOptions>, {
     limits: { fileSize: config.maxUploadBytes, files: 1 },
   });
+  const fastify = app.getHttpAdapter().getInstance();
+  const releases = new WeakMap<object, () => void>();
+  fastify.addHook(
+    'onRequest',
+    async (
+      req: { method: string; url: string },
+      reply: { code: (n: number) => { send: (body: unknown) => void } },
+    ) => {
+      if (maintenance.locked) {
+        reply.code(503).send({ message: '备份或恢复维护中，请稍后重试' });
+        return;
+      }
+      const exclusive =
+        req.method === 'POST' &&
+        /^\/api\/system\/backups(?:\/[^/]+\/restore)?(?:\?|$)/.test(req.url);
+      if (!exclusive) releases.set(req, maintenance.enter());
+    },
+  );
+  const release = async (req: object) => {
+    releases.get(req)?.();
+    releases.delete(req);
+  };
+  fastify.addHook('onResponse', release);
+  fastify.addHook('onError', release);
   app.useGlobalFilters(new PrismaExceptionFilter());
 }

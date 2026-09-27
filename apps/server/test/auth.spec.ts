@@ -29,15 +29,27 @@ describe('认证流程', () => {
     expect(res.statusCode).toBe(201);
     expect(res.json().recoveryCode).toMatch(/^[A-Z2-9]{16}$/);
 
-    const dup = await ctx.inject({ method: 'POST', url: '/api/auth/setup', payload: { password: 'another-one-8' } });
+    const dup = await ctx.inject({
+      method: 'POST',
+      url: '/api/auth/setup',
+      payload: { password: 'another-one-8' },
+    });
     expect(dup.statusCode).toBe(409);
   });
 
   it('密码错误返回 401，正确密码登录成功并种下会话 Cookie', async () => {
-    const bad = await ctx.inject({ method: 'POST', url: '/api/auth/login', payload: { password: 'wrong-pass' } });
+    const bad = await ctx.inject({
+      method: 'POST',
+      url: '/api/auth/login',
+      payload: { password: 'wrong-pass' },
+    });
     expect(bad.statusCode).toBe(401);
 
-    const ok = await ctx.inject({ method: 'POST', url: '/api/auth/login', payload: { password: 'super-secret-8' } });
+    const ok = await ctx.inject({
+      method: 'POST',
+      url: '/api/auth/login',
+      payload: { password: 'super-secret-8' },
+    });
     expect(ok.statusCode).toBe(200);
     const setCookie = ok.headers['set-cookie'] as unknown as string[];
     expect(String(Array.isArray(setCookie) ? setCookie[0] : setCookie)).toContain('pl_session=');
@@ -47,7 +59,11 @@ describe('认证流程', () => {
   });
 
   it('登录后可访问业务接口，伪造 Cookie 拒绝', async () => {
-    const ok = await ctx.inject({ method: 'GET', url: '/api/items', headers: { cookie: ctx.cookie } });
+    const ok = await ctx.inject({
+      method: 'GET',
+      url: '/api/items',
+      headers: { cookie: ctx.cookie, 'idempotency-key': crypto.randomUUID() },
+    });
     expect(ok.statusCode).toBe(200);
 
     const forged = await ctx.inject({

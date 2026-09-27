@@ -47,16 +47,16 @@ URL_RE = re.compile(r"https?://[^\s，,；;）)、】\]]+")
 
 def parse_quantity(text: str) -> float | None:
     """提取数量：优先行尾独立数字，其次带单位写法。"""
-    m = re.search(r"(?<![A-Za-z\d.])\d+(?:\.\d+)?\s*" + UNIT_RE + r"\s*$", text)
-    if m:
-        return float(re.match(r"\d+(?:\.\d+)?", m.group(0)).group(0))
-    m = re.search(r"[xX×]\s*(\d+(?:\.\d+)?)\s*$", text)
-    if m:
-        return float(m.group(1))
-    m = QTY_TOKEN_RE.search(text)
-    if m:
-        return float(m.group(1))
-    return None
+    text = URL_RE.sub("", text)
+    text = PRICE_LABELED_RE.sub("", PRICE_SYMBOL_RE.sub("", text)).strip()
+    m = re.search(r"(?:数量)[:：]?\s*(\d+(?:\.\d+)?)", text)
+    if not m:
+        m = re.search(r"(?<![A-Za-z\d.])(\d+(?:\.\d+)?)\s*" + UNIT_RE, text)
+    if not m:
+        m = re.search(r"[xX×]\s*(\d+(?:\.\d+)?)\s*$", text)
+    if not m:
+        m = re.search(r"(?:^|\s)(\d+(?:\.\d+)?)\s*$", text)
+    return float(m.group(1)) if m else None
 
 
 def parse_price(text: str) -> float | None:

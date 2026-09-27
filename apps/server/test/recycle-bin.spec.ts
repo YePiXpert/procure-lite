@@ -17,7 +17,7 @@ beforeAll(async () => {
 afterAll(() => closeApp(ctx));
 
 function auth(payload: Record<string, unknown> = {}): Record<string, unknown> {
-  return { headers: { cookie: ctx.cookie }, ...payload };
+  return { headers: { cookie: ctx.cookie, 'idempotency-key': crypto.randomUUID() }, ...payload };
 }
 
 async function seed(serial: string, itemName: string): Promise<number> {
@@ -32,7 +32,11 @@ async function seed(serial: string, itemName: string): Promise<number> {
 describe('回收站批量操作', () => {
   it('批量恢复把记录一起放回台账', async () => {
     const ids = [await seed('RB-001', '回形针'), await seed('RB-002', '便利贴')];
-    await ctx.inject({ method: 'POST', url: '/api/items/batch-delete', ...auth({ payload: { ids } }) });
+    await ctx.inject({
+      method: 'POST',
+      url: '/api/items/batch-delete',
+      ...auth({ payload: { ids } }),
+    });
 
     const bin = await ctx.inject({ method: 'GET', url: '/api/items?deleted=only', ...auth() });
     expect(bin.json().total).toBe(2);
@@ -55,13 +59,25 @@ describe('回收站批量操作', () => {
     const ids = list.json().items.map((i: { id: number }) => i.id);
 
     // 在线记录不该被 batch-purge 误删
-    const noop = await ctx.inject({ method: 'POST', url: '/api/items/batch-purge', ...auth({ payload: { ids } }) });
+    const noop = await ctx.inject({
+      method: 'POST',
+      url: '/api/items/batch-purge',
+      ...auth({ payload: { ids } }),
+    });
     expect(noop.json().purged).toBe(0);
     const stillThere = await ctx.inject({ method: 'GET', url: '/api/items', ...auth() });
     expect(stillThere.json().total).toBe(2);
 
-    await ctx.inject({ method: 'POST', url: '/api/items/batch-delete', ...auth({ payload: { ids } }) });
-    const purge = await ctx.inject({ method: 'POST', url: '/api/items/batch-purge', ...auth({ payload: { ids } }) });
+    await ctx.inject({
+      method: 'POST',
+      url: '/api/items/batch-delete',
+      ...auth({ payload: { ids } }),
+    });
+    const purge = await ctx.inject({
+      method: 'POST',
+      url: '/api/items/batch-purge',
+      ...auth({ payload: { ids } }),
+    });
     expect(purge.json().purged).toBe(2);
 
     const after = await ctx.inject({ method: 'GET', url: '/api/items?deleted=include', ...auth() });
@@ -71,9 +87,17 @@ describe('回收站批量操作', () => {
   it('不带 ids 表示清空整个回收站', async () => {
     const ids = [await seed('RB-003', '文件夹'), await seed('RB-004', '笔记本')];
     const keep = await seed('RB-005', '胶水');
-    await ctx.inject({ method: 'POST', url: '/api/items/batch-delete', ...auth({ payload: { ids } }) });
+    await ctx.inject({
+      method: 'POST',
+      url: '/api/items/batch-delete',
+      ...auth({ payload: { ids } }),
+    });
 
-    const purge = await ctx.inject({ method: 'POST', url: '/api/items/batch-purge', ...auth({ payload: {} }) });
+    const purge = await ctx.inject({
+      method: 'POST',
+      url: '/api/items/batch-purge',
+      ...auth({ payload: {} }),
+    });
     expect(purge.json().purged).toBe(2);
 
     const bin = await ctx.inject({ method: 'GET', url: '/api/items?deleted=only', ...auth() });

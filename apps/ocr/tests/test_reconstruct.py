@@ -59,8 +59,8 @@ class TestRebuild:
         assert by_name["签字笔(黑)"]["quantity"] == 20
         assert by_name["订书机"]["quantity"] == 3
         assert by_name["A4复印纸"]["purchaseLink"] == "https://item.jd.com/100012345.html"
-        # 数量缺失 → 默认 1 + 警告
-        assert by_name["荧光笔"]["quantity"] == 1
+        # 数量缺失 → 未知 + 警告
+        assert by_name["荧光笔"]["quantity"] is None
         assert any("荧光笔" in w for w in result["warnings"])
 
     def test_missing_fields_warn(self):
@@ -72,3 +72,13 @@ class TestRebuild:
         lines = ["某某公司办公用品申请", "行政部", "物品：签字笔 5"]
         result = rebuild_from_lines(lines)
         assert result.get("department") == "行政部"
+
+
+def test_duplicate_names_preserve_source_rows():
+    result = rebuild_from_lines(["签字笔 2", "订书机 3", "签字笔 4"])
+    assert [(r["itemName"], r["quantity"]) for r in result["items"]] == [("签字笔", 2), ("订书机", 3), ("签字笔", 4)]
+
+
+def test_price_is_not_unknown_quantity():
+    result = rebuild_from_lines(["荧光笔 ¥2.50"])
+    assert result["items"][0]["quantity"] is None

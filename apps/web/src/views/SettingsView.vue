@@ -51,7 +51,21 @@ const backupErrors = reactive<Record<string, string>>({});
 const backupSaving = ref(false);
 
 /* AI 助手 */
-const aiForm = reactive({ enabled: false, baseUrl: '', apiKey: '', model: '', semanticSearch: true });
+const aiForm = reactive({
+  enabled: false,
+  baseUrl: '',
+  apiKey: '',
+  model: '',
+  semanticSearch: true,
+  autoImport: false,
+  importModel: '',
+  askModel: '',
+  searchModel: '',
+  inputPrice: '',
+  outputPrice: '',
+  monthlyBudget: '',
+});
+const aiCapabilities = ref<import('@procure-lite/shared').AiConfigView['capabilities']>();
 const aiErrors = reactive<Record<string, string>>({});
 const aiSaving = ref(false);
 const aiTesting = ref(false);
@@ -83,6 +97,14 @@ async function load(): Promise<void> {
       aiForm.baseUrl = ai.baseUrl;
       aiForm.model = ai.model;
       aiForm.semanticSearch = ai.semanticSearch;
+      aiForm.autoImport = ai.autoImport ?? false;
+      aiForm.importModel = ai.importModel ?? '';
+      aiForm.askModel = ai.askModel ?? '';
+      aiForm.searchModel = ai.searchModel ?? '';
+      aiForm.inputPrice = ai.inputPrice == null ? '' : String(ai.inputPrice);
+      aiForm.outputPrice = ai.outputPrice == null ? '' : String(ai.outputPrice);
+      aiForm.monthlyBudget = ai.monthlyBudget == null ? '' : String(ai.monthlyBudget);
+      aiCapabilities.value = ai.capabilities;
       aiKeySet.value = ai.apiKeySet;
     }
   } catch (e) {
@@ -109,7 +131,8 @@ function validatePassword(): boolean {
   else if (passwordForm.newPassword === passwordForm.currentPassword) {
     passwordErrors.newPassword = '新密码不能与当前密码相同';
   }
-  if (passwordForm.newPassword !== passwordForm.confirm) passwordErrors.confirm = '两次输入的新密码不一致';
+  if (passwordForm.newPassword !== passwordForm.confirm)
+    passwordErrors.confirm = '两次输入的新密码不一致';
   return Object.keys(passwordErrors).length === 0;
 }
 
@@ -211,6 +234,14 @@ function aiPayload() {
     baseUrl: aiForm.baseUrl.trim(),
     model: aiForm.model.trim(),
     semanticSearch: aiForm.semanticSearch,
+    protocol: 'responses' as const,
+    autoImport: aiForm.autoImport,
+    importModel: aiForm.importModel,
+    askModel: aiForm.askModel,
+    searchModel: aiForm.searchModel,
+    inputPrice: aiForm.inputPrice === '' ? null : Number(aiForm.inputPrice),
+    outputPrice: aiForm.outputPrice === '' ? null : Number(aiForm.outputPrice),
+    monthlyBudget: aiForm.monthlyBudget === '' ? null : Number(aiForm.monthlyBudget),
     // 留空 = 保留已保存的 Key（服务端语义）
     ...(aiForm.apiKey.trim() ? { apiKey: aiForm.apiKey.trim() } : {}),
   };
@@ -236,11 +267,13 @@ async function testAi(): Promise<void> {
   if (!validateAi()) return;
   aiTesting.value = true;
   try {
-    const view = await aiApi.updateConfig(aiPayload());
+    const view = await aiApi.updateConfig({ ...aiPayload(), autoImport: false });
     aiKeySet.value = view.apiKeySet;
     aiForm.apiKey = '';
-    const res = await aiApi.health();
-    if (res.ok) toast.success('AI 服务连接正常');
+    const res = await aiApi.capabilities();
+    aiCapabilities.value = res;
+    aiForm.autoImport = false;
+    if (res.image && res.structured) toast.success('AI 服务连接正常');
     else toast.error('AI 服务连接失败，请检查接口地址、API Key 与模型名');
   } catch (e) {
     toast.error(apiError(e));
@@ -329,7 +362,9 @@ const totalBackupSize = computed(() => backups.value.reduce((sum, b) => sum + b.
     <section class="card p-5">
       <h2 class="text-sm font-semibold text-ink mb-1">外观</h2>
       <p class="text-xs text-faint mb-4">界面明暗主题，跟随系统时随操作系统的显示设置切换</p>
-      <div class="flex gap-0.5 max-w-sm bg-canvas border border-line rounded-(--radius-control) p-0.5">
+      <div
+        class="flex gap-0.5 max-w-sm bg-canvas border border-line rounded-(--radius-control) p-0.5"
+      >
         <button
           v-for="opt in themeOptions"
           :key="opt.value"
@@ -372,14 +407,18 @@ const totalBackupSize = computed(() => backups.value.reduce((sum, b) => sum + b.
         />
         <p class="text-meta text-faint">修改密码会让所有已登录会话失效，你需要用新密码重新登录。</p>
         <div class="flex gap-2 pt-1">
-          <Button variant="primary" size="sm" :loading="changing" @click="changePassword">修改密码</Button>
+          <Button variant="primary" size="sm" :loading="changing" @click="changePassword"
+            >修改密码</Button
+          >
           <Button variant="secondary" size="sm" @click="recoveryDialogOpen = true">
             <Icon name="key" :size="13" /> 重置恢复码
           </Button>
         </div>
       </div>
       <div class="mt-5 pt-4 border-t border-line">
-        <Button variant="ghost" size="sm" @click="logout"><Icon name="logout" :size="13" /> 退出登录</Button>
+        <Button variant="ghost" size="sm" @click="logout"
+          ><Icon name="logout" :size="13" /> 退出登录</Button
+        >
       </div>
     </section>
 
@@ -392,9 +431,18 @@ const totalBackupSize = computed(() => backups.value.reduce((sum, b) => sum + b.
         </Button>
       </div>
       <dl class="grid grid-cols-2 gap-x-6 gap-y-3 text-sm">
-        <div><dt class="text-xs text-faint">版本</dt><dd class="num">v{{ status?.version }}</dd></div>
-        <div><dt class="text-xs text-faint">运行时长</dt><dd>{{ fmtUptime(status?.uptimeSeconds ?? 0) }}</dd></div>
-        <div><dt class="text-xs text-faint">数据库大小</dt><dd class="num">{{ formatBytes(status?.dbSizeBytes ?? 0) }}</dd></div>
+        <div>
+          <dt class="text-xs text-faint">版本</dt>
+          <dd class="num">v{{ status?.version }}</dd>
+        </div>
+        <div>
+          <dt class="text-xs text-faint">运行时长</dt>
+          <dd>{{ fmtUptime(status?.uptimeSeconds ?? 0) }}</dd>
+        </div>
+        <div>
+          <dt class="text-xs text-faint">数据库大小</dt>
+          <dd class="num">{{ formatBytes(status?.dbSizeBytes ?? 0) }}</dd>
+        </div>
         <div>
           <dt class="text-xs text-faint">OCR 解析服务</dt>
           <dd class="flex items-center gap-2">
@@ -408,10 +456,19 @@ const totalBackupSize = computed(() => backups.value.reduce((sum, b) => sum + b.
             </button>
           </dd>
         </div>
-        <div><dt class="text-xs text-faint">台账记录</dt><dd class="num">{{ status?.counts.items }}</dd></div>
-        <div><dt class="text-xs text-faint">物品 / 发放单</dt><dd class="num">{{ status?.counts.products }} / {{ status?.counts.distributions }}</dd></div>
+        <div>
+          <dt class="text-xs text-faint">台账记录</dt>
+          <dd class="num">{{ status?.counts.items }}</dd>
+        </div>
+        <div>
+          <dt class="text-xs text-faint">物品 / 发放单</dt>
+          <dd class="num">{{ status?.counts.products }} / {{ status?.counts.distributions }}</dd>
+        </div>
       </dl>
-      <p v-if="ocrOk === false" class="mt-3 px-3 py-2 bg-amber-soft border border-amber/25 rounded-(--radius-control) text-xs text-amber">
+      <p
+        v-if="ocrOk === false"
+        class="mt-3 px-3 py-2 bg-amber-soft border border-amber/25 rounded-(--radius-control) text-xs text-amber"
+      >
         OCR 不可用时导入页仍能打开，但上传后会解析失败。可以先手工新增台账记录。
       </p>
     </section>
@@ -419,23 +476,27 @@ const totalBackupSize = computed(() => backups.value.reduce((sum, b) => sum + b.
     <!-- AI 助手 -->
     <section class="card p-5 lg:col-span-2">
       <div class="flex items-center gap-2 mb-1">
-        <span class="flex items-center justify-center size-7 rounded-lg bg-primary-soft text-primary">
+        <span
+          class="flex items-center justify-center size-7 rounded-lg bg-primary-soft text-primary"
+        >
           <Icon name="sparkles" :size="14" />
         </span>
         <h2 class="text-sm font-semibold text-ink">AI 助手</h2>
       </div>
       <p class="text-xs text-faint mb-4">
-        配置 OpenAI 兼容接口后，可用自然语言查询台账，并启用智能搜索与 OCR 校对辅助
+        配置支持 Responses 的 GPT 服务，检测能力后开启每单自动识别。
       </p>
       <div class="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
-        <label class="flex items-center gap-2 text-sm sm:col-span-2 lg:col-span-4 cursor-pointer select-none w-fit">
+        <label
+          class="flex items-center gap-2 text-sm sm:col-span-2 lg:col-span-4 cursor-pointer select-none w-fit"
+        >
           <input v-model="aiForm.enabled" type="checkbox" class="size-4 accent-primary" />
           启用 AI 能力（问答 / 智能搜索 / OCR 校对）
         </label>
         <Input
           v-model="aiForm.baseUrl"
           label="接口地址"
-          placeholder="https://api.deepseek.com"
+          placeholder="https://服务商地址/v1"
           :error="aiErrors.baseUrl"
         />
         <Input
@@ -449,22 +510,64 @@ const totalBackupSize = computed(() => backups.value.reduce((sum, b) => sum + b.
         <Input
           v-model="aiForm.model"
           label="模型名"
-          placeholder="deepseek-chat"
+          placeholder="gpt-6-sol"
           :error="aiErrors.model"
         />
-        <label class="flex items-center gap-2 text-sm cursor-pointer select-none self-end pb-2 w-fit">
+        <label
+          class="flex items-center gap-2 text-sm cursor-pointer select-none self-end pb-2 w-fit"
+        >
           <input v-model="aiForm.semanticSearch" type="checkbox" class="size-4 accent-primary" />
           搜索时启用同义词扩展
         </label>
+        <Input v-model="aiForm.importModel" label="单据识别模型" placeholder="留空继承主模型" />
+        <Input v-model="aiForm.askModel" label="台账问答模型" placeholder="留空继承主模型" />
+        <Input v-model="aiForm.searchModel" label="搜索扩展模型" placeholder="留空继承主模型" />
+        <Input
+          v-model="aiForm.inputPrice"
+          label="每百万输入 tokens 单价"
+          type="number"
+          step="any"
+          placeholder="可空，服务商计价"
+        />
+        <Input
+          v-model="aiForm.outputPrice"
+          label="每百万输出 tokens 单价"
+          type="number"
+          step="any"
+          placeholder="可空，服务商计价"
+        />
+        <Input
+          v-model="aiForm.monthlyBudget"
+          label="月导入预算阈值"
+          type="number"
+          step="any"
+          placeholder="留空不限制；与单价同币种"
+        />
+        <p class="text-xs text-muted sm:col-span-2 lg:col-span-4">
+          按已记录的导入估算费用停止后续请求；不含问答、搜索，单页请求可能跨过阈值。用量未知时暂停预算控制下的自动导入。
+        </p>
+        <label class="sm:col-span-2 text-sm"
+          ><input v-model="aiForm.autoImport" type="checkbox" /> 每张新单据自动调用
+          GPT（先完成能力检测）</label
+        >
       </div>
       <div class="flex items-center gap-2 mt-4">
         <Button variant="primary" size="sm" :loading="aiSaving" @click="saveAiConfig">保存</Button>
         <Button variant="secondary" size="sm" :loading="aiTesting" @click="testAi">
-          <Icon name="refresh" :size="13" /> 测试连接
+          <Icon name="refresh" :size="13" /> 保存并检测 Responses 能力
         </Button>
       </div>
-      <p class="mt-3 px-3 py-2 bg-amber-soft border border-amber/25 rounded-(--radius-control) text-xs text-amber">
-        开启后，提问与所涉台账内容会发送给你配置的模型服务商；API Key 明文保存在本机数据库中。
+      <p v-if="aiCapabilities" class="text-xs mt-3">
+        检测时间 {{ aiCapabilities.checkedAt }} · 文本 {{ aiCapabilities.text ? '通过' : '失败' }} ·
+        图像 {{ aiCapabilities.image ? '通过' : '失败' }} · 结构化输出
+        {{ aiCapabilities.structured ? '通过' : '失败' }} · 工具往返
+        {{ aiCapabilities.tools ? '通过' : '失败' }}
+      </p>
+      <p
+        class="mt-3 px-3 py-2 bg-amber-soft border border-amber/25 rounded-(--radius-control) text-xs text-amber"
+      >
+        开启自动导入后，单据原件会发送给配置的服务商。store:false
+        不代表第三方零留存。密钥优先读取服务器配置；在本页面保存的密钥仍存于本机数据库。
       </p>
     </section>
 
@@ -495,7 +598,14 @@ const totalBackupSize = computed(() => backups.value.reduce((sum, b) => sum + b.
           class="w-28"
           :error="backupErrors.keepCount"
         />
-        <Button variant="primary" size="sm" class="mt-7" :loading="backupSaving" @click="saveBackupConfig">保存</Button>
+        <Button
+          variant="primary"
+          size="sm"
+          class="mt-7"
+          :loading="backupSaving"
+          @click="saveBackupConfig"
+          >保存</Button
+        >
       </div>
     </section>
 
@@ -512,13 +622,17 @@ const totalBackupSize = computed(() => backups.value.reduce((sum, b) => sum + b.
       </div>
       <p v-if="backups.length === 0" class="text-xs text-faint">还没有备份</p>
       <template v-else>
-        <p class="mb-2 text-meta text-faint">{{ backups.length }} 份 · 共 {{ formatBytes(totalBackupSize) }}</p>
+        <p class="mb-2 text-meta text-faint">
+          {{ backups.length }} 份 · 共 {{ formatBytes(totalBackupSize) }}
+        </p>
         <ul class="divide-y divide-line max-h-72 overflow-y-auto">
           <li v-for="b in backups" :key="b.name" class="flex items-center gap-3 py-2.5">
             <Icon name="file" :size="15" class="text-faint shrink-0" />
             <div class="min-w-0 flex-1">
               <p class="text-xs num truncate" :title="b.name">{{ b.name }}</p>
-              <p class="text-meta text-faint">{{ formatDateTime(b.createdAt) }} · {{ formatBytes(b.sizeBytes) }}</p>
+              <p class="text-meta text-faint">
+                {{ formatDateTime(b.createdAt) }} · {{ formatBytes(b.sizeBytes) }}
+              </p>
             </div>
             <button
               class="text-xs text-primary hover:underline cursor-pointer shrink-0 disabled:opacity-50"
@@ -527,15 +641,28 @@ const totalBackupSize = computed(() => backups.value.reduce((sum, b) => sum + b.
             >
               {{ downloadingBackup === b.name ? '下载中…' : '下载' }}
             </button>
-            <button class="text-xs text-amber hover:underline cursor-pointer shrink-0" @click="restoreTarget = b">恢复</button>
-            <button class="text-xs text-red hover:underline cursor-pointer shrink-0" @click="deleteBackupTarget = b">删除</button>
+            <button
+              class="text-xs text-amber hover:underline cursor-pointer shrink-0"
+              @click="restoreTarget = b"
+            >
+              恢复
+            </button>
+            <button
+              class="text-xs text-red hover:underline cursor-pointer shrink-0"
+              @click="deleteBackupTarget = b"
+            >
+              删除
+            </button>
           </li>
         </ul>
       </template>
     </section>
 
     <!-- 恢复中：全屏挡住，避免用户在数据被覆盖的过程中继续操作 -->
-    <div v-if="restoring" class="fixed inset-0 z-[90] flex flex-col items-center justify-center gap-3 bg-black/60 backdrop-blur-sm text-white">
+    <div
+      v-if="restoring"
+      class="fixed inset-0 z-[90] flex flex-col items-center justify-center gap-3 bg-black/60 backdrop-blur-sm text-white"
+    >
       <span class="size-8 border-[3px] border-white/30 border-t-white rounded-full animate-spin" />
       <p class="text-sm font-semibold">正在恢复备份…</p>
       <p class="text-xs text-white/70">服务短暂不可用，请不要关闭页面</p>
@@ -544,7 +671,9 @@ const totalBackupSize = computed(() => backups.value.reduce((sum, b) => sum + b.
     <!-- 恢复码结果 -->
     <Dialog :open="!!recoveryCodeIssued" title="新的恢复码" width="420px" persistent>
       <p class="text-sm text-muted">请立即保存，只显示这一次：</p>
-      <p class="mt-3 px-4 py-3 bg-canvas border border-line rounded-(--radius-control) text-center font-mono text-base tracking-widest select-all break-all">
+      <p
+        class="mt-3 px-4 py-3 bg-canvas border border-line rounded-(--radius-control) text-center font-mono text-base tracking-widest select-all break-all"
+      >
         {{ recoveryCodeIssued }}
       </p>
       <Button variant="secondary" size="sm" class="mt-3 w-full" @click="copyRecoveryCode">
@@ -557,11 +686,30 @@ const totalBackupSize = computed(() => backups.value.reduce((sum, b) => sum + b.
     </Dialog>
 
     <!-- 重置恢复码确认 -->
-    <Dialog :open="recoveryDialogOpen" title="重置恢复码" width="420px" @update:open="recoveryDialogOpen = $event">
+    <Dialog
+      :open="recoveryDialogOpen"
+      title="重置恢复码"
+      width="420px"
+      @update:open="recoveryDialogOpen = $event"
+    >
       <p class="text-sm text-muted mb-3">输入当前密码以生成新的恢复码，旧恢复码将失效。</p>
-      <Input v-model="recoveryPassword" type="password" label="当前密码" autocomplete="current-password" required @enter="regenerateRecovery" />
+      <Input
+        v-model="recoveryPassword"
+        type="password"
+        label="当前密码"
+        autocomplete="current-password"
+        required
+        @enter="regenerateRecovery"
+      />
       <template #footer>
-        <Button variant="ghost" @click="recoveryDialogOpen = false; recoveryPassword = ''">取消</Button>
+        <Button
+          variant="ghost"
+          @click="
+            recoveryDialogOpen = false;
+            recoveryPassword = '';
+          "
+          >取消</Button
+        >
         <Button variant="primary" :loading="changing" @click="regenerateRecovery">生成</Button>
       </template>
     </Dialog>

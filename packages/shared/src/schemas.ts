@@ -8,9 +8,7 @@ import {
 } from './enums.js';
 
 /** YYYY-MM-DD 本地日期字符串 */
-export const dateString = z
-  .string()
-  .regex(/^\d{4}-\d{2}-\d{2}$/, '日期格式应为 YYYY-MM-DD');
+export const dateString = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, '日期格式应为 YYYY-MM-DD');
 export type DateString = z.infer<typeof dateString>;
 
 const positiveNumber = z.coerce.number().positive();
@@ -136,9 +134,12 @@ export const distributionCreateSchema = z
     note: z.string().trim().max(500).optional(),
     lines: z.array(distributionLineSchema).min(1, '至少一条领用明细'),
   })
-  .refine((v) => v.lines.every((l) => (l.itemId ? !l.productId : !!l.productId || v.source === 'DIRECT')), {
-    message: '明细必须关联台账记录或库存物品',
-  });
+  .refine(
+    (v) => v.lines.every((l) => (l.itemId ? !l.productId : !!l.productId || v.source === 'DIRECT')),
+    {
+      message: '明细必须关联台账记录或库存物品',
+    },
+  );
 export type DistributionCreateInput = z.infer<typeof distributionCreateSchema>;
 
 export const distributionQuerySchema = z.object({
@@ -224,43 +225,106 @@ export const changePasswordSchema = z
 
 /* --------------------------------- OA 导入 --------------------------------- */
 
-/** OCR 服务解析结果的结构 */
-export const parsedItemSchema = z.object({
-  itemName: z.string().trim().min(1),
-  quantity: z.coerce.number().positive(),
-  unitPrice: z.coerce.number().nonnegative().optional(),
-  purchaseLink: z.string().trim().max(500).optional(),
+/** 草稿保留未知字段；确认入账使用独立的严格契约。 */
+export const sourceSchema = z.object({
+  page: z.number().int().positive(),
+  method: z.string(),
+  rawText: z.string().optional(),
+  box: z.array(z.array(z.number().min(0).max(1)).length(2)).nullish(),
+  confidence: z.number().min(0).max(1).nullish(),
+  rotation: z.number().optional(),
 });
-
+export const parsedItemSchema = z.object({
+  lineId: z.string().optional(),
+  itemName: z.string().trim(),
+  quantity: z.number().finite().nullable(),
+  unit: z.string().max(16).nullish(),
+  unitPrice: z.number().finite().nonnegative().nullish(),
+  purchaseLink: z.string().trim().max(500).nullish(),
+  source: sourceSchema.optional(),
+});
+export const parsePageSchema = z.object({
+  page: z.number().int().positive(),
+  status: z.enum(['PENDING', 'RUNNING', 'DONE', 'FAILED']),
+  mode: z.string(),
+  error: z.string().optional(),
+});
 export const parseResultSchema = z.object({
+  schemaVersion: z.literal(2).optional(),
+  parserVersion: z.string().optional(),
   serialNumber: z.string().optional(),
   department: z.string().optional(),
   handler: z.string().optional(),
-  requestDate: dateString.optional(),
+  requestDate: z.string().optional(),
   items: z.array(parsedItemSchema),
   warnings: z.array(z.string()),
+  pages: z.array(parsePageSchema).optional(),
+  pageCount: z.number().int().positive().optional(),
   mode: z.enum(['PDF_TEXT', 'PDF_OCR', 'IMAGE_OCR', 'PDF_MIXED', 'TEXT']),
 });
 export type ParseResult = z.infer<typeof parseResultSchema>;
-
-export const importConfirmSchema = z.object({
-  /** 来源解析任务：用于把 OA 原件转存为台账附件（手工录入时可空） */
-  taskId: z.string().trim().max(64).optional(),
-  serialNumber: z.string().trim().min(1, '流水号不能为空').max(64),
-  department: z.string().trim().min(1, '部门不能为空').max(64),
-  handler: z.string().trim().min(1, '经办人不能为空').max(64),
-  requestDate: dateString,
-  supplierId: z.coerce.number().int().positive().optional().nullable(),
-  items: z
-    .array(
-      parsedItemSchema.extend({
-        /** 与已有台账重复时的处理：skip 跳过 / merge 数量累加 */
-        duplicateAction: z.enum(['skip', 'merge']).optional(),
-      }),
-    )
-    .min(1, '没有可导入的明细'),
+export const confirmedItemSchema = z.object({
+  lineId: z.string().optional(),
+  itemName: z.string().trim().min(1).max(200),
+  quantity: positiveNumber,
+  unit: z.string().trim().max(16).nullish(),
+  unitPrice: nonNegativeNumber.nullish(),
+  purchaseLink: z.string().trim().max(500).nullish(),
+  duplicateAction: z.enum(['skip', 'merge']).optional(),
 });
+export const importConfirmSchema = z
+  .object({
+    taskId: z.string().trim().max(64).optional(),
+    version: z.number().int().nonnegative().optional(),
+    operationId: z.string().uuid().optional(),
+    serialNumber: z.string().trim().min(1).max(64),
+    department: z.string().trim().min(1).max(64),
+    handler: z.string().trim().min(1).max(64),
+    requestDate: dateString,
+    supplierId: z.coerce.number().int().positive().nullish(),
+    items: z.array(confirmedItemSchema).min(1).max(500),
+  })
+  .refine((v) => new Set(v.items.map((i) => i.itemName)).size === v.items.length, {
+    message: '同名明细必须补充规格区分，或人工合并后再提交',
+  });
 export type ImportConfirmInput = z.infer<typeof importConfirmSchema>;
+export const importDraftSchema = z.object({
+  serialNumber: z.string().default(''),
+  department: z.string().default(''),
+  handler: z.string().default(''),
+  requestDate: z.string().default(''),
+  supplierId: z.number().int().positive().nullish(),
+  items: z
+    .array(parsedItemSchema.extend({ duplicateAction: z.enum(['skip', 'merge']).optional() }))
+    .max(500),
+  reviewedPages: z
+    .array(z.object({ page: z.number().int().positive(), note: z.string().trim().min(1).max(500) }))
+    .default([]),
+  reviewedAi: z.array(z.string().max(4000)).max(500).default([]),
+});
+/** Binds a human decision to the exact proposal; a changed retry must be reviewed again. */
+export function aiSuggestionKey(item: {
+  lineId: string | null;
+  itemName: string;
+  quantity: number | null;
+  unit?: string | null;
+  unitPrice?: number | null;
+  purchaseLink?: string | null;
+}): string {
+  return JSON.stringify([
+    item.lineId,
+    item.itemName,
+    item.quantity,
+    item.unit ?? null,
+    item.unitPrice ?? null,
+    item.purchaseLink ?? null,
+  ]);
+}
+export type ImportDraft = z.infer<typeof importDraftSchema>;
+export const saveImportDraftSchema = z.object({
+  version: z.number().int().nonnegative(),
+  draft: importDraftSchema,
+});
 
 /** 重复检查的响应行 */
 export interface DuplicatePreview {
@@ -311,6 +375,14 @@ export const aiConfigSchema = z.object({
   model: z.string().trim().min(1, '模型名不能为空').max(64),
   /** 台账/库存搜索启用 AI 同义词扩展（关闭则退回普通关键字匹配） */
   semanticSearch: z.boolean(),
+  protocol: z.literal('responses').optional(),
+  autoImport: z.boolean().optional(),
+  importModel: z.string().trim().max(100).optional(),
+  askModel: z.string().trim().max(100).optional(),
+  searchModel: z.string().trim().max(100).optional(),
+  inputPrice: z.number().nonnegative().nullish(),
+  outputPrice: z.number().nonnegative().nullish(),
+  monthlyBudget: z.number().positive().nullish(),
 });
 export type AiConfigInput = z.infer<typeof aiConfigSchema>;
 
@@ -321,6 +393,22 @@ export interface AiConfigView {
   model: string;
   semanticSearch: boolean;
   apiKeySet: boolean;
+  protocol?: 'responses';
+  autoImport?: boolean;
+  importModel?: string;
+  askModel?: string;
+  searchModel?: string;
+  inputPrice?: number | null;
+  outputPrice?: number | null;
+  monthlyBudget?: number | null;
+  capabilities?: {
+    checkedAt: string;
+    text: boolean;
+    image: boolean;
+    structured: boolean;
+    tools: boolean;
+  };
+  keySource?: 'server' | 'database';
 }
 
 export const aiAskSchema = z.object({
@@ -365,7 +453,8 @@ export const aiOcrReviewResultSchema = z.object({
   lines: z
     .array(
       z.object({
-        index: z.number().int().min(0),
+        index: z.number().int().min(0).optional(),
+        lineId: z.string(),
         itemName: z.string().optional(),
         quantity: z.number().positive().optional(),
         unitPrice: z.number().nonnegative().optional(),

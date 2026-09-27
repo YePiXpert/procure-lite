@@ -1,119 +1,230 @@
-import { Injectable, Logger, ServiceUnavailableException } from '@nestjs/common';
-import axios from 'axios';
+import { Injectable, ServiceUnavailableException } from '@nestjs/common';
+import OpenAI from 'openai';
+import { toResponseInputItems } from 'openai/lib/responses/ResponseInputItems';
+import type {
+  ResponseInput,
+  ResponseOutputItem,
+  ResponseCreateParamsNonStreaming,
+} from 'openai/resources/responses/responses';
 
-/** OpenAI 兼容 /chat/completions 的最小消息类型（含 tool-calling 往返所需的字段） */
 export interface ChatMessage {
   role: 'system' | 'user' | 'assistant' | 'tool';
   content: string | null;
-  /** assistant 发起的工具调用请求（回传时原样带上） */
+  image?: string;
+  responseItems?: ResponseOutputItem[];
   tool_calls?: { id: string; type: 'function'; function: { name: string; arguments: string } }[];
-  /** role=tool 时对应的调用 id */
   tool_call_id?: string;
 }
-
 export interface ToolDef {
   type: 'function';
-  function: {
-    name: string;
-    description: string;
-    /** JSON Schema */
-    parameters: Record<string, unknown>;
-  };
+  function: { name: string; description: string; parameters: Record<string, unknown> };
 }
-
 export interface ChatCallOptions {
   baseUrl: string;
   apiKey: string;
   model: string;
   messages: ChatMessage[];
   tools?: ToolDef[];
-  /** 要求模型输出合法 JSON（用于结构化抽取场景） */
   jsonMode?: boolean;
+  schema?: Record<string, unknown>;
   temperature?: number;
   maxTokens?: number;
   timeoutMs?: number;
+  signal?: AbortSignal;
 }
-
 export interface ChatCompletionResult {
   content: string | null;
   toolCalls: { id: string; name: string; args: unknown }[];
+  outputItems?: ResponseOutputItem[];
+  usage?: { input: number; output: number };
+  requestId?: string;
+}
+export class AiResponseError extends ServiceUnavailableException {
+  constructor(
+    message: string,
+    readonly kind: string,
+    readonly metadata?: Pick<ChatCompletionResult, 'usage' | 'requestId'>,
+  ) {
+    super(message);
+  }
+}
+/** Strict output contracts require all properties; formerly optional fields become nullable. */
+export function strictSchema(raw: Record<string, unknown>): Record<string, unknown> {
+  const schema = JSON.parse(JSON.stringify(raw)) as Record<string, unknown>;
+  delete schema.$schema;
+  function walk(node: Record<string, unknown>) {
+    if (node.properties) {
+      const properties = node.properties as Record<string, Record<string, unknown>>;
+      const required = (node.required ?? []) as string[];
+      for (const [key, value] of Object.entries(properties)) {
+        walk(value);
+        if (!required.includes(key)) properties[key] = { anyOf: [value, { type: 'null' }] };
+      }
+      node.required = Object.keys(properties);
+      node.additionalProperties = false;
+    }
+    if (node.items) walk(node.items as Record<string, unknown>);
+    for (const name of ['anyOf', 'oneOf', 'allOf'])
+      for (const sub of (node[name] ?? []) as Record<string, unknown>[]) walk(sub);
+  }
+  walk(schema);
+  return schema;
 }
 
-interface OpenAiChatResponse {
-  choices?: {
-    message?: {
-      content?: string | null;
-      tool_calls?: { id: string; function: { name: string; arguments: string } }[];
-    };
-  }[];
-}
-
-/** 调用 OpenAI 兼容的 LLM 服务（智谱 GLM / DeepSeek 等均可），配置由调用方传入 */
 @Injectable()
 export class LlmClient {
-  private readonly logger = new Logger(LlmClient.name);
-
   async chat(opts: ChatCallOptions): Promise<ChatCompletionResult> {
-    const url = `${opts.baseUrl.replace(/\/+$/, '')}/chat/completions`;
-    try {
-      const res = await axios.post<OpenAiChatResponse>(
-        url,
-        {
-          model: opts.model,
-          messages: opts.messages,
-          ...(opts.tools?.length ? { tools: opts.tools, tool_choice: 'auto' } : {}),
-          ...(opts.jsonMode ? { response_format: { type: 'json_object' } } : {}),
-          temperature: opts.temperature ?? 0.2,
-          ...(opts.maxTokens ? { max_tokens: opts.maxTokens } : {}),
-        },
-        {
-          headers: { Authorization: `Bearer ${opts.apiKey}` },
-          timeout: opts.timeoutMs ?? 90_000,
-        },
-      );
-      const message = res.data.choices?.[0]?.message;
-      if (!message) throw new Error('响应中没有 choices');
-      const toolCalls = (message.tool_calls ?? []).map((c) => ({
-        id: c.id,
-        name: c.function.name,
-        args: this.parseArgs(c.function.arguments),
-      }));
-      return { content: message.content ?? null, toolCalls };
-    } catch (e) {
-      if (axios.isAxiosError(e)) {
-        const detail =
-          (e.response?.data as { error?: { message?: string } } | undefined)?.error?.message ??
-          e.message;
-        this.logger.error(`LLM 调用失败: ${detail}`);
-        throw new ServiceUnavailableException(`AI 服务调用失败：${detail}`);
+    const client = new OpenAI({
+      apiKey: opts.apiKey,
+      baseURL: opts.baseUrl.replace(/\/+$/, ''),
+      maxRetries: 0,
+      timeout: opts.timeoutMs ?? 120_000,
+    });
+    const input: ResponseInput = [];
+    for (const message of opts.messages) {
+      if (message.responseItems) {
+        try {
+          input.push(...toResponseInputItems(message.responseItems));
+        } catch {
+          throw new AiResponseError('服务返回了不支持的 Responses 输出条目', 'UNSUPPORTED_OUTPUT');
+        }
+        continue;
       }
-      throw e;
+      if (message.role === 'tool') {
+        input.push({
+          type: 'function_call_output',
+          call_id: message.tool_call_id!,
+          output: message.content ?? '',
+        });
+        continue;
+      }
+      if (message.tool_calls?.length) {
+        for (const call of message.tool_calls)
+          input.push({
+            type: 'function_call',
+            call_id: call.id,
+            name: call.function.name,
+            arguments: call.function.arguments,
+          });
+        continue;
+      }
+      if (message.image)
+        input.push({
+          role: 'user',
+          content: [
+            { type: 'input_text', text: message.content ?? '' },
+            { type: 'input_image', image_url: message.image, detail: 'high' },
+          ],
+        });
+      else input.push({ role: message.role, content: message.content ?? '' });
+    }
+    const body: ResponseCreateParamsNonStreaming = {
+      model: opts.model,
+      input,
+      store: false,
+      max_output_tokens: opts.maxTokens ?? 4096,
+      ...(opts.tools?.length
+        ? {
+            tools: opts.tools.map((t) => ({
+              type: 'function' as const,
+              name: t.function.name,
+              description: t.function.description,
+              parameters: strictSchema(t.function.parameters),
+              strict: true,
+            })),
+          }
+        : {}),
+      ...(opts.schema
+        ? {
+            text: {
+              format: {
+                type: 'json_schema' as const,
+                name: 'result',
+                schema: strictSchema(opts.schema),
+                strict: true,
+              },
+            },
+          }
+        : opts.jsonMode
+          ? { text: { format: { type: 'json_object' as const } } }
+          : {}),
+    };
+    for (let attempt = 0; ; attempt++) {
+      let metadata: Pick<ChatCompletionResult, 'usage' | 'requestId'> | undefined;
+      try {
+        const response = await client.responses.create(body, { signal: opts.signal });
+        metadata = {
+          usage:
+            response.usage &&
+            Number.isFinite(response.usage.input_tokens) &&
+            Number.isFinite(response.usage.output_tokens) &&
+            response.usage.input_tokens >= 0 &&
+            response.usage.output_tokens >= 0
+              ? { input: response.usage.input_tokens, output: response.usage.output_tokens }
+              : undefined,
+          requestId: response._request_id ?? response.id,
+        };
+        if (response.status !== 'completed')
+          throw new AiResponseError(
+            response.status === 'incomplete'
+              ? '模型输出被截断，请重试或减少单页内容'
+              : '模型未完成响应',
+            'INCOMPLETE',
+            metadata,
+          );
+        if (
+          response.output.some(
+            (i) => i.type === 'message' && i.content.some((c) => c.type === 'refusal'),
+          )
+        )
+          throw new AiResponseError('模型拒绝识别此内容', 'REFUSAL', metadata);
+        const toolCalls = response.output
+          .filter((i) => i.type === 'function_call')
+          .map((i) => ({ id: i.call_id, name: i.name, args: JSON.parse(i.arguments) as unknown }));
+        return {
+          content: response.output_text || null,
+          toolCalls,
+          outputItems: response.output,
+          usage: metadata.usage,
+          requestId: response._request_id ?? response.id,
+        };
+      } catch (error) {
+        if (error instanceof AiResponseError) throw error;
+        if (
+          attempt === 0 &&
+          error instanceof OpenAI.APIError &&
+          [429, 500, 502, 503].includes(error.status ?? 0)
+        ) {
+          await new Promise((resolve) => setTimeout(resolve, 1000));
+          continue;
+        }
+        const reason =
+          error instanceof OpenAI.APIError
+            ? `服务返回 ${error.status ?? '连接错误'}（未自动重发不确定请求）`
+            : error instanceof Error
+              ? error.message
+              : '未知错误';
+        throw new AiResponseError(
+          `AI 调用失败：${reason}`,
+          error instanceof OpenAI.APIError && !error.status ? 'UNKNOWN' : 'SERVICE_ERROR',
+          metadata,
+        );
+      }
     }
   }
-
-  /** 连通性测试：发一个最小请求（设置页「测试连接」用） */
   async ping(baseUrl: string, apiKey: string, model: string): Promise<boolean> {
     try {
-      await this.chat({
+      const result = await this.chat({
         baseUrl,
         apiKey,
         model,
-        messages: [{ role: 'user', content: 'ping' }],
-        maxTokens: 8,
+        messages: [{ role: 'user', content: 'Reply OK' }],
+        maxTokens: 128,
         timeoutMs: 15_000,
       });
-      return true;
+      return !!result.content;
     } catch {
       return false;
-    }
-  }
-
-  private parseArgs(raw: string | undefined): unknown {
-    if (!raw) return {};
-    try {
-      return JSON.parse(raw);
-    } catch {
-      return { _raw: raw };
     }
   }
 }

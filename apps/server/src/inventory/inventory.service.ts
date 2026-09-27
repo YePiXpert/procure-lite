@@ -1,3 +1,5 @@
+import { assertCompatibleUnit } from '../common/unit';
+import { operation } from '../common/operation';
 import {
   BadRequestException,
   ConflictException,
@@ -114,36 +116,38 @@ export class InventoryService {
   }
 
   /** 手动记账：INBOUND 需为正；ADJUSTMENT 可正可负但结果不能为负；OUTBOUND 只能走发放流程 */
-  async createMovement(input: MovementCreateInput, ip?: string) {
-    const movement = await this.prisma.$transaction(async (tx) => {
-      const product = await tx.product.findUnique({ where: { id: input.productId } });
-      if (!product) throw new NotFoundException('物品不存在');
+  async createMovement(input: MovementCreateInput, ip?: string, operationId?: string) {
+    const movement = await this.prisma.$transaction(async (tx) =>
+      operation(tx, operationId, 'movement', input, async () => {
+        const product = await tx.product.findUnique({ where: { id: input.productId } });
+        if (!product) throw new NotFoundException('物品不存在');
 
-      if (input.type === 'OUTBOUND') {
-        throw new BadRequestException('出库请通过「发放登记」操作，以保证领用记录完整');
-      }
-      if (input.type === 'INBOUND' && input.quantity <= 0) {
-        throw new BadRequestException('入库数量必须为正数');
-      }
-      // 条件增量更新：并发下不丢更新，且原子地保证库存非负
-      const updated = await tx.product.updateMany({
-        where: { id: input.productId, stockQty: { gte: -input.quantity } },
-        data: { stockQty: { increment: input.quantity } },
-      });
-      if (updated.count === 0) {
-        throw new ConflictException(`调整后库存为负（当前 ${product.stockQty}）`);
-      }
+        if (input.type === 'OUTBOUND') {
+          throw new BadRequestException('出库请通过「发放登记」操作，以保证领用记录完整');
+        }
+        if (input.type === 'INBOUND' && input.quantity <= 0) {
+          throw new BadRequestException('入库数量必须为正数');
+        }
+        // 条件增量更新：并发下不丢更新，且原子地保证库存非负
+        const updated = await tx.product.updateMany({
+          where: { id: input.productId, stockQty: { gte: -input.quantity } },
+          data: { stockQty: { increment: input.quantity } },
+        });
+        if (updated.count === 0) {
+          throw new ConflictException(`调整后库存为负（当前 ${product.stockQty}）`);
+        }
 
-      const movement = await tx.inventoryMovement.create({
-        data: {
-          productId: input.productId,
-          quantity: input.quantity,
-          type: input.type,
-          note: input.note,
-        },
-      });
-      return movement;
-    });
+        const movement = await tx.inventoryMovement.create({
+          data: {
+            productId: input.productId,
+            quantity: input.quantity,
+            type: input.type,
+            note: input.note,
+          },
+        });
+        return movement;
+      }),
+    );
     await this.audit.log('INVENTORY_MOVEMENT', {
       entity: 'product',
       entityId: input.productId,
@@ -183,30 +187,39 @@ export class InventoryService {
   /* -------------------------------- 采购入库 -------------------------------- */
 
   /** 台账物品到货后整单入库：记录转「已入库」，库存增加 */
-  async stockIn(itemId: number, ip?: string) {
-    const after = await this.prisma.$transaction((tx) => this.stockInTx(tx, itemId));
+  async stockIn(itemId: number, ip?: string, operationId?: string) {
+    const after = await this.prisma.$transaction((tx) =>
+      operation(tx, operationId, 'stockIn', { itemId }, () => this.stockInTx(tx, itemId)),
+    );
     await this.audit.log('ITEM_STOCK_IN', { entity: 'item', entityId: itemId, ip });
     return after;
   }
 
   /** 工作台整单入库：多条明细同一事务，任一条不满足条件整批回滚 */
-  async stockInMany(itemIds: number[], ip?: string) {
+  async stockInMany(itemIds: number[], ip?: string, operationId?: string) {
     const ids = [...new Set(itemIds)];
-    await this.prisma.$transaction(async (tx) => {
-      for (const id of ids) await this.stockInTx(tx, id);
-    });
-    await this.audit.log('ITEM_STOCK_IN', { entity: 'item', detail: { ids }, ip });
-    return { stocked: ids.length };
+    return this.prisma.$transaction(async (tx) =>
+      operation(tx, operationId, 'stockInMany', { ids }, async () => {
+        for (const id of ids) await this.stockInTx(tx, id);
+        await tx.auditLog.create({
+          data: { action: 'ITEM_STOCK_IN_BATCH', detail: JSON.stringify({ ids }), operatorIp: ip },
+        });
+        return { stocked: ids.length };
+      }),
+    );
   }
 
   private async stockInTx(tx: Prisma.TransactionClient, itemId: number) {
     const item = await tx.item.findFirst({ where: { id: itemId, deletedAt: null } });
     if (!item) throw new NotFoundException('台账记录不存在');
     if (item.status !== 'PENDING_DISTRIBUTION') {
-      throw new BadRequestException(`「${item.itemName}」不是「待分发」状态，不能入库（请先确认到货）`);
+      throw new BadRequestException(
+        `「${item.itemName}」不是「待分发」状态，不能入库（请先确认到货）`,
+      );
     }
 
     let product = await tx.product.findUnique({ where: { name: item.itemName } });
+    if (product) assertCompatibleUnit(item.itemName, product.unit, item.unit);
     if (!product) {
       product = await tx.product.create({
         data: { name: item.itemName, unit: item.unit ?? undefined },

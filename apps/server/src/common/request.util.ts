@@ -1,3 +1,4 @@
+import { BadRequestException } from '@nestjs/common';
 import type { FastifyRequest } from 'fastify';
 
 /**
@@ -6,4 +7,13 @@ import type { FastifyRequest } from 'fastify';
  */
 export function clientIp(req: FastifyRequest): string | undefined {
   return req.ip?.replace('::ffff:', '') || undefined;
+}
+
+export function operationId(req: FastifyRequest): string | undefined {
+  const value = req.headers['idempotency-key'];
+  if (value === undefined)
+    throw new BadRequestException('缺少 Idempotency-Key 操作编号，请刷新客户端后重试');
+  if (typeof value !== 'string' || !/^[0-9a-f-]{36}$/i.test(value))
+    throw new BadRequestException('操作编号无效');
+  return value;
 }

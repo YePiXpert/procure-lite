@@ -1,0 +1,14 @@
+ALTER TABLE "ImportTask" ADD COLUMN "contentHash" TEXT;
+ALTER TABLE "ImportTask" ADD COLUMN "draft" TEXT;
+ALTER TABLE "ImportTask" ADD COLUMN "version" INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE "ImportTask" ADD COLUMN "generation" INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE "ImportTask" ADD COLUMN "aiStatus" TEXT NOT NULL DEFAULT 'DISABLED';
+ALTER TABLE "ImportTask" ADD COLUMN "aiResult" TEXT;
+ALTER TABLE "ImportTask" ADD COLUMN "confirmedAt" DATETIME;
+ALTER TABLE "ImportTask" ADD COLUMN "confirmation" TEXT;
+CREATE INDEX "ImportTask_contentHash_idx" ON "ImportTask"("contentHash");
+CREATE TABLE "OperationReceipt" ("id" TEXT NOT NULL PRIMARY KEY, "scope" TEXT NOT NULL, "requestHash" TEXT NOT NULL, "response" TEXT NOT NULL, "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP);
+CREATE TABLE "AiCall" ("id" TEXT NOT NULL PRIMARY KEY, "taskId" TEXT, "page" INTEGER, "generation" INTEGER NOT NULL DEFAULT 0, "model" TEXT NOT NULL, "status" TEXT NOT NULL, "response" TEXT, "inputTokens" INTEGER, "outputTokens" INTEGER, "cost" REAL, "requestId" TEXT, "durationMs" INTEGER, "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP);
+CREATE INDEX "AiCall_taskId_createdAt_idx" ON "AiCall"("taskId", "createdAt");
+CREATE TABLE "ImportRevision" ("id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT, "taskId" TEXT NOT NULL, "kind" TEXT NOT NULL, "version" INTEGER NOT NULL, "snapshot" TEXT NOT NULL, "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP);
+CREATE UNIQUE INDEX "ImportRevision_taskId_kind_version_key" ON "ImportRevision"("taskId", "kind", "version");

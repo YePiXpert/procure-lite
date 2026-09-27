@@ -1,3 +1,4 @@
+import { recoverRestore } from '../system/restore-files';
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { PrismaClient } from '@prisma/client';
 import { config } from '../config';
@@ -8,6 +9,7 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
 
   constructor() {
     // connection_limit=1：SQLite 单写者，池内多连接只会在写事务上互撞
+    recoverRestore(config.dataDir);
     super({ datasourceUrl: `${config.databaseUrl}?connection_limit=1` });
   }
 
@@ -20,7 +22,7 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
    * WAL：读写不再互斥；busy_timeout：写锁竞争时等待而非立即报 SQLITE_BUSY。
    * WAL 是数据库级持久设置，busy_timeout 是连接级设置（单连接下设一次即可）。
    */
-  private async applyPragmas(): Promise<void> {
+  async applyPragmas(): Promise<void> {
     try {
       // journal_mode 会返回结果行，必须走 queryRaw 而非 executeRaw
       await this.$queryRawUnsafe('PRAGMA journal_mode=WAL;');

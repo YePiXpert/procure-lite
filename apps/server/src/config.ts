@@ -24,9 +24,11 @@ export const config = {
   ocrApiKey: process.env.OCR_API_KEY ?? 'dev-ocr-key',
   /** AI 能力的初始默认值；运行时以 Setting 表中的 aiConfig 为准（设置页可改）。用 || 是因为 compose 会把未设置的环境变量传成空串 */
   llmDefaults: {
-    baseUrl: process.env.LLM_BASE_URL || 'https://api.deepseek.com',
-    apiKey: process.env.LLM_API_KEY || '',
-    model: process.env.LLM_MODEL || 'deepseek-chat',
+    baseUrl: process.env.LLM_BASE_URL || 'https://api.openai.com/v1',
+    apiKey: process.env.LLM_API_KEY_FILE
+      ? fs.readFileSync(process.env.LLM_API_KEY_FILE, 'utf8').trim()
+      : process.env.LLM_API_KEY || '',
+    model: process.env.LLM_MODEL || 'gpt-6-sol',
   },
   maxUploadBytes: Number(process.env.MAX_UPLOAD_MB ?? 30) * 1024 * 1024,
   session: {

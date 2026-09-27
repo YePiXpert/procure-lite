@@ -44,6 +44,10 @@ jobs:
       - run: pnpm --filter @procure-lite/server typecheck
       - run: pnpm --filter @procure-lite/server test
       - run: pnpm --filter @procure-lite/server build
+      - run: pnpm --filter @procure-lite/web exec playwright install --with-deps chromium
+      - run: pnpm --filter @procure-lite/web test:e2e
+      - run: python3 -m unittest discover -s deploy/tests -v
+      - run: python3 -m unittest discover -s scripts/tests -v
 
   ocr:
     name: OCR 解析服务（测试）
@@ -60,10 +64,20 @@ jobs:
         working-directory: apps/ocr
         run: pytest -v
 
+  ocr-runtime:
+    name: OCR 真实模型与离线资源测试
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build -f deploy/Dockerfile.ocr -t procure-lite-ocr:runtime-test .
+      - run: docker build -f deploy/Dockerfile.ocr-test -t procure-lite-ocr:test .
+      - run: docker run --rm --network none --cpus 2 --memory 4g procure-lite-ocr:test
+      - run: docker run --rm --network none --cpus 2 --memory 4g procure-lite-ocr:test python -m tests.smoke_engine
+
   docker:
     name: 镜像（${{ matrix.name }}）构建并推送 GHCR
     runs-on: ubuntu-latest
-    needs: [web, server, ocr]
+    needs: [web, server, ocr, ocr-runtime]
     # PR 只验证构建不推送；push / 手动触发推送 ghcr.io
     permissions:
       contents: read
@@ -100,6 +114,7 @@ jobs:
         with:
           context: .
           file: ${{ matrix.dockerfile }}
+          build-args: SOURCE_REVISION=${{ github.sha }}
           platforms: linux/amd64
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}

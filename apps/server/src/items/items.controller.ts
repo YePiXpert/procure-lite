@@ -17,7 +17,7 @@ import { z } from 'zod';
 import { ItemsService } from './items.service';
 import { ExportService } from './export.service';
 import { ZodValidationPipe } from '../common/zod-validation.pipe';
-import { clientIp } from '../common/request.util';
+import { clientIp, operationId } from '../common/request.util';
 import {
   batchUpdateSchema,
   itemCreateSchema,
@@ -62,7 +62,9 @@ export class ItemsController {
   @Post('batch-delete')
   @HttpCode(200)
   batchDelete(
-    @Body(new ZodValidationPipe(z.object({ ids: z.array(z.coerce.number().int().positive()).min(1) })))
+    @Body(
+      new ZodValidationPipe(z.object({ ids: z.array(z.coerce.number().int().positive()).min(1) })),
+    )
     body: { ids: number[] },
     @Req() req: FastifyRequest,
   ) {
@@ -85,13 +87,15 @@ export class ItemsController {
     @Body(new ZodValidationPipe(purchaseRegisterSchema)) body: PurchaseRegisterInput,
     @Req() req: FastifyRequest,
   ) {
-    return this.items.registerPurchase(body, clientIp(req));
+    return this.items.registerPurchase(body, clientIp(req), operationId(req));
   }
 
   @Post('batch-restore')
   @HttpCode(200)
   batchRestore(
-    @Body(new ZodValidationPipe(z.object({ ids: z.array(z.coerce.number().int().positive()).min(1) })))
+    @Body(
+      new ZodValidationPipe(z.object({ ids: z.array(z.coerce.number().int().positive()).min(1) })),
+    )
     body: { ids: number[] },
     @Req() req: FastifyRequest,
   ) {

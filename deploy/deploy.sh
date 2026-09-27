@@ -58,12 +58,13 @@ else
   fi
 fi
 
+# ---------- 获取镜像：三个服务必须来自同一源码版本 ----------
+SOURCE_REVISION=$(git rev-parse HEAD)
+export RELEASE_TAG="sha-$(git rev-parse --short=7 HEAD)"
 # ---------- 获取镜像：优先拉取 GHCR ----------
 info "拉取镜像（ghcr.io/$GHCR_OWNER/procure-lite-*）…"
 if docker compose pull 2>&1; then
   info "镜像拉取完成"
-  info "启动服务…"
-  docker compose up -d --remove-orphans
 else
   warn "镜像拉取失败（镜像未发布或为私有包未登录），回退到本地构建"
   if ! docker manifest inspect "ghcr.io/$GHCR_OWNER/procure-lite-server:latest" >/dev/null 2>&1; then
@@ -74,8 +75,17 @@ else
     warn "或到 GitHub → Packages → 对应包 → Settings 改为 Public"
   fi
   info "本地构建镜像并启动（OCR 镜像较大，约 5-15 分钟）…"
-  docker compose up -d --build
+  docker compose build --build-arg "SOURCE_REVISION=$SOURCE_REVISION" web server ocr
 fi
+
+# Persist the selected release only after all three images are available.
+ENV_TMP=$(mktemp .env.release.XXXXXX)
+awk '!/^RELEASE_TAG=/' .env > "$ENV_TMP"
+printf '\nRELEASE_TAG=%s\n' "$RELEASE_TAG" >> "$ENV_TMP"
+chmod 600 "$ENV_TMP"
+mv "$ENV_TMP" .env
+info "启动服务…"
+docker compose up -d --remove-orphans --pull never
 
 # ---------- 健康检查 ----------
 info "等待服务就绪…"
@@ -92,12 +102,11 @@ for i in $(seq 1 60); do
   sleep 3
 done
 for i in $(seq 1 30); do
-  OCR_OK=$(curl -fsS "http://127.0.0.1:${WEB_PORT}/api/system/ocr-health" 2>/dev/null || true)
-  if [ "$OCR_OK" = "true" ]; then
+  if docker compose exec -T ocr python -c 'import os,urllib.request; urllib.request.urlopen(urllib.request.Request("http://127.0.0.1:8000/ready",headers={"X-API-Key":os.environ["OCR_API_KEY"]}),timeout=30).read()' >/dev/null 2>&1; then
     info "OCR 解析服务正常（模型已加载）"
     break
   fi
-  [ "$i" = 30 ] && warn "OCR 服务 90 秒内未就绪（冷启动可能仍在加载模型），稍后在「系统设置」里确认其状态"
+  [ "$i" = 30 ] && die "OCR 就绪检查失败，部署未通过；检查模型与资源限制"
   sleep 3
 done
 

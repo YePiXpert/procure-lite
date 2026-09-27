@@ -1,6 +1,9 @@
 # OCR 解析微服务（PaddleOCR CPU 版，体积较大属正常）
 FROM python:3.11-slim
+ARG SOURCE_REVISION=unknown
+LABEL org.opencontainers.image.revision=$SOURCE_REVISION
 ENV PYTHONUNBUFFERED=1 PIP_NO_CACHE_DIR=1
+ENV OMP_NUM_THREADS=2 OPENBLAS_NUM_THREADS=2 MKL_NUM_THREADS=2
 WORKDIR /app
 
 # 系统依赖（paddle 与图像处理所需）
@@ -8,12 +11,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libglib2.0-0 libgl1 libgomp1 libsm6 libxext6 libxrender1 \
     && rm -rf /var/lib/apt/lists/*
 
-COPY apps/ocr/requirements.txt ./
+COPY apps/ocr/requirements.lock ./requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
 
 # 预下载 PaddleOCR 模型（构建期完成，避免首次请求超时）
-RUN python -c "from paddleocr import PaddleOCR; PaddleOCR(use_angle_cls=True, lang='ch', show_log=False)" || true
-
 COPY apps/ocr/app ./app
+COPY apps/ocr/models.sha256 /app/models.sha256
+RUN python -c "import asyncio; from app.ocr import warmup; asyncio.run(warmup())"
+RUN cd /root/.paddlex/official_models && sha256sum -c /app/models.sha256
+
 EXPOSE 8000
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

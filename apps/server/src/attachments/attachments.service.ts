@@ -52,11 +52,15 @@ export class AttachmentsService implements OnModuleDestroy {
       throw new BadRequestException('缺少关联对象');
     }
     if (params.itemId) {
-      const item = await this.prisma.item.findFirst({ where: { id: params.itemId, deletedAt: null } });
+      const item = await this.prisma.item.findFirst({
+        where: { id: params.itemId, deletedAt: null },
+      });
       if (!item) throw new NotFoundException('台账记录不存在');
     }
     if (params.distributionId) {
-      const dist = await this.prisma.distribution.findUnique({ where: { id: params.distributionId } });
+      const dist = await this.prisma.distribution.findUnique({
+        where: { id: params.distributionId },
+      });
       if (!dist) throw new NotFoundException('发放单不存在');
     }
 
@@ -122,7 +126,7 @@ export class AttachmentsService implements OnModuleDestroy {
    */
   async releaseFile(storagePath: string): Promise<void> {
     const remaining = await this.prisma.attachment.count({ where: { storagePath } });
-    if (remaining > 0) return;
+    if (remaining > 0 || (await this.prisma.importTask.count({ where: { storagePath } }))) return;
     fs.rmSync(path.join(config.uploadsDir, storagePath), { force: true });
   }
 

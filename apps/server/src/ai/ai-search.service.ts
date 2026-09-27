@@ -1,3 +1,4 @@
+import { maintenance } from '../common/maintenance';
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { AiConfigService } from './ai-config.service';
@@ -14,6 +15,7 @@ const MAX_SYNONYMS = 8;
 @Injectable()
 export class AiSearchService {
   private readonly logger = new Logger(AiSearchService.name);
+  private epoch = maintenance.epoch;
   private readonly cache = new Map<string, { terms: string[]; exp: number }>();
   private vocabCache: { names: string[]; exp: number } | null = null;
 
@@ -28,6 +30,11 @@ export class AiSearchService {
    * 任何失败都降级为空数组，绝不阻塞原有搜索。
    */
   async synonyms(term: string): Promise<string[]> {
+    if (this.epoch !== maintenance.epoch) {
+      this.cache.clear();
+      this.vocabCache = null;
+      this.epoch = maintenance.epoch;
+    }
     if (term.length < 2 || /^\d+$/.test(term)) return [];
     const cached = this.cache.get(term);
     if (cached && cached.exp > Date.now()) return cached.terms;
@@ -45,6 +52,11 @@ export class AiSearchService {
 
   /** 品名词表（台账高频品名 + 库存物品名），扩展与 OCR 校对共用 */
   async vocabulary(): Promise<string[]> {
+    if (this.epoch !== maintenance.epoch) {
+      this.cache.clear();
+      this.vocabCache = null;
+      this.epoch = maintenance.epoch;
+    }
     if (this.vocabCache && this.vocabCache.exp > Date.now()) return this.vocabCache.names;
     const [itemNames, products] = await Promise.all([
       this.prisma.item.groupBy({
@@ -56,7 +68,9 @@ export class AiSearchService {
       }),
       this.prisma.product.findMany({ select: { name: true }, take: 200 }),
     ]);
-    const names = [...new Set([...itemNames.map((g) => g.itemName), ...products.map((p) => p.name)])];
+    const names = [
+      ...new Set([...itemNames.map((g) => g.itemName), ...products.map((p) => p.name)]),
+    ];
     this.vocabCache = { names, exp: Date.now() + VOCAB_TTL_MS };
     return names;
   }
@@ -70,21 +84,28 @@ export class AiSearchService {
     const res = await this.llm.chat({
       baseUrl: cfg.baseUrl,
       apiKey: cfg.apiKey,
-      model: cfg.model,
+      model: cfg.searchModel || cfg.model,
       messages: [
         {
           role: 'system',
           content:
             '你是采购台账的搜索助手。下面给出系统现有品名词表与用户搜索词。' +
             '从词表中选出与搜索词指同一种或相近物品的名称（忽略词表中已包含搜索词字面的项）。' +
-            '只输出 JSON：{"terms": ["..."]}，最多 ' + MAX_SYNONYMS + ' 个；没有合适的输出空数组。',
+            '只输出 JSON：{"terms": ["..."]}，最多 ' +
+            MAX_SYNONYMS +
+            ' 个；没有合适的输出空数组。',
         },
         {
           role: 'user',
           content: JSON.stringify({ 词表: vocab.slice(0, 300), 搜索词: term }),
         },
       ],
-      jsonMode: true,
+      schema: {
+        type: 'object',
+        properties: { terms: { type: 'array', items: { type: 'string' }, maxItems: 8 } },
+        required: ['terms'],
+        additionalProperties: false,
+      },
       temperature: 0,
       maxTokens: 512,
       timeoutMs: 20_000,

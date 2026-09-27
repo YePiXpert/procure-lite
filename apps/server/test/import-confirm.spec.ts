@@ -9,7 +9,7 @@ beforeAll(async () => {
 afterAll(() => closeApp(ctx));
 
 function auth(payload: Record<string, unknown> = {}): Record<string, unknown> {
-  return { headers: { cookie: ctx.cookie }, ...payload };
+  return { headers: { cookie: ctx.cookie, 'idempotency-key': crypto.randomUUID() }, ...payload };
 }
 
 describe('导入确认（去重）', () => {
@@ -31,7 +31,13 @@ describe('导入确认（去重）', () => {
     const check = await ctx.inject({
       method: 'POST',
       url: '/api/imports/check-duplicates',
-      ...auth({ payload: { serialNumber: base.serialNumber, handler: base.handler, itemNames: ['签字笔', '荧光笔'] } }),
+      ...auth({
+        payload: {
+          serialNumber: base.serialNumber,
+          handler: base.handler,
+          itemNames: ['签字笔', '荧光笔'],
+        },
+      }),
     });
     expect(check.statusCode).toBe(201);
     const dups = check.json();
@@ -55,7 +61,11 @@ describe('导入确认（去重）', () => {
     expect(confirm.statusCode).toBe(201);
     expect(confirm.json()).toMatchObject({ created: 1, merged: 0, skipped: 1 });
 
-    const list = await ctx.inject({ method: 'GET', url: '/api/items?search=OA-2026-777', ...auth() });
+    const list = await ctx.inject({
+      method: 'GET',
+      url: '/api/items?search=OA-2026-777',
+      ...auth(),
+    });
     expect(list.json().total).toBe(2); // 只有原来两条
   });
 
@@ -76,7 +86,11 @@ describe('导入确认（去重）', () => {
     expect(confirm.statusCode).toBe(201);
     expect(confirm.json()).toMatchObject({ created: 0, merged: 1, skipped: 0 });
 
-    const list = await ctx.inject({ method: 'GET', url: '/api/items?search=签字笔&handler=刘洋', ...auth() });
+    const list = await ctx.inject({
+      method: 'GET',
+      url: '/api/items?search=签字笔&handler=刘洋',
+      ...auth(),
+    });
     expect(list.json().items[0].quantity).toBe(8);
   });
 
@@ -100,7 +114,11 @@ describe('导入确认（去重）', () => {
 
 describe('审计日志', () => {
   it('操作被记录且可查询', async () => {
-    const res = await ctx.inject({ method: 'GET', url: '/api/audit-logs?search=ITEM_CREATE', ...auth() });
+    const res = await ctx.inject({
+      method: 'GET',
+      url: '/api/audit-logs?search=ITEM_CREATE',
+      ...auth(),
+    });
     expect(res.statusCode).toBe(200);
     expect(res.json().total).toBeGreaterThanOrEqual(1);
   });
@@ -118,7 +136,11 @@ describe('报表', () => {
   });
 
   it('amount 按月份分组', async () => {
-    const res = await ctx.inject({ method: 'GET', url: '/api/reports/amount?groupBy=month', ...auth() });
+    const res = await ctx.inject({
+      method: 'GET',
+      url: '/api/reports/amount?groupBy=month',
+      ...auth(),
+    });
     expect(res.statusCode).toBe(200);
     const points = res.json();
     expect(Array.isArray(points)).toBe(true);

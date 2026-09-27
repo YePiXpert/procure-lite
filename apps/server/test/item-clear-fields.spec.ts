@@ -29,14 +29,14 @@ beforeAll(async () => {
   const res = await ctx.inject({
     method: 'POST',
     url: '/api/items',
-    headers: { cookie: ctx.cookie },
+    headers: { cookie: ctx.cookie, 'idempotency-key': crypto.randomUUID() },
     payload: filled,
   });
   itemId = res.json().id;
   await ctx.inject({
     method: 'PATCH',
     url: `/api/items/${itemId}`,
-    headers: { cookie: ctx.cookie },
+    headers: { cookie: ctx.cookie, 'idempotency-key': crypto.randomUUID() },
     payload: { arrivalDate: '2026-08-12' },
   });
 });
@@ -46,7 +46,7 @@ function patch(payload: Record<string, unknown>) {
   return ctx.inject({
     method: 'PATCH',
     url: `/api/items/${itemId}`,
-    headers: { cookie: ctx.cookie },
+    headers: { cookie: ctx.cookie, 'idempotency-key': crypto.randomUUID() },
     payload,
   });
 }
@@ -83,7 +83,7 @@ describe('台账可选字段的清空语义', () => {
     const history = await ctx.inject({
       method: 'GET',
       url: `/api/items/${itemId}/history`,
-      headers: { cookie: ctx.cookie },
+      headers: { cookie: ctx.cookie, 'idempotency-key': crypto.randomUUID() },
     });
     const latest = history.json()[0];
     expect(latest.action).toBe('UPDATE');

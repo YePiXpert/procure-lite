@@ -12,6 +12,8 @@ COPY apps/web apps/web
 RUN pnpm --filter @procure-lite/shared build && pnpm --filter @procure-lite/web build
 
 FROM nginx:1.27-alpine
+ARG SOURCE_REVISION=unknown
+LABEL org.opencontainers.image.revision=$SOURCE_REVISION
 COPY deploy/nginx.conf /etc/nginx/conf.d/default.conf
 COPY --from=build /repo/apps/web/dist /usr/share/nginx/html
 EXPOSE 80

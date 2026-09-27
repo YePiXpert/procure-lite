@@ -14,7 +14,7 @@ beforeAll(async () => {
 afterAll(() => closeApp(ctx));
 
 function auth(payload: Record<string, unknown> = {}): Record<string, unknown> {
-  return { headers: { cookie: ctx.cookie }, ...payload };
+  return { headers: { cookie: ctx.cookie, 'idempotency-key': crypto.randomUUID() }, ...payload };
 }
 
 let serialSeq = 0;
@@ -63,7 +63,11 @@ async function distribute(itemId: number, itemName: string) {
 }
 
 async function createSupplier(name: string): Promise<number> {
-  const res = await ctx.inject({ method: 'POST', url: '/api/suppliers', ...auth({ payload: { name } }) });
+  const res = await ctx.inject({
+    method: 'POST',
+    url: '/api/suppliers',
+    ...auth({ payload: { name } }),
+  });
   expect(res.statusCode).toBe(201);
   return res.json().id;
 }
@@ -102,7 +106,11 @@ describe('手工改状态的边界', () => {
   it('编辑不能把状态改成已发放 / 已入库', async () => {
     const [id] = await seedForm(['回形针'], 'PENDING_DISTRIBUTION');
     for (const status of ['DISTRIBUTED', 'STOCKED']) {
-      const res = await ctx.inject({ method: 'PATCH', url: `/api/items/${id}`, ...auth({ payload: { status } }) });
+      const res = await ctx.inject({
+        method: 'PATCH',
+        url: `/api/items/${id}`,
+        ...auth({ payload: { status } }),
+      });
       expect(res.statusCode).toBe(400);
       expect(res.json().message).toContain('发放');
     }
@@ -121,17 +129,33 @@ describe('手工改状态的边界', () => {
     expect(back.statusCode).toBe(400);
     expect(back.json().message).toContain('作废');
 
-    const qty = await ctx.inject({ method: 'PATCH', url: `/api/items/${id}`, ...auth({ payload: { quantity: 99 } }) });
+    const qty = await ctx.inject({
+      method: 'PATCH',
+      url: `/api/items/${id}`,
+      ...auth({ payload: { quantity: 99 } }),
+    });
     expect(qty.statusCode).toBe(400);
 
     // 编辑表单整表提交：状态/数量与原值相同，只改备注与付款 → 允许
     const note = await ctx.inject({
       method: 'PATCH',
       url: `/api/items/${id}`,
-      ...auth({ payload: { status: 'DISTRIBUTED', quantity: 10, itemName: '文件夹', note: '已签收', paymentStatus: 'PAID' } }),
+      ...auth({
+        payload: {
+          status: 'DISTRIBUTED',
+          quantity: 10,
+          itemName: '文件夹',
+          note: '已签收',
+          paymentStatus: 'PAID',
+        },
+      }),
     });
     expect(note.statusCode).toBe(200);
-    expect(note.json()).toMatchObject({ status: 'DISTRIBUTED', note: '已签收', paymentStatus: 'PAID' });
+    expect(note.json()).toMatchObject({
+      status: 'DISTRIBUTED',
+      note: '已签收',
+      paymentStatus: 'PAID',
+    });
   });
 
   it('批量改状态：终态被 schema 拒绝；混入已发放记录则整批拒绝、一条不改', async () => {
@@ -159,15 +183,25 @@ describe('手工改状态的边界', () => {
     const arrive = await ctx.inject({
       method: 'POST',
       url: '/api/items/batch-update',
-      ...auth({ payload: { ids: [a, b], patch: { status: 'PENDING_DISTRIBUTION', arrivalDate: '2026-09-03' } } }),
+      ...auth({
+        payload: {
+          ids: [a, b],
+          patch: { status: 'PENDING_DISTRIBUTION', arrivalDate: '2026-09-03' },
+        },
+      }),
     });
     expect(arrive.statusCode).toBe(200);
-    expect(await getItem(a)).toMatchObject({ status: 'PENDING_DISTRIBUTION', arrivalDate: '2026-09-03' });
+    expect(await getItem(a)).toMatchObject({
+      status: 'PENDING_DISTRIBUTION',
+      arrivalDate: '2026-09-03',
+    });
 
     const undo = await ctx.inject({
       method: 'POST',
       url: '/api/items/batch-update',
-      ...auth({ payload: { ids: [a, b], patch: { status: 'PENDING_ARRIVAL', arrivalDate: null } } }),
+      ...auth({
+        payload: { ids: [a, b], patch: { status: 'PENDING_ARRIVAL', arrivalDate: null } },
+      }),
     });
     expect(undo.statusCode).toBe(200);
     expect(await getItem(b)).toMatchObject({ status: 'PENDING_ARRIVAL', arrivalDate: null });
@@ -216,7 +250,11 @@ describe('整单下单登记', () => {
     });
     expect(await getItem(c)).toMatchObject({ status: 'PENDING_ARRIVAL', unitPrice: null });
 
-    const suggest = await ctx.inject({ method: 'GET', url: '/api/suppliers/suggest?itemName=A4 纸', ...auth() });
+    const suggest = await ctx.inject({
+      method: 'GET',
+      url: '/api/suppliers/suggest?itemName=A4 纸',
+      ...auth(),
+    });
     expect(suggest.json().some((r: { unitPrice: number }) => r.unitPrice === 25)).toBe(true);
 
     const history = await ctx.inject({ method: 'GET', url: `/api/items/${a}/history`, ...auth() });
@@ -228,7 +266,9 @@ describe('整单下单登记', () => {
     const res = await ctx.inject({
       method: 'POST',
       url: '/api/items/purchase',
-      ...auth({ payload: { lines: [{ id: a, unitPrice: 1 }], markOrdered: false, rememberPrice: false } }),
+      ...auth({
+        payload: { lines: [{ id: a, unitPrice: 1 }], markOrdered: false, rememberPrice: false },
+      }),
     });
     expect(res.statusCode).toBe(200);
     expect(res.json()).toEqual({ updated: 1, ordered: 0 });
@@ -242,7 +282,14 @@ describe('整单下单登记', () => {
     const res = await ctx.inject({
       method: 'POST',
       url: '/api/items/purchase',
-      ...auth({ payload: { lines: [{ id: a, unitPrice: 30 }, { id: b, unitPrice: 20 }] } }),
+      ...auth({
+        payload: {
+          lines: [
+            { id: a, unitPrice: 30 },
+            { id: b, unitPrice: 20 },
+          ],
+        },
+      }),
     });
     expect(res.statusCode).toBe(400);
     expect((await getItem(a)).unitPrice).toBeNull();
@@ -252,19 +299,31 @@ describe('整单下单登记', () => {
 describe('整单入库', () => {
   it('多条同时入库，库存累加', async () => {
     const [a, b] = await seedForm(['打印纸', '碳粉'], 'PENDING_DISTRIBUTION');
-    const res = await ctx.inject({ method: 'POST', url: '/api/inventory/stock-in', ...auth({ payload: { itemIds: [a, b] } }) });
+    const res = await ctx.inject({
+      method: 'POST',
+      url: '/api/inventory/stock-in',
+      ...auth({ payload: { itemIds: [a, b] } }),
+    });
     expect(res.statusCode).toBe(200);
     expect(res.json()).toEqual({ stocked: 2 });
     expect((await getItem(a)).status).toBe('STOCKED');
 
-    const products = await ctx.inject({ method: 'GET', url: '/api/inventory/products?search=碳粉', ...auth() });
+    const products = await ctx.inject({
+      method: 'GET',
+      url: '/api/inventory/products?search=碳粉',
+      ...auth(),
+    });
     expect(products.json().find((p: { name: string }) => p.name === '碳粉').stockQty).toBe(10);
   });
 
   it('任一条不在待分发则整批回滚', async () => {
     const [a] = await seedForm(['胶水'], 'PENDING_DISTRIBUTION');
     const [b] = await seedForm(['剪刀'], 'PENDING_ARRIVAL');
-    const res = await ctx.inject({ method: 'POST', url: '/api/inventory/stock-in', ...auth({ payload: { itemIds: [a, b] } }) });
+    const res = await ctx.inject({
+      method: 'POST',
+      url: '/api/inventory/stock-in',
+      ...auth({ payload: { itemIds: [a, b] } }),
+    });
     expect(res.statusCode).toBe(400);
     expect(res.json().message).toContain('剪刀');
     expect((await getItem(a)).status).toBe('PENDING_DISTRIBUTION');

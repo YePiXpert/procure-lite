@@ -200,6 +200,15 @@ model ImportTask {
   storagePath String?
   createdAt   DateTime  @default(now())
   finishedAt  DateTime?
+  contentHash String?
+  draft       String?
+  version     Int      @default(0)
+  generation  Int      @default(0)
+  aiStatus    String   @default("DISABLED")
+  aiResult    String?
+  confirmedAt DateTime?
+  confirmation String?
+  @@index([contentHash])
 }
 
 /* 单管理员安全状态 */
@@ -216,4 +225,40 @@ model SystemSecurity {
 model Setting {
   key   String @id
   value String
+}
+
+
+model OperationReceipt {
+  id String @id
+  scope String
+  requestHash String
+  response String
+  createdAt DateTime @default(now())
+}
+
+model ImportRevision {
+  id Int @id @default(autoincrement())
+  taskId String
+  kind String // DRAFT | LOCAL
+  version Int
+  snapshot String
+  createdAt DateTime @default(now())
+  @@unique([taskId, kind, version])
+}
+
+model AiCall {
+  id String @id
+  taskId String?
+  page Int?
+  generation Int @default(0)
+  model String
+  status String
+  response String?
+  inputTokens Int?
+  outputTokens Int?
+  cost Float?
+  requestId String?
+  durationMs Int?
+  createdAt DateTime @default(now())
+  @@index([taskId, createdAt])
 }

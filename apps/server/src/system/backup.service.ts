@@ -1,177 +1,253 @@
-import {
-  BadRequestException,
-  Injectable,
-  Logger,
-  NotFoundException,
-  OnModuleDestroy,
-  ServiceUnavailableException,
-} from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import fs from 'node:fs';
 import path from 'node:path';
-import { createWriteStream } from 'node:fs';
+import { createHash, randomUUID } from 'node:crypto';
+import { execFileSync } from 'node:child_process';
+import { PrismaClient } from '@prisma/client';
 import archiver from 'archiver';
 import AdmZip from 'adm-zip';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { config } from '../config';
-
-const MAX_RESTORE_ENTRIES = 20_000;
-const MAX_RESTORE_BYTES = 2 * 1024 * 1024 * 1024; // 2GB 解压上限
+import { maintenance, restoreEvents } from '../common/maintenance';
+import { recoverRestore, writeRestoreJournal } from './restore-files';
 
 export interface BackupInfo {
   name: string;
   sizeBytes: number;
   createdAt: string;
 }
-
-/** 备份 = SQLite 一致性快照 + 上传附件目录，打包为 zip */
+const sha = (bytes: Buffer) => createHash('sha256').update(bytes).digest('hex');
+const schemaPath = path.resolve(__dirname, '../../prisma/schema.prisma');
+function files(directory: string, prefix = ''): string[] {
+  if (!fs.existsSync(directory)) return [];
+  return fs
+    .readdirSync(directory, { withFileTypes: true })
+    .flatMap((e) =>
+      e.isSymbolicLink()
+        ? []
+        : e.isDirectory()
+          ? files(path.join(directory, e.name), prefix + e.name + '/')
+          : [prefix + e.name],
+    );
+}
 @Injectable()
-export class BackupService implements OnModuleDestroy {
-  private readonly logger = new Logger(BackupService.name);
-  private restoring = false;
-
+export class BackupService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
   ) {}
-
-  isRestoring(): boolean {
-    return this.restoring;
+  isRestoring() {
+    return maintenance.locked;
   }
-
   async create(ip?: string): Promise<BackupInfo> {
-    if (this.restoring) throw new ServiceUnavailableException('备份恢复进行中，请稍后再试');
-    const stamp = new Date();
-    const name = `backup-${stamp.toISOString().replace(/[:.]/g, '-').slice(0, 19)}.zip`;
-    const target = path.join(config.backupsDir, name);
-    const snapshotPath = path.join(config.backupsDir, `.snapshot-${Date.now()}.db`);
-
-    try {
-      // VACUUM INTO 生成一致性快照（单引号转义防意外）
-      const snapshotSql = snapshotPath.split('\\').join('/').replace(/'/g, "''");
-      await this.prisma.$executeRawUnsafe(`VACUUM INTO '${snapshotSql}'`);
-
-      await new Promise<void>((resolve, reject) => {
-        const output = createWriteStream(target);
-        const archive = archiver('zip', { zlib: { level: 6 } });
-        output.on('close', resolve);
-        archive.on('error', reject);
-        archive.pipe(output);
-        archive.file(snapshotPath, { name: 'procure.db' });
-        archive.directory(config.uploadsDir, 'uploads');
-        void archive.finalize();
-      });
-
-      const stat = fs.statSync(target);
-      await this.audit.log('BACKUP_CREATE', { entity: 'backup', detail: { name }, ip });
-      return { name, sizeBytes: stat.size, createdAt: stat.birthtime.toISOString() };
-    } finally {
-      fs.rmSync(snapshotPath, { force: true });
-    }
+    return maintenance.exclusive(async () => {
+      const name = `backup-${Date.now()}-${randomUUID()}.zip`,
+        target = path.join(config.backupsDir, name),
+        snapshot = path.join(config.backupsDir, `.snapshot-${randomUUID()}.db`);
+      try {
+        await this.prisma.$executeRawUnsafe(`VACUUM INTO '${snapshot.replace(/'/g, "''")}'`);
+        const hashes: Record<string, string> = { 'procure.db': sha(fs.readFileSync(snapshot)) };
+        for (const file of files(config.uploadsDir))
+          hashes[`uploads/${file}`] = sha(fs.readFileSync(path.join(config.uploadsDir, file)));
+        const manifest = {
+          formatVersion: 2,
+          schemaHash: sha(fs.readFileSync(schemaPath)),
+          createdAt: new Date().toISOString(),
+          files: hashes,
+        };
+        await new Promise<void>((resolve, reject) => {
+          const output = fs.createWriteStream(target),
+            archive = archiver('zip', { zlib: { level: 6 } });
+          output.on('close', resolve);
+          output.on('error', reject);
+          archive.on('error', reject);
+          archive.pipe(output);
+          archive.file(snapshot, { name: 'procure.db' });
+          archive.directory(config.uploadsDir, 'uploads');
+          archive.append(JSON.stringify(manifest), { name: 'manifest.json' });
+          void archive.finalize();
+        });
+        await this.audit.log('BACKUP_CREATE', { detail: { name }, ip });
+        return { name, sizeBytes: fs.statSync(target).size, createdAt: manifest.createdAt };
+      } catch (error) {
+        fs.rmSync(target, { force: true });
+        throw error;
+      } finally {
+        fs.rmSync(snapshot, { force: true });
+      }
+    });
   }
-
   list(): BackupInfo[] {
     return fs
       .readdirSync(config.backupsDir)
-      .filter((f) => f.endsWith('.zip'))
+      .filter((n) => n.endsWith('.zip'))
       .map((name) => {
-        const stat = fs.statSync(path.join(config.backupsDir, name));
-        return { name, sizeBytes: stat.size, createdAt: stat.mtime.toISOString() };
+        const s = fs.statSync(path.join(config.backupsDir, name));
+        return { name, sizeBytes: s.size, createdAt: s.mtime.toISOString() };
       })
-      .sort((a, b) => b.name.localeCompare(a.name));
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   }
-
-  private resolve(name: string): string {
+  path(name: string) {
     if (!/^backup-[\w-]+\.zip$/.test(name)) throw new BadRequestException('备份文件名不合法');
     const full = path.join(config.backupsDir, name);
     if (!fs.existsSync(full)) throw new NotFoundException('备份不存在');
     return full;
   }
-
-  path(name: string): string {
-    return this.resolve(name);
-  }
-
-  /** 恢复：校验 zip → 断开数据库 → 替换文件 → 重连 */
-  async restore(name: string, ip?: string): Promise<void> {
-    const full = this.resolve(name);
-    if (this.restoring) throw new ServiceUnavailableException('已有恢复任务进行中');
-    this.restoring = true;
-    let disconnected = false;
+  private async validate(db: string, root: string, migrate: boolean) {
+    let client = new PrismaClient({ datasources: { db: { url: `file:${db}` } } });
     try {
-      const zip = new AdmZip(full);
-      const entries = zip.getEntries();
-      if (entries.length > MAX_RESTORE_ENTRIES) throw new BadRequestException('备份内容异常');
-      const totalBytes = entries.reduce((s, e) => s + e.header.size, 0);
-      if (totalBytes > MAX_RESTORE_BYTES) throw new BadRequestException('备份内容异常');
-      for (const e of entries) {
-        if (e.entryName.includes('..') || path.isAbsolute(e.entryName)) {
-          throw new BadRequestException('备份包含非法路径');
-        }
-      }
-
-      const tempDir = path.join(config.backupsDir, `.restore-${Date.now()}`);
-      fs.mkdirSync(tempDir, { recursive: true });
-      zip.extractAllTo(tempDir, true);
-
-      const dbFile = path.join(tempDir, 'procure.db');
-      if (!fs.existsSync(dbFile)) throw new BadRequestException('备份缺少数据库文件');
-
-      await this.prisma.$disconnect();
-      disconnected = true;
-      fs.copyFileSync(dbFile, config.dbPath);
-
-      fs.rmSync(config.uploadsDir, { recursive: true, force: true });
-      const restoredUploads = path.join(tempDir, 'uploads');
-      if (fs.existsSync(restoredUploads)) {
-        fs.mkdirSync(config.uploadsDir, { recursive: true });
-        fs.cpSync(restoredUploads, config.uploadsDir, { recursive: true });
-      } else {
-        fs.mkdirSync(config.uploadsDir, { recursive: true });
-      }
-
-      fs.rmSync(tempDir, { recursive: true, force: true });
-      await this.prisma.$connect();
-      disconnected = false;
-      await this.audit.log('BACKUP_RESTORE', { entity: 'backup', detail: { name }, ip });
-      this.logger.log(`已从备份 ${name} 恢复`);
-    } catch (e) {
-      this.logger.error(`恢复失败：${e instanceof Error ? e.message : e}`);
-      throw e;
+      const integrity =
+        await client.$queryRawUnsafe<Record<string, unknown>[]>('PRAGMA integrity_check');
+      if (integrity.length !== 1 || Object.values(integrity[0])[0] !== 'ok')
+        throw new BadRequestException('备份数据库损坏');
+      if ((await client.$queryRawUnsafe<unknown[]>('PRAGMA foreign_key_check')).length)
+        throw new BadRequestException('备份外键不完整');
     } finally {
-      // 无论成败，只要断开过就尽力重连，避免进程带着关闭的连接池继续服务
-      if (disconnected) {
-        await this.prisma.$connect().catch((re: unknown) => {
-          this.logger.error(`恢复后重连数据库失败，由容器重启兜底: ${re}`);
-        });
+      await client.$disconnect();
+    }
+    if (migrate)
+      execFileSync(
+        process.execPath,
+        [require.resolve('prisma/build/index.js'), 'migrate', 'deploy', '--schema', schemaPath],
+        { env: { ...process.env, DATABASE_URL: `file:${db}` }, stdio: 'pipe', timeout: 60_000 },
+      );
+    client = new PrismaClient({ datasources: { db: { url: `file:${db}` } } });
+    try {
+      const attachments = await client.attachment.findMany({ select: { storagePath: true } });
+      const tasks = await client.importTask.findMany({
+        where: { storagePath: { not: null } },
+        select: { storagePath: true },
+      });
+      for (const entry of [...attachments, ...tasks]) {
+        if (!entry.storagePath) continue;
+        const absolute = path.resolve(root, 'uploads', entry.storagePath);
+        if (
+          !absolute.startsWith(path.resolve(root, 'uploads') + path.sep) ||
+          !fs.existsSync(absolute)
+        )
+          throw new BadRequestException(`备份缺少原件或附件：${entry.storagePath}`);
       }
-      this.restoring = false;
+      await client.$queryRawUnsafe('PRAGMA wal_checkpoint(TRUNCATE)');
+    } finally {
+      await client.$disconnect();
     }
   }
-
-  remove(name: string, ip?: string): { ok: boolean } {
-    const full = this.resolve(name);
-    fs.rmSync(full);
-    void this.audit.log('BACKUP_DELETE', { entity: 'backup', detail: { name }, ip });
+  async restore(name: string, ip?: string): Promise<void> {
+    const full = this.path(name);
+    return maintenance.exclusive(async () => {
+      const directory = `.restore-${randomUUID()}`,
+        root = path.join(config.dataDir, directory),
+        stage = path.join(root, 'new'),
+        old = path.join(root, 'old');
+      let switched = false;
+      let disconnected = false;
+      fs.mkdirSync(stage, { recursive: true });
+      fs.mkdirSync(old);
+      try {
+        const zip = new AdmZip(full),
+          entries = zip.getEntries();
+        if (
+          entries.length > 20_000 ||
+          entries.reduce((n, e) => n + e.header.size, 0) > 2 * 1024 ** 3
+        )
+          throw new BadRequestException('备份内容超限');
+        const names = new Set<string>();
+        for (const e of entries) {
+          const n = e.entryName;
+          if (
+            n.includes('..') ||
+            n.includes('\\') ||
+            path.isAbsolute(n) ||
+            names.has(n) ||
+            !/^(procure\.db|manifest\.json|uploads\/.+|uploads\/)$/.test(n) ||
+            ((e.header.attr >>> 16) & 0xf000) === 0xa000
+          )
+            throw new BadRequestException('备份包含非法路径或重复条目');
+          names.add(n);
+        }
+        zip.extractAllTo(stage, true);
+        const manifestPath = path.join(stage, 'manifest.json');
+        let sameSchema = false;
+        if (fs.existsSync(manifestPath)) {
+          const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+          if (manifest.formatVersion !== 2) throw new BadRequestException('不支持的备份版本');
+          for (const [file, hash] of Object.entries(manifest.files as Record<string, string>)) {
+            const absolute = path.resolve(stage, file);
+            if (
+              !absolute.startsWith(stage + path.sep) ||
+              !fs.existsSync(absolute) ||
+              sha(fs.readFileSync(absolute)) !== hash
+            )
+              throw new BadRequestException('备份文件校验失败');
+          }
+          for (const e of entries)
+            if (!e.isDirectory && e.entryName !== 'manifest.json' && !manifest.files[e.entryName])
+              throw new BadRequestException('备份文件未列入清单');
+          sameSchema = manifest.schemaHash === sha(fs.readFileSync(schemaPath));
+        }
+        const db = path.join(stage, 'procure.db');
+        if (!fs.existsSync(db)) throw new BadRequestException('备份缺少数据库');
+        await this.validate(db, stage, !sameSchema);
+        fs.mkdirSync(path.join(stage, 'uploads'), { recursive: true });
+        const epoch = await this.prisma.systemSecurity.findUnique({
+          where: { id: 1 },
+          select: { sessionEpoch: true },
+        });
+        await this.prisma.$queryRawUnsafe('PRAGMA wal_checkpoint(TRUNCATE)');
+        await this.prisma.$disconnect();
+        disconnected = true;
+        writeRestoreJournal(config.dataDir, directory, 'SWAPPING');
+        switched = true;
+        for (const suffix of ['-wal', '-shm']) fs.rmSync(config.dbPath + suffix, { force: true });
+        for (const file of ['procure.db', 'uploads']) {
+          const live = path.join(config.dataDir, file);
+          if (fs.existsSync(live)) fs.renameSync(live, path.join(old, file));
+          fs.renameSync(path.join(stage, file), live);
+        }
+        await this.prisma.$connect();
+        disconnected = false;
+        await this.prisma.applyPragmas();
+        const restored = await this.prisma.systemSecurity.findUnique({ where: { id: 1 } });
+        if (restored)
+          await this.prisma.systemSecurity.update({
+            where: { id: 1 },
+            data: { sessionEpoch: Math.max(restored.sessionEpoch, epoch?.sessionEpoch ?? 0) + 1 },
+          });
+        await this.audit.log('BACKUP_RESTORE', { detail: { name }, ip });
+        writeRestoreJournal(config.dataDir, directory, 'COMMITTED');
+        recoverRestore(config.dataDir);
+        switched = false;
+        maintenance.epoch++;
+        await Promise.all(restoreEvents.listeners('restored').map((listener) => listener()));
+      } catch (error) {
+        if (switched) {
+          await this.prisma.$disconnect();
+          recoverRestore(config.dataDir);
+          await this.prisma.$connect();
+          await this.prisma.applyPragmas();
+        } else if (disconnected) {
+          await this.prisma.$connect();
+          await this.prisma.applyPragmas();
+        }
+        throw error;
+      } finally {
+        if (!switched) fs.rmSync(root, { recursive: true, force: true });
+      }
+    });
+  }
+  remove(name: string, ip?: string) {
+    if (maintenance.locked) throw new BadRequestException('维护中不能删除备份');
+    fs.rmSync(this.path(name));
+    void this.audit.log('BACKUP_DELETE', { detail: { name }, ip });
     return { ok: true };
   }
-
-  /** 只保留最近 keepCount 个备份 */
-  prune(keepCount: number): number {
-    const list = this.list();
-    let removed = 0;
-    for (const b of list.slice(keepCount)) {
-      try {
-        fs.rmSync(path.join(config.backupsDir, b.name));
-        removed += 1;
-      } catch {
-        // 忽略单个删除失败
-      }
+  prune(keep: number) {
+    let n = 0;
+    for (const b of this.list().slice(keep)) {
+      fs.rmSync(this.path(b.name));
+      n++;
     }
-    return removed;
-  }
-
-  onModuleDestroy(): void {
-    this.restoring = false;
+    return n;
   }
 }

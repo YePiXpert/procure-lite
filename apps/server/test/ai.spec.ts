@@ -14,7 +14,7 @@ class FakeLlm {
 
   async chat(opts: ChatCallOptions): Promise<ChatCompletionResult> {
     this.calls.push(opts);
-    if (opts.jsonMode) return { content: this.json, toolCalls: [] };
+    if (opts.jsonMode || opts.schema) return { content: this.json, toolCalls: [] };
     const next = this.queue.shift();
     if (!next) throw new Error('FakeLml 队列为空');
     return next;
@@ -37,7 +37,7 @@ beforeAll(async () => {
 afterAll(() => closeApp(ctx));
 
 function auth(payload: Record<string, unknown> = {}): Record<string, unknown> {
-  return { headers: { cookie: ctx.cookie }, ...payload };
+  return { headers: { cookie: ctx.cookie, 'idempotency-key': crypto.randomUUID() }, ...payload };
 }
 
 async function seedItem(over: Record<string, unknown> = {}): Promise<void> {
@@ -183,7 +183,9 @@ describe('AI 问答', () => {
 
     // 第二轮请求里应带有工具结果消息
     const second = fake.calls.find((c) => c.messages.some((m) => m.role === 'tool'));
-    expect(second?.messages.some((m) => m.role === 'tool' && m.tool_call_id === 'call-1')).toBe(true);
+    expect(second?.messages.some((m) => m.role === 'tool' && m.tool_call_id === 'call-1')).toBe(
+      true,
+    );
   });
 
   it('模型直接回答时不产生 steps', async () => {
@@ -208,7 +210,9 @@ describe('AI 语义搜索', () => {
     });
     expect(res.statusCode).toBe(200);
     expect(res.json().total).toBeGreaterThanOrEqual(1);
-    expect(res.json().items.some((i: { itemName: string }) => i.itemName === 'A4复印纸')).toBe(true);
+    expect(res.json().items.some((i: { itemName: string }) => i.itemName === 'A4复印纸')).toBe(
+      true,
+    );
   });
 
   it('词表外的扩展词被丢弃（结果落地）', async () => {
@@ -220,7 +224,9 @@ describe('AI 语义搜索', () => {
     });
     expect(res.statusCode).toBe(200);
     // 「打印纸2」本身不命中，词表外的词也被过滤 → 总数与 A4复印纸 无关
-    expect(res.json().items.some((i: { itemName: string }) => i.itemName === 'A4复印纸')).toBe(false);
+    expect(res.json().items.some((i: { itemName: string }) => i.itemName === 'A4复印纸')).toBe(
+      false,
+    );
   });
 });
 
@@ -250,7 +256,7 @@ describe('AI OCR 校对', () => {
     fake.json = JSON.stringify({
       department: '行政部',
       handler: '刘洋', // 与当前值相同 → 应被差集剔除
-      lines: [{ index: 0, itemName: 'A4复印纸', reason: '对齐已有品名' }],
+      lines: [{ lineId: 'legacy-0', itemName: 'A4复印纸', reason: '对齐已有品名' }],
       warnings: ['流水号格式看起来正常'],
     });
     const res = await ctx.inject({

@@ -1,10 +1,9 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
+import { createHash } from 'node:crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { config } from '../config';
 import type { AiConfigInput, AiConfigView } from '@procure-lite/shared';
-
-const SETTING_KEY = 'aiConfig';
 
 export interface StoredAiConfig {
   enabled: boolean;
@@ -12,54 +11,111 @@ export interface StoredAiConfig {
   apiKey: string;
   model: string;
   semanticSearch: boolean;
+  protocol: 'responses';
+  autoImport: boolean;
+  importModel: string;
+  askModel: string;
+  searchModel: string;
+  inputPrice: number | null;
+  outputPrice: number | null;
+  monthlyBudget: number | null;
 }
-
-/** AI 配置：存 Setting 表（与自动备份同一模式），env 只作首次默认值 */
+export type Capabilities = NonNullable<AiConfigView['capabilities']> & { fingerprint: string };
 @Injectable()
 export class AiConfigService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
   ) {}
-
   private defaults(): StoredAiConfig {
     return {
       enabled: false,
-      baseUrl: config.llmDefaults.baseUrl,
-      apiKey: config.llmDefaults.apiKey,
-      model: config.llmDefaults.model,
+      ...config.llmDefaults,
       semanticSearch: true,
+      protocol: 'responses',
+      autoImport: false,
+      importModel: '',
+      askModel: '',
+      searchModel: '',
+      inputPrice: null,
+      outputPrice: null,
+      monthlyBudget: null,
     };
   }
-
   async getConfig(): Promise<StoredAiConfig> {
-    const row = await this.prisma.setting.findUnique({ where: { key: SETTING_KEY } }).catch(() => null);
-    if (!row) return this.defaults();
+    const row = await this.prisma.setting.findUnique({ where: { key: 'aiConfig' } });
+    let stored = {};
     try {
-      return { ...this.defaults(), ...(JSON.parse(row.value) as Partial<StoredAiConfig>) };
+      stored = row ? JSON.parse(row.value) : {};
     } catch {
-      return this.defaults();
+      /* corrupt config stays disabled */
     }
+    const result = { ...this.defaults(), ...stored };
+    if (config.llmDefaults.apiKey) result.apiKey = config.llmDefaults.apiKey;
+    return result;
   }
-
-  async updateConfig(input: AiConfigInput, ip?: string): Promise<StoredAiConfig> {
-    const current = await this.getConfig();
-    // 前端不回传 apiKey 明文，留空表示沿用已保存的 Key
-    const apiKey = input.apiKey ? input.apiKey : current.apiKey;
-    if (input.enabled && !apiKey) {
-      throw new BadRequestException('启用 AI 前需要先填写 API Key');
-    }
-    const stored: StoredAiConfig = {
-      enabled: input.enabled,
-      baseUrl: input.baseUrl,
-      apiKey,
-      model: input.model,
-      semanticSearch: input.semanticSearch,
+  fingerprint(cfg: StoredAiConfig) {
+    return createHash('sha256')
+      .update(
+        JSON.stringify([
+          cfg.baseUrl,
+          cfg.apiKey,
+          cfg.model,
+          cfg.importModel,
+          cfg.askModel,
+          cfg.searchModel,
+          'responses',
+        ]),
+      )
+      .digest('hex');
+  }
+  async capabilities(cfg: StoredAiConfig): Promise<Capabilities | undefined> {
+    const row = await this.prisma.setting.findUnique({ where: { key: 'aiCapabilities' } });
+    if (!row) return;
+    const value = JSON.parse(row.value) as Capabilities;
+    return value.fingerprint === this.fingerprint(cfg) ? value : undefined;
+  }
+  async saveCapabilities(cfg: StoredAiConfig, values: Omit<Capabilities, 'fingerprint'>) {
+    const result = {
+      ...values,
+      fingerprint: this.fingerprint(cfg),
+      baseUrl: cfg.baseUrl,
+      models: {
+        text: cfg.model,
+        import: cfg.importModel || cfg.model,
+        ask: cfg.askModel || cfg.model,
+        search: cfg.searchModel || cfg.model,
+      },
     };
     await this.prisma.setting.upsert({
-      where: { key: SETTING_KEY },
-      create: { key: SETTING_KEY, value: JSON.stringify(stored) },
-      update: { value: JSON.stringify(stored) },
+      where: { key: 'aiCapabilities' },
+      create: { key: 'aiCapabilities', value: JSON.stringify(result) },
+      update: { value: JSON.stringify(result) },
+    });
+    return result;
+  }
+  async updateConfig(input: AiConfigInput, ip?: string) {
+    const current = await this.getConfig();
+    const stored: StoredAiConfig = {
+      ...current,
+      ...input,
+      protocol: 'responses',
+      apiKey: config.llmDefaults.apiKey || input.apiKey || current.apiKey,
+    };
+    if (stored.enabled && !stored.apiKey) throw new BadRequestException('请先配置 API Key');
+    if (stored.enabled && stored.autoImport) {
+      const caps = await this.capabilities(stored);
+      if (!caps?.image || !caps.structured)
+        throw new BadRequestException(
+          '请先保存配置并通过图像、结构化输出能力检测，再开启自动智能导入',
+        );
+    }
+    // Server-managed secrets must never be copied into the database or backups.
+    const persisted = { ...stored, apiKey: config.llmDefaults.apiKey ? '' : stored.apiKey };
+    await this.prisma.setting.upsert({
+      where: { key: 'aiConfig' },
+      create: { key: 'aiConfig', value: JSON.stringify(persisted) },
+      update: { value: JSON.stringify(persisted) },
     });
     await this.audit.log('AI_CONFIG_UPDATE', {
       detail: { enabled: stored.enabled, baseUrl: stored.baseUrl, model: stored.model },
@@ -67,26 +123,34 @@ export class AiConfigService {
     });
     return stored;
   }
-
-  /** 是否已具备调用条件（ask / 语义搜索 / OCR 校对的公共门槛） */
-  async isReady(): Promise<boolean> {
-    const cfg = await this.getConfig();
-    return cfg.enabled && !!cfg.apiKey && !!cfg.baseUrl && !!cfg.model;
+  async isReady() {
+    const c = await this.getConfig();
+    return c.enabled && !!c.apiKey;
   }
-
-  /** 语义搜索开关（独立于 ask，弱化配置耦合） */
-  async semanticSearchEnabled(): Promise<boolean> {
-    const cfg = await this.getConfig();
-    return cfg.enabled && cfg.semanticSearch && !!cfg.apiKey;
+  async semanticSearchEnabled() {
+    const c = await this.getConfig();
+    return c.enabled && c.semanticSearch && !!c.apiKey;
   }
-
-  view(cfg: StoredAiConfig): AiConfigView {
+  async canImport(cfg: StoredAiConfig) {
+    const caps = await this.capabilities(cfg);
+    return cfg.enabled && cfg.autoImport && !!cfg.apiKey && !!caps?.image && !!caps.structured;
+  }
+  async view(cfg: StoredAiConfig): Promise<AiConfigView> {
+    const { apiKey, ...rest } = cfg;
+    const caps = await this.capabilities(cfg);
     return {
-      enabled: cfg.enabled,
-      baseUrl: cfg.baseUrl,
-      model: cfg.model,
-      semanticSearch: cfg.semanticSearch,
-      apiKeySet: !!cfg.apiKey,
+      ...rest,
+      apiKeySet: !!apiKey,
+      keySource: config.llmDefaults.apiKey ? 'server' : 'database',
+      capabilities: caps
+        ? {
+            checkedAt: caps.checkedAt,
+            text: caps.text,
+            image: caps.image,
+            structured: caps.structured,
+            tools: caps.tools,
+          }
+        : undefined,
     };
   }
 }

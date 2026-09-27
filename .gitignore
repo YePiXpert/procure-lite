@@ -25,3 +25,15 @@ __pycache__/
 *.log
 .DS_Store
 *.egg-info/
+
+# Browser test artifacts
+playwright-report/
+test-results/
+
+# Local deployment configuration and complete data rollback points
+pre-upgrade-backups/
+docker-compose.override.yml
+docker-compose.override.yaml
+compose.override.yml
+compose.override.yaml
+secrets/

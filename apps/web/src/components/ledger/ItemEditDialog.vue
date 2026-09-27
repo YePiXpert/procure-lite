@@ -37,7 +37,7 @@ const EMPTY = {
   handler: '',
   requestDate: todayString(),
   itemName: '',
-  quantity: '1',
+  quantity: '',
   unit: '',
   purchaseLink: '',
   unitPrice: '',
@@ -72,7 +72,7 @@ watch(
       handler: it?.handler ?? '',
       requestDate: it?.requestDate ?? todayString(),
       itemName: it?.itemName ?? '',
-      quantity: String(it?.quantity ?? 1),
+      quantity: it?.quantity == null ? '' : String(it.quantity),
       unit: it?.unit ?? '',
       purchaseLink: it?.purchaseLink ?? '',
       unitPrice: it?.unitPrice != null ? String(it.unitPrice) : '',
@@ -295,7 +295,10 @@ async function save(): Promise<void> {
         />
 
         <!-- 比价建议就放在填单价的地方，不用再跑去供应商页面查 -->
-        <div v-if="suggestions.length > 0" class="mt-2 p-2.5 bg-primary-soft/50 border border-primary/15 rounded-(--radius-control)">
+        <div
+          v-if="suggestions.length > 0"
+          class="mt-2 p-2.5 bg-primary-soft/50 border border-primary/15 rounded-(--radius-control)"
+        >
           <p class="flex items-center gap-1.5 text-meta font-semibold text-primary mb-1.5">
             <Icon name="supplier" :size="12" /> 这个品名的历史报价（点击填入）
           </p>
@@ -354,9 +357,13 @@ async function save(): Promise<void> {
       </div>
     </div>
     <template #footer>
-      <p v-if="isEdit" class="mr-auto self-center text-meta text-faint">清空某个字段并保存，即可把它置空</p>
+      <p v-if="isEdit" class="mr-auto self-center text-meta text-faint">
+        清空某个字段并保存，即可把它置空
+      </p>
       <Button variant="ghost" @click="emit('update:open', false)">取消</Button>
-      <Button variant="primary" :loading="saving" @click="save">{{ isEdit ? '保存修改' : '新增' }}</Button>
+      <Button variant="primary" :loading="saving" @click="save">{{
+        isEdit ? '保存修改' : '新增'
+      }}</Button>
     </template>
   </Dialog>
 </template>

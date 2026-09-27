@@ -19,14 +19,18 @@ beforeAll(async () => {
 afterAll(() => closeApp(ctx));
 
 function auth(payload: Record<string, unknown> = {}): Record<string, unknown> {
-  return { headers: { cookie: ctx.cookie }, ...payload };
+  return { headers: { cookie: ctx.cookie, 'idempotency-key': crypto.randomUUID() }, ...payload };
 }
 
 describe('台账 CRUD', () => {
   let itemId = 0;
 
   it('创建记录', async () => {
-    const res = await ctx.inject({ method: 'POST', url: '/api/items', ...auth({ payload: sampleItem }) });
+    const res = await ctx.inject({
+      method: 'POST',
+      url: '/api/items',
+      ...auth({ payload: sampleItem }),
+    });
     expect(res.statusCode).toBe(201);
     const body = res.json();
     itemId = body.id;
@@ -35,7 +39,11 @@ describe('台账 CRUD', () => {
   });
 
   it('重复三元组被拒绝（409）', async () => {
-    const res = await ctx.inject({ method: 'POST', url: '/api/items', ...auth({ payload: sampleItem }) });
+    const res = await ctx.inject({
+      method: 'POST',
+      url: '/api/items',
+      ...auth({ payload: sampleItem }),
+    });
     expect(res.statusCode).toBe(409);
   });
 
@@ -43,7 +51,16 @@ describe('台账 CRUD', () => {
     const res = await ctx.inject({
       method: 'POST',
       url: '/api/items',
-      ...auth({ payload: { serialNumber: '', department: '', handler: '', requestDate: '', itemName: '', quantity: 0 } }),
+      ...auth({
+        payload: {
+          serialNumber: '',
+          department: '',
+          handler: '',
+          requestDate: '',
+          itemName: '',
+          quantity: 0,
+        },
+      }),
     });
     expect(res.statusCode).toBe(400);
   });
@@ -52,7 +69,14 @@ describe('台账 CRUD', () => {
     await ctx.inject({
       method: 'POST',
       url: '/api/items',
-      ...auth({ payload: { ...sampleItem, serialNumber: 'OA-2026-002', itemName: 'A4 复印纸', quantity: 10 } }),
+      ...auth({
+        payload: {
+          ...sampleItem,
+          serialNumber: 'OA-2026-002',
+          itemName: 'A4 复印纸',
+          quantity: 10,
+        },
+      }),
     });
 
     const all = await ctx.inject({ method: 'GET', url: '/api/items', ...auth() });
@@ -77,7 +101,11 @@ describe('台账 CRUD', () => {
     expect(update.statusCode).toBe(200);
     expect(update.json().quantity).toBe(30);
 
-    const history = await ctx.inject({ method: 'GET', url: `/api/items/${itemId}/history`, ...auth() });
+    const history = await ctx.inject({
+      method: 'GET',
+      url: `/api/items/${itemId}/history`,
+      ...auth(),
+    });
     const records = history.json();
     expect(records.length).toBeGreaterThanOrEqual(2);
     expect(records[0].action).toBe('UPDATE');
@@ -118,12 +146,20 @@ describe('台账 CRUD', () => {
     expect(restored.json().total).toBe(2);
 
     // 在线记录不允许直接彻底删除
-    const onlinePurge = await ctx.inject({ method: 'DELETE', url: `/api/items/${itemId}?permanent=true`, ...auth() });
+    const onlinePurge = await ctx.inject({
+      method: 'DELETE',
+      url: `/api/items/${itemId}?permanent=true`,
+      ...auth(),
+    });
     expect(onlinePurge.statusCode).toBe(400);
 
     // 再入回收站后可彻底删除
     await ctx.inject({ method: 'DELETE', url: `/api/items/${itemId}`, ...auth() });
-    const purge = await ctx.inject({ method: 'DELETE', url: `/api/items/${itemId}?permanent=true`, ...auth() });
+    const purge = await ctx.inject({
+      method: 'DELETE',
+      url: `/api/items/${itemId}?permanent=true`,
+      ...auth(),
+    });
     expect(purge.statusCode).toBe(200);
     const after = await ctx.inject({ method: 'GET', url: '/api/items?deleted=include', ...auth() });
     expect(after.json().total).toBe(1);

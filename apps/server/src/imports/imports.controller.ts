@@ -1,25 +1,98 @@
-import { Body, Controller, Get, Param, Post, Req } from '@nestjs/common';
+import { operationId } from '../common/request.util';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  Post,
+  Req,
+  Put,
+  Res,
+  ParseIntPipe,
+  Query,
+} from '@nestjs/common';
+import fs from 'node:fs';
+import type { FastifyReply } from 'fastify';
 import type { FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { ImportsService } from './imports.service';
 import { ZodValidationPipe } from '../common/zod-validation.pipe';
 import { clientIp } from '../common/request.util';
 import { readUpload } from '../common/multipart.util';
-import { importConfirmSchema, type ImportConfirmInput } from '@procure-lite/shared';
+import {
+  saveImportDraftSchema,
+  type ImportDraft,
+  importConfirmSchema,
+  type ImportConfirmInput,
+} from '@procure-lite/shared';
 
 @Controller('imports')
 export class ImportsController {
   constructor(private readonly imports: ImportsService) {}
 
   @Post('upload')
-  async upload(@Req() req: FastifyRequest) {
+  async upload(@Req() req: FastifyRequest, @Query('continueDuplicate') continueDuplicate?: string) {
     const file = await readUpload(req);
-    return this.imports.upload(file, clientIp(req));
+    return this.imports.upload(file, clientIp(req), continueDuplicate === 'true');
   }
 
   @Get('tasks/:id')
   task(@Param('id') id: string) {
     return this.imports.task(id);
+  }
+
+  @Get('tasks/:id/original')
+  async original(@Param('id') id: string, @Res() reply: FastifyReply) {
+    const source = await this.imports.original(id);
+    reply.header('Cache-Control', 'private, no-store').type(source.mime);
+    return reply.send(fs.createReadStream(source.full));
+  }
+
+  @Get('tasks/:id/revisions')
+  revisions(@Param('id') id: string) {
+    return this.imports.revisions(id);
+  }
+
+  @Get('tasks/:id/pages/:page')
+  async page(
+    @Param('id') id: string,
+    @Param('page', ParseIntPipe) page: number,
+    @Res() reply: FastifyReply,
+  ) {
+    return reply
+      .header('Cache-Control', 'private, no-store')
+      .type('image/png')
+      .send(await this.imports.page(id, page));
+  }
+
+  @Put('tasks/:id/draft')
+  saveDraft(
+    @Param('id') id: string,
+    @Body(new ZodValidationPipe(saveImportDraftSchema))
+    body: { version: number; draft: ImportDraft },
+  ) {
+    return this.imports.saveDraft(id, body.version, body.draft);
+  }
+
+  @Post('tasks/:id/retry')
+  retry(
+    @Param('id') id: string,
+    @Body(
+      new ZodValidationPipe(
+        z.object({
+          stage: z.enum(['local', 'ai']),
+          pages: z.array(z.number().int().min(1).max(30)).optional(),
+        }),
+      ),
+    )
+    body: { stage: 'local' | 'ai'; pages?: number[] },
+  ) {
+    return this.imports.retry(id, body.stage, body.pages);
+  }
+
+  @Post('tasks/:id/cancel')
+  cancel(@Param('id') id: string) {
+    return this.imports.cancel(id);
   }
 
   @Post('check-duplicates')
@@ -33,7 +106,11 @@ export class ImportsController {
         }),
       ),
     )
-    body: { serialNumber: string; handler: string; itemNames: string[] },
+    body: {
+      serialNumber: string;
+      handler: string;
+      itemNames: string[];
+    },
   ) {
     return this.imports.checkDuplicates(body);
   }
@@ -43,6 +120,6 @@ export class ImportsController {
     @Body(new ZodValidationPipe(importConfirmSchema)) body: ImportConfirmInput,
     @Req() req: FastifyRequest,
   ) {
-    return this.imports.confirm(body, clientIp(req));
+    return this.imports.confirm(body, clientIp(req), operationId(req));
   }
 }

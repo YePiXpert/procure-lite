@@ -9,10 +9,14 @@ beforeAll(async () => {
 afterAll(() => closeApp(ctx));
 
 function auth(payload: Record<string, unknown> = {}): Record<string, unknown> {
-  return { headers: { cookie: ctx.cookie }, ...payload };
+  return { headers: { cookie: ctx.cookie, 'idempotency-key': crypto.randomUUID() }, ...payload };
 }
 
-async function seedItem(itemName: string, quantity: number, status = 'PENDING_DISTRIBUTION'): Promise<number> {
+async function seedItem(
+  itemName: string,
+  quantity: number,
+  status = 'PENDING_DISTRIBUTION',
+): Promise<number> {
   const res = await ctx.inject({
     method: 'POST',
     url: '/api/items',
@@ -83,7 +87,11 @@ describe('发放与库存联动', () => {
 
   it('库存发放：扣库存，作废回冲', async () => {
     // 先通过盘点入库 100
-    const products0 = await ctx.inject({ method: 'POST', url: '/api/inventory/products', ...auth({ payload: { name: '胶棒' } }) });
+    const products0 = await ctx.inject({
+      method: 'POST',
+      url: '/api/inventory/products',
+      ...auth({ payload: { name: '胶棒' } }),
+    });
     const productId = products0.json().id;
     await ctx.inject({
       method: 'POST',
@@ -111,12 +119,20 @@ describe('发放与库存联动', () => {
     expect(products.json().find((p: { name: string }) => p.name === '胶棒').stockQty).toBe(60);
 
     // 领用统计
-    const stats = await ctx.inject({ method: 'GET', url: '/api/distributions/recipients', ...auth() });
+    const stats = await ctx.inject({
+      method: 'GET',
+      url: '/api/distributions/recipients',
+      ...auth(),
+    });
     const zhao = stats.json().find((s: { recipient: string }) => s.recipient === '赵敏');
     expect(zhao.quantity).toBe(40);
 
     // 作废 → 库存回冲到 100
-    const revoke = await ctx.inject({ method: 'DELETE', url: `/api/distributions/${distributionId}`, ...auth() });
+    const revoke = await ctx.inject({
+      method: 'DELETE',
+      url: `/api/distributions/${distributionId}`,
+      ...auth(),
+    });
     expect(revoke.statusCode).toBe(200);
     products = await ctx.inject({ method: 'GET', url: '/api/inventory/products', ...auth() });
     expect(products.json().find((p: { name: string }) => p.name === '胶棒').stockQty).toBe(100);
@@ -141,7 +157,11 @@ describe('发放与库存联动', () => {
 
   it('台账整单入库：状态转 STOCKED，生成流水', async () => {
     const itemId = await seedItem('文件夹', 12, 'PENDING_DISTRIBUTION');
-    const res = await ctx.inject({ method: 'POST', url: `/api/inventory/stock-in/${itemId}`, ...auth() });
+    const res = await ctx.inject({
+      method: 'POST',
+      url: `/api/inventory/stock-in/${itemId}`,
+      ...auth(),
+    });
     expect(res.statusCode).toBe(201);
     expect(res.json().status).toBe('STOCKED');
 
@@ -149,7 +169,11 @@ describe('发放与库存联动', () => {
     expect(products.json().find((p: { name: string }) => p.name === '文件夹').stockQty).toBe(12);
 
     // 非待分发状态不能入库
-    const again = await ctx.inject({ method: 'POST', url: `/api/inventory/stock-in/${itemId}`, ...auth() });
+    const again = await ctx.inject({
+      method: 'POST',
+      url: `/api/inventory/stock-in/${itemId}`,
+      ...auth(),
+    });
     expect(again.statusCode).toBe(400);
   });
 

@@ -51,7 +51,8 @@ export default defineConfig({
         manualChunks(id: string): string | undefined {
           if (!id.includes('node_modules')) return undefined;
           if (/echarts|zrender|vue-echarts/.test(id)) return 'echarts';
-          if (/[\\/]node_modules[\\/](vue|@vue|vue-router|pinia|axios|reka-ui)([\\/]|$)/.test(id)) return 'vendor';
+          if (/[\\/]node_modules[\\/](vue|@vue|vue-router|pinia|axios|reka-ui)([\\/]|$)/.test(id))
+            return 'vendor';
           return undefined;
         },
       },
@@ -60,7 +61,10 @@ export default defineConfig({
   server: {
     port: 5173,
     proxy: {
-      '/api': { target: 'http://127.0.0.1:3000', changeOrigin: true },
+      '/api': {
+        target: process.env.API_PROXY_TARGET || 'http://127.0.0.1:3000',
+        changeOrigin: true,
+      },
     },
-  }
+  },
 });

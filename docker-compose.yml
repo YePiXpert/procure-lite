@@ -4,7 +4,7 @@ name: procure-lite
 # 若无法访问 GHCR 或需要本地改动，docker compose up --build 走本地构建
 services:
   web:
-    image: ghcr.io/yepixpert/procure-lite-web:latest
+    image: ghcr.io/yepixpert/procure-lite-web:${RELEASE_TAG:-latest}
     build:
       context: .
       dockerfile: deploy/Dockerfile.web
@@ -15,7 +15,7 @@ services:
     restart: unless-stopped
 
   server:
-    image: ghcr.io/yepixpert/procure-lite-server:latest
+    image: ghcr.io/yepixpert/procure-lite-server:${RELEASE_TAG:-latest}
     build:
       context: .
       dockerfile: deploy/Dockerfile.server
@@ -35,13 +35,23 @@ services:
     restart: unless-stopped
 
   ocr:
-    image: ghcr.io/yepixpert/procure-lite-ocr:latest
+    image: ghcr.io/yepixpert/procure-lite-ocr:${RELEASE_TAG:-latest}
     build:
       context: .
       dockerfile: deploy/Dockerfile.ocr
     environment:
       OCR_API_KEY: ${OCR_API_KEY:-please-change-ocr-key}
       OCR_MAX_CONCURRENT: "1"
+      OCR_CPU_THREADS: "2"
+      OCR_MAX_PAGES: "30"
+    cpus: 2
+    mem_limit: 4g
+    healthcheck:
+      test: ["CMD", "python", "-c", "import os,urllib.request; urllib.request.urlopen(urllib.request.Request('http://127.0.0.1:8000/ready',headers={'X-API-Key':os.environ['OCR_API_KEY']}),timeout=90).read()"]
+      interval: 30s
+      timeout: 95s
+      start_period: 120s
+      retries: 3
     restart: unless-stopped
 
 volumes:

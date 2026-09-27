@@ -1,3 +1,4 @@
+import { operation } from '../common/operation';
 import {
   BadRequestException,
   ConflictException,
@@ -48,7 +49,7 @@ const SNAPSHOT_FIELDS = [
 type Snapshot = Record<(typeof SNAPSHOT_FIELDS)[number], unknown>;
 
 /** 终态记录已对应发放记录/库存流水，这些字段一改账就对不上 */
-const FINAL_LOCKED_FIELDS = ['itemName', 'quantity'] as const;
+const FINAL_LOCKED_FIELDS = ['itemName', 'quantity', 'unit'] as const;
 
 function statusLabel(status: string): string {
   return ITEM_STATUS_LABELS[status as ItemStatus] ?? status;
@@ -58,7 +59,10 @@ function statusLabel(status: string): string {
  * 手工改状态只允许在执行中三态之间；终态必须经发放/入库产生，也不能手工改回。
  * 返回错误文案，允许则返回 null。
  */
-function manualStatusError(item: { itemName: string; status: string }, to: string | undefined): string | null {
+function manualStatusError(
+  item: { itemName: string; status: string },
+  to: string | undefined,
+): string | null {
   if (!to || canChangeStatusManually(item.status, to)) return null;
   if (isFinalStatus(item.status)) {
     return item.status === 'DISTRIBUTED'
@@ -197,7 +201,12 @@ export class ItemsService {
           afterData: JSON.stringify(snapshotOf(item)),
         },
       });
-      await this.audit.log('ITEM_CREATE', { entity: 'item', entityId: item.id, detail: { itemName: input.itemName }, ip });
+      await this.audit.log('ITEM_CREATE', {
+        entity: 'item',
+        entityId: item.id,
+        detail: { itemName: input.itemName },
+        ip,
+      });
       return item;
     } catch (e) {
       throw this.mapUniqueError(e);
@@ -211,7 +220,9 @@ export class ItemsService {
     const statusError = manualStatusError(before, input.status);
     if (statusError) throw new BadRequestException(statusError);
     if (isFinalStatus(before.status)) {
-      const locked = FINAL_LOCKED_FIELDS.filter((f) => input[f] !== undefined && input[f] !== before[f]);
+      const locked = FINAL_LOCKED_FIELDS.filter(
+        (f) => input[f] !== undefined && input[f] !== before[f],
+      );
       if (locked.length > 0) {
         throw new BadRequestException(
           `「${before.itemName}」已${statusLabel(before.status)}，品名和数量已与发放/库存记录绑定，不能再修改`,
@@ -243,7 +254,12 @@ export class ItemsService {
             afterData: JSON.stringify(afterSnap),
           },
         });
-        await this.audit.log('ITEM_UPDATE', { entity: 'item', entityId: id, detail: { changed }, ip });
+        await this.audit.log('ITEM_UPDATE', {
+          entity: 'item',
+          entityId: id,
+          detail: { changed },
+          ip,
+        });
       }
       return after;
     } catch (e) {
@@ -261,10 +277,14 @@ export class ItemsService {
     const result = await this.prisma.$transaction(async (tx) => {
       const targets = await tx.item.findMany({ where: { id: { in: ids }, deletedAt: null } });
       // 先整体校验再写：一条不合法就整批拒绝，不留半截
-      const errors = targets.map((t) => manualStatusError(t, input.patch.status)).filter((e): e is string => !!e);
+      const errors = targets
+        .map((t) => manualStatusError(t, input.patch.status))
+        .filter((e): e is string => !!e);
       if (errors.length > 0) {
         throw new BadRequestException(
-          errors.length === 1 ? errors[0] : `${errors.length} 条记录的状态不能这样修改，例如：${errors[0]}`,
+          errors.length === 1
+            ? errors[0]
+            : `${errors.length} 条记录的状态不能这样修改，例如：${errors[0]}`,
         );
       }
       let updated = 0;
@@ -299,62 +319,72 @@ export class ItemsService {
    * 下单登记（整单或部分明细）：写供应商 / 成交价 / 链接，可选推进到「待到货」并记入比价库。
    * 同一事务：任一条不在「待采购 / 待到货」就整批拒绝。
    */
-  async registerPurchase(input: PurchaseRegisterInput, ip?: string) {
+  async registerPurchase(input: PurchaseRegisterInput, ip?: string, operationId?: string) {
     const ids = input.lines.map((l) => l.id);
     if (new Set(ids).size !== ids.length) throw new BadRequestException('明细重复');
     const supplierTouched = input.supplierId !== undefined;
-    const supplierName = supplierTouched ? await this.lookupSupplierName(input.supplierId) : undefined;
+    const supplierName = supplierTouched
+      ? await this.lookupSupplierName(input.supplierId)
+      : undefined;
 
-    const results = await this.prisma.$transaction(async (tx) => {
-      const items = await tx.item.findMany({ where: { id: { in: ids }, deletedAt: null } });
-      if (items.length !== ids.length) throw new NotFoundException('部分台账记录不存在或已删除');
-      const blocked = items.find((i) => i.status !== 'PENDING_PURCHASE' && i.status !== 'PENDING_ARRIVAL');
-      if (blocked) {
-        throw new BadRequestException(`「${blocked.itemName}」当前为「${statusLabel(blocked.status)}」，不能再登记下单`);
-      }
+    const results = await this.prisma.$transaction(async (tx) =>
+      operation(tx, operationId, 'purchase', input, async () => {
+        const items = await tx.item.findMany({ where: { id: { in: ids }, deletedAt: null } });
+        if (items.length !== ids.length) throw new NotFoundException('部分台账记录不存在或已删除');
+        const blocked = items.find(
+          (i) => i.status !== 'PENDING_PURCHASE' && i.status !== 'PENDING_ARRIVAL',
+        );
+        if (blocked) {
+          throw new BadRequestException(
+            `「${blocked.itemName}」当前为「${statusLabel(blocked.status)}」，不能再登记下单`,
+          );
+        }
 
-      const byId = new Map(items.map((i) => [i.id, i]));
-      const out: { id: number; ordered: boolean }[] = [];
-      for (const line of input.lines) {
-        const before = byId.get(line.id)!;
-        const data: Prisma.ItemUpdateInput = {};
-        if (supplierTouched) {
-          data.supplier = input.supplierId ? { connect: { id: input.supplierId } } : { disconnect: true };
-          data.supplierName = supplierName;
-        }
-        if (line.unitPrice !== undefined) data.unitPrice = line.unitPrice;
-        if (line.purchaseLink !== undefined) data.purchaseLink = line.purchaseLink || null;
-        const ordered = input.markOrdered && before.status === 'PENDING_PURCHASE';
-        if (ordered) data.status = 'PENDING_ARRIVAL';
+        const byId = new Map(items.map((i) => [i.id, i]));
+        const out: { id: number; ordered: boolean }[] = [];
+        for (const line of input.lines) {
+          const before = byId.get(line.id)!;
+          const data: Prisma.ItemUpdateInput = {};
+          if (supplierTouched) {
+            data.supplier = input.supplierId
+              ? { connect: { id: input.supplierId } }
+              : { disconnect: true };
+            data.supplierName = supplierName;
+          }
+          if (line.unitPrice !== undefined) data.unitPrice = line.unitPrice;
+          if (line.purchaseLink !== undefined) data.purchaseLink = line.purchaseLink || null;
+          const ordered = input.markOrdered && before.status === 'PENDING_PURCHASE';
+          if (ordered) data.status = 'PENDING_ARRIVAL';
 
-        const after = await tx.item.update({ where: { id: line.id }, data });
-        const changed = diffSnapshots(snapshotOf(before), snapshotOf(after));
-        if (Object.keys(changed).length > 0) {
-          await tx.itemHistory.create({
-            data: {
-              itemId: line.id,
-              action: 'PURCHASE',
-              changedFields: JSON.stringify(changed),
-              beforeData: JSON.stringify(snapshotOf(before)),
-              afterData: JSON.stringify(snapshotOf(after)),
-            },
-          });
+          const after = await tx.item.update({ where: { id: line.id }, data });
+          const changed = diffSnapshots(snapshotOf(before), snapshotOf(after));
+          if (Object.keys(changed).length > 0) {
+            await tx.itemHistory.create({
+              data: {
+                itemId: line.id,
+                action: 'PURCHASE',
+                changedFields: JSON.stringify(changed),
+                beforeData: JSON.stringify(snapshotOf(before)),
+                afterData: JSON.stringify(snapshotOf(after)),
+              },
+            });
+          }
+          const price = after.unitPrice;
+          if (input.rememberPrice && input.supplierId && price != null && price > 0) {
+            await tx.supplierPriceRecord.create({
+              data: {
+                supplierId: input.supplierId,
+                itemName: after.itemName,
+                unitPrice: price,
+                purchaseLink: after.purchaseLink ?? undefined,
+              },
+            });
+          }
+          out.push({ id: line.id, ordered });
         }
-        const price = after.unitPrice;
-        if (input.rememberPrice && input.supplierId && price != null && price > 0) {
-          await tx.supplierPriceRecord.create({
-            data: {
-              supplierId: input.supplierId,
-              itemName: after.itemName,
-              unitPrice: price,
-              purchaseLink: after.purchaseLink ?? undefined,
-            },
-          });
-        }
-        out.push({ id: line.id, ordered });
-      }
-      return out;
-    });
+        return out;
+      }),
+    );
 
     const ordered = results.filter((r) => r.ordered).length;
     await this.audit.log('ITEM_PURCHASE', {
@@ -413,7 +443,11 @@ export class ItemsService {
       await this.purge(t.id, ip, false);
       purged += 1;
     }
-    await this.audit.log('ITEM_PURGE', { entity: 'item', detail: { scope: ids === 'all' ? 'all' : ids, purged }, ip });
+    await this.audit.log('ITEM_PURGE', {
+      entity: 'item',
+      detail: { scope: ids === 'all' ? 'all' : ids, purged },
+      ip,
+    });
     return { purged };
   }
 
@@ -429,11 +463,16 @@ export class ItemsService {
       select: { storagePath: true },
     });
     // 级联清理：历史随记录删除；领用明细保留但解除引用
-    await this.prisma.distributionLine.updateMany({ where: { itemId: id }, data: { itemId: null } });
+    await this.prisma.distributionLine.updateMany({
+      where: { itemId: id },
+      data: { itemId: null },
+    });
     await this.prisma.item.delete({ where: { id } });
     // 附件行已随台账级联删除，此时仍有引用的说明是共享文件（如同批导入的 OA 原件），不能删盘
     for (const a of attachments) {
-      const referenced = await this.prisma.attachment.count({ where: { storagePath: a.storagePath } });
+      const referenced = await this.prisma.attachment.count({
+        where: { storagePath: a.storagePath },
+      });
       if (referenced === 0) {
         fs.rm(path.join(config.uploadsDir, a.storagePath), { force: true }, () => undefined);
       }
@@ -453,7 +492,9 @@ export class ItemsService {
   }
 
   async rollback(id: number, historyId: number, ip?: string) {
-    const record = await this.prisma.itemHistory.findFirst({ where: { id: historyId, itemId: id } });
+    const record = await this.prisma.itemHistory.findFirst({
+      where: { id: historyId, itemId: id },
+    });
     if (!record?.afterData) throw new NotFoundException('历史记录不存在');
 
     // 目标点之后若发生过入库/发放，回滚状态会造成库存与台账脱节（如已入库物品回到待分发可二次发放）
@@ -465,7 +506,9 @@ export class ItemsService {
       ['STOCK_IN', 'DISTRIBUTE', 'DISTRIBUTION_REVOKE'].includes(a.action),
     );
     if (blocking) {
-      throw new BadRequestException('目标版本之后发生过入库/发放，直接回滚会导致库存不一致；请通过作废发放单或盘点调整处理');
+      throw new BadRequestException(
+        '目标版本之后发生过入库/发放，直接回滚会导致库存不一致；请通过作废发放单或盘点调整处理',
+      );
     }
 
     const target = JSON.parse(record.afterData) as Snapshot;
@@ -473,6 +516,13 @@ export class ItemsService {
     if (!before) throw new NotFoundException('记录不存在');
     const statusError = manualStatusError(before, String(target.status ?? before.status));
     if (statusError) throw new BadRequestException(`不能回滚到该版本：${statusError}`);
+
+    if (isFinalStatus(before.status)) {
+      for (const field of FINAL_LOCKED_FIELDS)
+        if ((target[field] ?? null) !== before[field]) {
+          throw new BadRequestException('终态记录不能回滚品名、数量或单位');
+        }
+    }
 
     const patch: Record<string, unknown> = {};
     for (const field of SNAPSHOT_FIELDS) {
@@ -501,7 +551,12 @@ export class ItemsService {
         afterData: JSON.stringify(afterSnap),
       },
     });
-    await this.audit.log('ITEM_ROLLBACK', { entity: 'item', entityId: id, detail: { historyId }, ip });
+    await this.audit.log('ITEM_ROLLBACK', {
+      entity: 'item',
+      entityId: id,
+      detail: { historyId },
+      ip,
+    });
     return after;
   }
 
@@ -509,7 +564,12 @@ export class ItemsService {
 
   /** 供报表/导出复用的列表查询（不分页限制） */
   async findManyForExport(query: ItemQuery) {
-    const where = await this.buildWhere({ ...query, deleted: query.deleted ?? undefined, page: 1, pageSize: 1 });
+    const where = await this.buildWhere({
+      ...query,
+      deleted: query.deleted ?? undefined,
+      page: 1,
+      pageSize: 1,
+    });
     return this.prisma.item.findMany({
       where,
       include: { supplier: { select: { name: true } } },

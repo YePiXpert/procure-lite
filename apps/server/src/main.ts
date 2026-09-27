@@ -4,7 +4,6 @@ import { Logger } from '@nestjs/common';
 import { AppModule } from './app.module';
 import { configureApp } from './bootstrap';
 import { config } from './config';
-import { BackupService } from './system/backup.service';
 
 async function bootstrap(): Promise<void> {
   const logger = new Logger('Bootstrap');
@@ -20,15 +19,6 @@ async function bootstrap(): Promise<void> {
 
   await configureApp(app);
   app.enableShutdownHooks();
-
-  // 备份恢复期间全站 503（恢复会替换数据库与附件，避免并发写入丢失）
-  const backup = app.get(BackupService);
-  const fastify = app.getHttpAdapter().getInstance();
-  fastify.addHook('onRequest', async (req, reply) => {
-    if (req.url.startsWith('/api') && backup.isRestoring()) {
-      await reply.code(503).send({ statusCode: 503, message: '备份恢复中，请稍后重试' });
-    }
-  });
 
   await app.listen({ port: config.port, host: '0.0.0.0' });
   logger.log(`API 服务已启动: http://0.0.0.0:${config.port}/api`);

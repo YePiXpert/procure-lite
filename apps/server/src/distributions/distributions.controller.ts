@@ -14,7 +14,7 @@ import type { FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { DistributionsService } from './distributions.service';
 import { ZodValidationPipe } from '../common/zod-validation.pipe';
-import { clientIp } from '../common/request.util';
+import { clientIp, operationId } from '../common/request.util';
 import {
   distributionCreateSchema,
   distributionQuerySchema,
@@ -33,7 +33,9 @@ export class DistributionsController {
   }
 
   @Get('recipients')
-  recipients(@Query(new ZodValidationPipe(reportQuerySchema)) query: { dateFrom?: string; dateTo?: string }) {
+  recipients(
+    @Query(new ZodValidationPipe(reportQuerySchema)) query: { dateFrom?: string; dateTo?: string },
+  ) {
     return this.distributions.recipientStats(query.dateFrom, query.dateTo);
   }
 
@@ -42,7 +44,7 @@ export class DistributionsController {
     @Body(new ZodValidationPipe(distributionCreateSchema)) body: DistributionCreateInput,
     @Req() req: FastifyRequest,
   ) {
-    return this.distributions.create(body, clientIp(req));
+    return this.distributions.create(body, clientIp(req), operationId(req));
   }
 
   @Get(':id')

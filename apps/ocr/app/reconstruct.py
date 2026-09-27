@@ -110,7 +110,6 @@ def extract_fields(lines: list[str]) -> dict:
 def extract_item_lines(lines: list[str]) -> list[dict]:
     """从正文行中识别物品明细：行内同时出现可解析数量与合理名称。"""
     items: list[dict] = []
-    seen_names: set[str] = set()
 
     for raw in lines:
         if is_ui_noise(raw) or is_header_row(raw):
@@ -120,11 +119,11 @@ def extract_item_lines(lines: list[str]) -> list[dict]:
             continue
 
         url = extract_url(line)
-        price = parse_price(line)
+        price = parse_price(line) if re.search(r"(?:单价|价格|[¥￥])", line) else None
         qty = parse_quantity(line)
         name = clean_item_name(line)
 
-        # 数量缺失时保留行（警告里提示默认 1），但要求名称足够像物品
+        # 数量缺失时保留行（必须人工确认），但要求名称足够像物品
         name_like = (
             len(name) >= 2
             and re.search(r"[\u4e00-\u9fa5A-Za-z]", name)
@@ -136,19 +135,9 @@ def extract_item_lines(lines: list[str]) -> list[dict]:
         if re.search(r"(部门|经办人|流水号|申请日期|经办|电话|邮箱|审批|意见)[:：]", line):
             continue
 
-        key = name
-        if key in seen_names:
-            # 同名行合并数量（跨页重复表头等场景少见，宁可合并）
-            items[-1]["quantity"] = (items[-1]["quantity"] or 1) + (qty or 1)
-            if price and not items[-1].get("unitPrice"):
-                items[-1]["unitPrice"] = price
-            if url and not items[-1].get("purchaseLink"):
-                items[-1]["purchaseLink"] = url
-            continue
-
-        seen_names.add(key)
         items.append(
             {
+                "rawText": raw,
                 "itemName": name,
                 "quantity": qty,
                 "unitPrice": price,
@@ -160,14 +149,13 @@ def extract_item_lines(lines: list[str]) -> list[dict]:
 
 
 def finalize_items(items: list[dict]) -> tuple[list[dict], list[str]]:
-    """数量缺失补 1（附警告），剔除明显不是物品的行。"""
+    """保留未知数量，不能把缺失值变成事实。"""
     warnings: list[str] = []
     cleaned: list[dict] = []
     for it in items:
         if it["quantity"] is None:
-            warnings.append(f"「{it['itemName']}」未识别到数量，默认为 1")
-            it["quantity"] = 1.0
-        cleaned.append({k: v for k, v in it.items() if v is not None})
+            warnings.append(f"「{it['itemName']}」未识别到数量，请对照原件确认")
+        cleaned.append({k: v for k, v in it.items() if v is not None or k == "quantity"})
     return cleaned, warnings
 
 

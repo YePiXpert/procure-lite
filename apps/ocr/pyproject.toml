@@ -16,8 +16,8 @@ dependencies = [
 [project.optional-dependencies]
 # PaddleOCR 体积大（含 paddlepaddle），仅生产/Docker 安装
 paddle = [
-    "paddleocr>=2.8,<3.0",
-    "paddlepaddle>=2.6,<3.0",
+    "paddleocr==3.7.0",
+    "paddlepaddle==3.3.1",
 ]
 dev = [
     "pytest>=8",
