@@ -67,6 +67,10 @@ pnpm test          # 前后端全部（vitest）
 cd apps/ocr && pytest   # 解析器单测 + API 集成（无需 paddle）
 ```
 
+## 隔离试用候选版
+
+候选业务版本固定为 `b10744b`。独立数据卷、本机端口和不可变镜像的启动、访问及清理方式见 [隔离试用说明](docs/trial-b10744b.md)。试用环境不继承正式数据库或 AI 设置，真实接口与业务效果仍待验收。
+
 ## Docker 部署（VPS）
 
 每次 push 到 `main`，GitHub Actions 会自动跑完全部测试后把三个镜像构建并推送到 GHCR（`ghcr.io/yepixpert/procure-lite-{web,server,ocr}`），**VPS 上不需要编译**，直接拉镜像。
