@@ -372,7 +372,7 @@ export const aiConfigSchema = z.object({
   baseUrl: z.string().trim().url('接口地址应为合法 URL').max(200),
   /** 留空 = 保留已保存的 Key */
   apiKey: z.string().trim().max(200).optional(),
-  model: z.string().trim().min(1, '模型名不能为空').max(64),
+  model: z.string().trim().min(1, '模型名不能为空').max(100),
   /** 台账/库存搜索启用 AI 同义词扩展（关闭则退回普通关键字匹配） */
   semanticSearch: z.boolean(),
   protocol: z.literal('responses').optional(),

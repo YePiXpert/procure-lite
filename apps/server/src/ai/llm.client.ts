@@ -73,6 +73,33 @@ export function strictSchema(raw: Record<string, unknown>): Record<string, unkno
 
 @Injectable()
 export class LlmClient {
+  async listModels(baseUrl: string, apiKey: string): Promise<string[]> {
+    try {
+      const client = new OpenAI({
+        apiKey,
+        baseURL: baseUrl.replace(/\/+$/, ''),
+        maxRetries: 0,
+        timeout: 15_000,
+      });
+      const page = await client.models.list();
+      if (!Array.isArray(page.data) || page.data.some((m) => !m || typeof m.id !== 'string')) {
+        throw new Error('Invalid model list');
+      }
+      return [
+        ...new Set(
+          page.data
+            .map((m) => m.id)
+            .filter((id) => id.trim() === id && id.length > 0 && id.length <= 100),
+        ),
+      ].sort();
+    } catch {
+      // Provider errors may echo credentials or request headers; never forward them.
+      throw new ServiceUnavailableException(
+        '无法获取模型列表，请检查已保存的服务地址与密钥，或手动填写模型名',
+      );
+    }
+  }
+
   async chat(opts: ChatCallOptions): Promise<ChatCompletionResult> {
     const client = new OpenAI({
       apiKey: opts.apiKey,

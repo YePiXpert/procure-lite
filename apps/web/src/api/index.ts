@@ -389,6 +389,7 @@ export const systemApi = {
 
 /* ----------------------------------- AI ----------------------------------- */
 export const aiApi = {
+  models: () => http.get<{ models: string[] }>('/ai/models', { timeout: 20_000 }).then((r) => r.data),
   capabilities: () =>
     http
       .post<

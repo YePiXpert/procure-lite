@@ -1,6 +1,7 @@
 import { beforeAll, afterAll, describe, expect, it } from 'vitest';
 import { createApp, closeApp, type TestApp } from './utils';
 import { LlmClient, type ChatCallOptions, type ChatCompletionResult } from '../src/ai/llm.client';
+import { config } from '../src/config';
 import { PrismaService } from '../src/prisma/prisma.service';
 
 /**
@@ -18,6 +19,12 @@ class FakeLlm {
     const next = this.queue.shift();
     if (!next) throw new Error('FakeLml 队列为空');
     return next;
+  }
+
+  modelCalls: { baseUrl: string; apiKey: string }[] = [];
+  async listModels(baseUrl: string, apiKey: string): Promise<string[]> {
+    this.modelCalls.push({ baseUrl, apiKey });
+    return ['synthetic-gpt'];
   }
 
   async ping(): Promise<boolean> {
@@ -68,6 +75,52 @@ describe('AI 配置', () => {
     expect(body.apiKeySet).toBe(false);
     expect(body.baseUrl).toMatch(/^https?:\/\//);
     expect(body).not.toHaveProperty('apiKey');
+  });
+
+  it('模型列表要求登录和密钥，缺少配置时不访问服务商', async () => {
+    const anonymous = await ctx.inject({ method: 'GET', url: '/api/ai/models' });
+    expect(anonymous.statusCode).toBe(401);
+    const missing = await ctx.inject({ method: 'GET', url: '/api/ai/models', ...auth() });
+    expect(missing.statusCode).toBe(400);
+    expect(fake.modelCalls).toHaveLength(0);
+  });
+
+  it('服务器密钥无需页面填写即可获取模型，且不回传或保存到数据库', async () => {
+    const previous = config.llmDefaults.apiKey;
+    Object.defineProperty(config.llmDefaults, 'apiKey', { value: 'server-only-secret' });
+    try {
+      const current = await ctx.inject({ method: 'GET', url: '/api/ai/config', ...auth() });
+      expect(current.json()).toMatchObject({
+        apiKeySet: true,
+        keySource: 'server',
+        enabled: false,
+      });
+      expect(current.body).not.toContain('server-only-secret');
+      const models = await ctx.inject({ method: 'GET', url: '/api/ai/models', ...auth() });
+      expect(models.json()).toEqual({ models: ['synthetic-gpt'] });
+      expect(fake.modelCalls.at(-1)?.apiKey).toBe('server-only-secret');
+      const save = await ctx.inject({
+        method: 'PUT',
+        url: '/api/ai/config',
+        ...auth({
+          payload: {
+            enabled: false,
+            baseUrl: config.llmDefaults.baseUrl,
+            model: 'synthetic-gpt',
+            semanticSearch: true,
+          },
+        }),
+      });
+      expect(save.statusCode).toBe(200);
+      expect(save.body).not.toContain('server-only-secret');
+      const row = await ctx.app
+        .get(PrismaService)
+        .setting.findUnique({ where: { key: 'aiConfig' } });
+      expect(row?.value).not.toContain('server-only-secret');
+      expect(JSON.parse(row!.value).apiKey).toBe('');
+    } finally {
+      Object.defineProperty(config.llmDefaults, 'apiKey', { value: previous });
+    }
   });
 
   it('未启用时 ask / ocr-review 返回 400', async () => {

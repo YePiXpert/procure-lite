@@ -5,6 +5,7 @@ import { useRouter } from 'vue-router';
 import Button from '@/components/ui/Button.vue';
 import Icon from '@/components/ui/Icon.vue';
 import Input from '@/components/ui/Input.vue';
+import ModelSelect from '@/components/ai/ModelSelect.vue';
 import Badge from '@/components/ui/Badge.vue';
 import ConfirmDialog from '@/components/ui/ConfirmDialog.vue';
 import ErrorState from '@/components/ui/ErrorState.vue';
@@ -70,6 +71,51 @@ const aiErrors = reactive<Record<string, string>>({});
 const aiSaving = ref(false);
 const aiTesting = ref(false);
 const aiKeySet = ref(false);
+const aiKeySource = ref<'server' | 'database'>('database');
+const aiChangeKey = ref(false);
+const aiModels = ref<string[]>([]);
+const aiModelsLoading = ref(false);
+const aiModelsError = ref('');
+const aiSavedBaseUrl = ref('');
+let aiConfigRevision = 0;
+const aiConnectionDirty = computed(
+  () => aiForm.baseUrl.trim() !== aiSavedBaseUrl.value || !!aiForm.apiKey.trim(),
+);
+const availableModels = computed(() => (aiConnectionDirty.value ? [] : aiModels.value));
+
+function applyAiView(view: import('@procure-lite/shared').AiConfigView): void {
+  aiKeySet.value = view.apiKeySet;
+  aiKeySource.value = view.keySource ?? 'database';
+  aiCapabilities.value = view.capabilities;
+  aiSavedBaseUrl.value = view.baseUrl;
+  aiForm.apiKey = '';
+  aiChangeKey.value = false;
+  aiModels.value = [];
+  aiModelsError.value = '';
+  aiModelsLoading.value = false;
+  aiConfigRevision++;
+  if (view.apiKeySet) void loadAiModels();
+}
+
+async function loadAiModels(): Promise<void> {
+  if (aiConnectionDirty.value || !aiKeySet.value) return;
+  const revision = aiConfigRevision;
+  aiModelsLoading.value = true;
+  aiModelsError.value = '';
+  try {
+    const result = await aiApi.models();
+    if (revision !== aiConfigRevision) return;
+    aiModels.value = result.models;
+    if (!result.models.length) aiModelsError.value = '服务商没有返回模型，可手动填写模型名。';
+  } catch (e) {
+    if (revision === aiConfigRevision) {
+      aiModels.value = [];
+      aiModelsError.value = apiError(e);
+    }
+  } finally {
+    if (revision === aiConfigRevision) aiModelsLoading.value = false;
+  }
+}
 
 /* 备份操作 */
 const creating = ref(false);
@@ -104,8 +150,7 @@ async function load(): Promise<void> {
       aiForm.inputPrice = ai.inputPrice == null ? '' : String(ai.inputPrice);
       aiForm.outputPrice = ai.outputPrice == null ? '' : String(ai.outputPrice);
       aiForm.monthlyBudget = ai.monthlyBudget == null ? '' : String(ai.monthlyBudget);
-      aiCapabilities.value = ai.capabilities;
-      aiKeySet.value = ai.apiKeySet;
+      applyAiView(ai);
     }
   } catch (e) {
     loadError.value = apiError(e);
@@ -252,8 +297,7 @@ async function saveAiConfig(): Promise<void> {
   aiSaving.value = true;
   try {
     const view = await aiApi.updateConfig(aiPayload());
-    aiKeySet.value = view.apiKeySet;
-    aiForm.apiKey = '';
+    applyAiView(view);
     toast.success('AI 配置已保存');
   } catch (e) {
     toast.error(apiError(e));
@@ -268,8 +312,7 @@ async function testAi(): Promise<void> {
   aiTesting.value = true;
   try {
     const view = await aiApi.updateConfig({ ...aiPayload(), autoImport: false });
-    aiKeySet.value = view.apiKeySet;
-    aiForm.apiKey = '';
+    applyAiView(view);
     const res = await aiApi.capabilities();
     aiCapabilities.value = res;
     aiForm.autoImport = false;
@@ -499,18 +542,34 @@ const totalBackupSize = computed(() => backups.value.reduce((sum, b) => sum + b.
           placeholder="https://服务商地址/v1"
           :error="aiErrors.baseUrl"
         />
+        <div v-if="aiKeySet && !aiChangeKey" class="text-sm self-center">
+          <p>
+            {{
+              aiKeySource === 'server' ? '服务器已配置 Key，无需填写' : 'Key 已保存，无需重复填写'
+            }}
+          </p>
+          <button
+            v-if="aiKeySource !== 'server'"
+            type="button"
+            class="text-primary text-xs mt-1"
+            @click="aiChangeKey = true"
+          >
+            更换密钥
+          </button>
+        </div>
         <Input
+          v-else
           v-model="aiForm.apiKey"
           type="password"
           label="API Key"
-          :placeholder="aiKeySet ? '已保存，留空不修改' : '服务商控制台获取'"
+          :placeholder="aiKeySet ? '留空保留已保存的密钥' : '首次配置时填写一次'"
           autocomplete="new-password"
           :error="aiErrors.apiKey"
         />
-        <Input
+        <ModelSelect
           v-model="aiForm.model"
-          label="模型名"
-          placeholder="gpt-6-sol"
+          label="主模型"
+          :models="availableModels"
           :error="aiErrors.model"
         />
         <label
@@ -519,9 +578,24 @@ const totalBackupSize = computed(() => backups.value.reduce((sum, b) => sum + b.
           <input v-model="aiForm.semanticSearch" type="checkbox" class="size-4 accent-primary" />
           搜索时启用同义词扩展
         </label>
-        <Input v-model="aiForm.importModel" label="单据识别模型" placeholder="留空继承主模型" />
-        <Input v-model="aiForm.askModel" label="台账问答模型" placeholder="留空继承主模型" />
-        <Input v-model="aiForm.searchModel" label="搜索扩展模型" placeholder="留空继承主模型" />
+        <ModelSelect
+          v-model="aiForm.importModel"
+          label="单据识别模型"
+          :models="availableModels"
+          inherit
+        />
+        <ModelSelect
+          v-model="aiForm.askModel"
+          label="台账问答模型"
+          :models="availableModels"
+          inherit
+        />
+        <ModelSelect
+          v-model="aiForm.searchModel"
+          label="搜索扩展模型"
+          :models="availableModels"
+          inherit
+        />
         <Input
           v-model="aiForm.inputPrice"
           label="每百万输入 tokens 单价"
@@ -551,12 +625,28 @@ const totalBackupSize = computed(() => backups.value.reduce((sum, b) => sum + b.
           GPT（先完成能力检测）</label
         >
       </div>
-      <div class="flex items-center gap-2 mt-4">
+      <div class="flex flex-wrap items-center gap-2 mt-4">
+        <Button
+          variant="secondary"
+          size="sm"
+          :loading="aiModelsLoading"
+          :disabled="aiConnectionDirty || !aiKeySet || aiSaving || aiTesting"
+          @click="loadAiModels"
+          >获取模型列表</Button
+        >
         <Button variant="primary" size="sm" :loading="aiSaving" @click="saveAiConfig">保存</Button>
         <Button variant="secondary" size="sm" :loading="aiTesting" @click="testAi">
           <Icon name="refresh" :size="13" /> 保存并检测 Responses 能力
         </Button>
       </div>
+      <p class="text-xs text-muted mt-3">
+        {{
+          aiConnectionDirty
+            ? '服务地址或密钥已修改，请先保存，再获取模型列表。'
+            : '模型列表来自已保存的服务。选好模型后保存；是否支持识别与工具调用，仍需能力检测。'
+        }}
+      </p>
+      <p v-if="aiModelsError" role="status" class="text-xs text-amber mt-2">{{ aiModelsError }}</p>
       <p v-if="aiCapabilities" class="text-xs mt-3">
         检测时间 {{ aiCapabilities.checkedAt }} · 文本 {{ aiCapabilities.text ? '通过' : '失败' }} ·
         图像 {{ aiCapabilities.image ? '通过' : '失败' }} · 结构化输出

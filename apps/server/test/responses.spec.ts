@@ -169,3 +169,39 @@ it('treats missing third-party usage fields as unknown', async () => {
   expect(response.usage).toBeUndefined();
   expect(response.content).toBe('{"quantity":null}');
 });
+
+it('discovers model IDs using saved provider credentials without a generation request', async () => {
+  const fetch = vi.fn(
+    async () =>
+      new Response(JSON.stringify({ data: [{ id: 'b' }, { id: 'a' }, { id: 'b' }, { id: '' }] }), {
+        headers: { 'Content-Type': 'application/json' },
+      }),
+  );
+  vi.stubGlobal('fetch', fetch);
+  expect(await new LlmClient().listModels(opts.baseUrl + '/', opts.apiKey)).toEqual(['a', 'b']);
+  const [url, init] = fetch.mock.calls[0] as unknown as [string, RequestInit];
+  expect(String(url)).toBe('https://provider.example/v1/models');
+  expect(init.method).toBe('GET');
+  expect(new Headers(init.headers).get('authorization')).toBe('Bearer test-secret');
+  expect(fetch).toHaveBeenCalledTimes(1);
+});
+it.each([401, 404, 500, 200])(
+  'model discovery safely handles unsupported, rejected and malformed responses (%s)',
+  async (status) => {
+    const fetch = vi.fn(
+      async () =>
+        new Response(
+          JSON.stringify({
+            error: { message: 'test-secret' },
+            data: status === 200 ? [{ id: 42 }] : undefined,
+          }),
+          { status, headers: { 'Content-Type': 'application/json' } },
+        ),
+    );
+    vi.stubGlobal('fetch', fetch);
+    await expect(new LlmClient().listModels(opts.baseUrl, opts.apiKey)).rejects.toThrow(
+      '无法获取模型列表',
+    );
+    expect(fetch).toHaveBeenCalledTimes(1);
+  },
+);

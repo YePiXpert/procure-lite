@@ -1,5 +1,47 @@
 import { test, expect } from '@playwright/test';
 
+test('服务器已配置密钥时可直接选择模型，列表故障保留手工入口', async ({ page, request }) => {
+  const password = 'browser-test-password';
+  await request.post('/api/auth/setup', { data: { password } });
+  await page.goto('/login');
+  await page.locator('input[type=password]').fill(password);
+  await page.getByRole('button', { name: /^登\s*录$/ }).click();
+  await expect(page).toHaveURL(/workbench/);
+  await page.request.put('/api/ai/config', {
+    data: {
+      enabled: false,
+      baseUrl: 'https://example.invalid/v1',
+      apiKey: 'synthetic',
+      model: 'saved-gpt',
+      semanticSearch: false,
+      autoImport: false,
+    },
+  });
+  await page.route('**/api/ai/config', async (route) => {
+    if (route.request().method() !== 'GET') return route.continue();
+    const response = await route.fetch();
+    await route.fulfill({ response, json: { ...(await response.json()), keySource: 'server' } });
+  });
+  await page.route('**/api/ai/models', (route) =>
+    route.fulfill({ json: { models: ['listed-gpt'] } }),
+  );
+  await page.goto('/settings');
+  await expect(page.getByText('服务器已配置 Key，无需填写')).toBeVisible();
+  await expect(page.getByLabel('API Key', { exact: true })).toHaveCount(0);
+  const model = page.getByRole('combobox', { name: '主模型', exact: true });
+  await expect(model).toContainText('saved-gpt（当前配置）');
+  await model.click();
+  await page.getByRole('option', { name: 'listed-gpt', exact: true }).click();
+  await expect(model).toContainText('listed-gpt');
+  // Retrieval failure must keep the selected value and manual editing usable.
+  await page.route('**/api/ai/models', (route) =>
+    route.fulfill({ status: 503, json: { message: '无法获取模型列表' } }),
+  );
+  await page.getByRole('button', { name: '获取模型列表', exact: true }).click();
+  await expect(page.getByText('无法获取模型列表', { exact: true })).toBeVisible();
+  await expect(page.getByLabel('主模型', { exact: true })).toHaveValue('listed-gpt');
+});
+
 for (const scenario of ['local', 'gpt', 'timeout']) {
   const ai = scenario !== 'local';
   const timeout = scenario === 'timeout';

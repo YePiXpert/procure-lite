@@ -1,5 +1,14 @@
 import { capabilityImage } from './capability-image';
-import { Body, Controller, Get, HttpCode, Post, Put, Req } from '@nestjs/common';
+import {
+  BadRequestException,
+  Body,
+  Controller,
+  Get,
+  HttpCode,
+  Post,
+  Put,
+  Req,
+} from '@nestjs/common';
 import type { FastifyRequest } from 'fastify';
 import {
   aiAskSchema,
@@ -43,6 +52,13 @@ export class AiController {
     const cfg = await this.aiConfig.getConfig();
     if (!(cfg.enabled && cfg.apiKey)) return { ok: false, reason: 'not-configured' };
     return { ok: await this.llm.ping(cfg.baseUrl, cfg.apiKey, cfg.model) };
+  }
+
+  @Get('models')
+  async models() {
+    const cfg = await this.aiConfig.getConfig();
+    if (!cfg.apiKey) throw new BadRequestException('请先配置服务密钥，再获取模型列表');
+    return { models: await this.llm.listModels(cfg.baseUrl, cfg.apiKey) };
   }
 
   @Post('capabilities')
