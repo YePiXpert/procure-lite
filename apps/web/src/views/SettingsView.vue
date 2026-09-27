@@ -62,9 +62,6 @@ const aiForm = reactive({
   importModel: '',
   askModel: '',
   searchModel: '',
-  inputPrice: '',
-  outputPrice: '',
-  monthlyBudget: '',
 });
 const aiCapabilities = ref<import('@procure-lite/shared').AiConfigView['capabilities']>();
 const aiErrors = reactive<Record<string, string>>({});
@@ -147,9 +144,6 @@ async function load(): Promise<void> {
       aiForm.importModel = ai.importModel ?? '';
       aiForm.askModel = ai.askModel ?? '';
       aiForm.searchModel = ai.searchModel ?? '';
-      aiForm.inputPrice = ai.inputPrice == null ? '' : String(ai.inputPrice);
-      aiForm.outputPrice = ai.outputPrice == null ? '' : String(ai.outputPrice);
-      aiForm.monthlyBudget = ai.monthlyBudget == null ? '' : String(ai.monthlyBudget);
       applyAiView(ai);
     }
   } catch (e) {
@@ -284,9 +278,6 @@ function aiPayload() {
     importModel: aiForm.importModel,
     askModel: aiForm.askModel,
     searchModel: aiForm.searchModel,
-    inputPrice: aiForm.inputPrice === '' ? null : Number(aiForm.inputPrice),
-    outputPrice: aiForm.outputPrice === '' ? null : Number(aiForm.outputPrice),
-    monthlyBudget: aiForm.monthlyBudget === '' ? null : Number(aiForm.monthlyBudget),
     // 留空 = 保留已保存的 Key（服务端语义）
     ...(aiForm.apiKey.trim() ? { apiKey: aiForm.apiKey.trim() } : {}),
   };
@@ -660,30 +651,6 @@ const totalBackupSize = computed(() => backups.value.reduce((sum, b) => sum + b.
                 class="size-4 accent-primary"
               />搜索时扩展同义词
             </label>
-            <Input
-              v-model="aiForm.inputPrice"
-              label="每百万输入 tokens 单价"
-              type="number"
-              step="any"
-              placeholder="可空，服务商计价"
-            />
-            <Input
-              v-model="aiForm.outputPrice"
-              label="每百万输出 tokens 单价"
-              type="number"
-              step="any"
-              placeholder="可空，服务商计价"
-            />
-            <Input
-              v-model="aiForm.monthlyBudget"
-              label="月导入预算阈值"
-              type="number"
-              step="any"
-              placeholder="留空不限制"
-            />
-            <p class="text-xs text-muted sm:col-span-2">
-              预算仅统计导入估算费用，不含问答和搜索；与单价同币种。用量未知时暂停预算控制下的自动导入，单次调用可能超出阈值。
-            </p>
             <p v-if="aiCapabilities" class="text-xs text-muted sm:col-span-2">
               检测时间 {{ aiCapabilities.checkedAt }} · 文本
               {{ aiCapabilities.text ? '通过' : '失败' }} · 图像
