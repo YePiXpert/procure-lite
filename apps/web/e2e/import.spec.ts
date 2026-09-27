@@ -1,7 +1,9 @@
 import { test, expect } from '@playwright/test';
 
-for (const ai of [false, true])
-  test(`${ai ? '自动 GPT' : '关闭 AI'}：导入、恢复草稿、采购与${ai ? '发放' : '入库'}`, async ({
+for (const scenario of ['local', 'gpt', 'timeout']) {
+  const ai = scenario !== 'local';
+  const timeout = scenario === 'timeout';
+  test(`${timeout ? 'GPT 超时后人工核对' : ai ? '自动 GPT' : '关闭 AI'}：导入、恢复草稿、采购与${ai ? '发放' : '入库'}`, async ({
     page,
     request,
   }) => {
@@ -15,7 +17,7 @@ for (const ai of [false, true])
       enabled: ai,
       apiKey: 'synthetic',
       baseUrl: 'https://example.invalid/v1',
-      model: 'synthetic',
+      model: timeout ? 'synthetic-timeout' : 'synthetic',
       semanticSearch: false,
       autoImport: false,
     };
@@ -28,19 +30,17 @@ for (const ai of [false, true])
       ).toBeTruthy();
     }
     await page.goto('/import');
-    await page
-      .locator('input[type=file]')
-      .setInputFiles({
-        name: `${ai ? 'gpt' : 'local'}.png`,
-        mimeType: 'image/png',
-        buffer: Buffer.from(ai ? 'gpt-synthetic' : 'local-synthetic'),
-      });
+    await page.locator('input[type=file]').setInputFiles({
+      name: `${scenario}.png`,
+      mimeType: 'image/png',
+      buffer: Buffer.from(`${scenario}-synthetic`),
+    });
     const qty = page.getByPlaceholder('数量：待确认');
     await expect(qty).toBeVisible();
     await expect(qty).toHaveValue('');
     await expect(page.locator('input[type=date]')).toHaveValue('');
     const taskUrl = page.url();
-    if (ai) {
+    if (ai && !timeout) {
       await expect(page.getByText('GPT：已完成', { exact: false })).toBeVisible();
       await page.getByText('识别依据与 GPT 建议', { exact: true }).click();
       await page.getByRole('button', { name: '已核对，采用建议' }).click();
@@ -50,10 +50,17 @@ for (const ai of [false, true])
       await qty.fill('8');
       await page.locator('input[type=date]').fill('2026-09-27');
     }
+    if (timeout) {
+      await expect(page.getByText('GPT：部分失败', { exact: false })).toBeVisible();
+      await page.getByRole('button', { name: '确认全部内容并导入' }).click();
+      await expect(page.getByRole('alert')).toContainText('第 1 页未完成核对');
+      await page.getByRole('checkbox', { name: /GPT 复核未完成/ }).check();
+    }
     await page.getByRole('button', { name: '保存草稿', exact: true }).click();
     await expect(page.getByText('草稿已保存', { exact: true })).toBeVisible();
     await page.reload();
     await expect(qty).toHaveValue('8');
+    if (timeout) await expect(page.getByRole('checkbox', { name: /GPT 复核未完成/ })).toBeChecked();
     await expect(page.locator('img[alt="单据原件页面"]')).toBeVisible();
     await page.screenshot({ path: test.info().outputPath('import-review.png'), fullPage: true });
     const originalUrl = await page.getByRole('link', { name: '打开原件' }).getAttribute('href');
@@ -82,3 +89,4 @@ for (const ai of [false, true])
     await page.getByRole('button', { name: '导出', exact: true }).click();
     expect((await download).suggestedFilename()).toMatch(/\.xlsx$/);
   });
+}

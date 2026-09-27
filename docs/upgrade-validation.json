@@ -56,5 +56,19 @@
     "auditScriptTests": 2,
     "shellSyntax": true,
     "diffWhitespace": true
+  },
+  "releaseBlockingFixes": {
+    "sourceBaseCommit": "e390771846e87437e5d8dc908d10fed1cb697f13",
+    "workingTreeSourceSha256": "ee62ee1d76e0bc09f42b9695b5212dc276ed557c5af7af0dfc1f433561fdd22a",
+    "serverTests": 99,
+    "webTests": 40,
+    "browserFlows": 3,
+    "serverTypecheck": true,
+    "webTypecheck": true,
+    "serverBuild": true,
+    "webBuild": true,
+    "scope": "Typed test fixtures; server-owned page review requirements; failed-call usage and budget accounting; manual fallback after GPT budget/preflight errors.",
+    "ciEvidence": "Original e390771 CI failed server typecheck. Current remote CI is recorded by GitHub Actions, separately from these local results.",
+    "externalAcceptance": "Still pending: real provider, business samples, historical precision and target-environment rollback. User confirmed these inputs are unavailable for this round."
   }
 }

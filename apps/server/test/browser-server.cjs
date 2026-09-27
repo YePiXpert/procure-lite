@@ -24,7 +24,7 @@ const { FastifyAdapter } = require('@nestjs/platform-fastify');
 const { AppModule } = require('../dist/app.module');
 const { configureApp } = require('../dist/bootstrap');
 const { OcrClient } = require('../dist/imports/ocr.client');
-const { LlmClient } = require('../dist/ai/llm.client');
+const { LlmClient, AiResponseError } = require('../dist/ai/llm.client');
 const { capabilityImage } = require('../dist/ai/capability-image');
 let sequence = 0;
 const ocr = {
@@ -84,6 +84,8 @@ const llm = {
     if (last.role === 'tool') return { content: 'CAPABILITY_OK', toolCalls: [] };
     if (last.content.includes('RED_BLUE')) return { content: 'RED_BLUE', toolCalls: [] };
     if (last.content.includes('Return value 7')) return { content: '{"value":7}', toolCalls: [] };
+    if (opts.model === 'synthetic-timeout')
+      throw new AiResponseError('合成超时，结果未知', 'UNKNOWN');
     const { local } = JSON.parse(last.content);
     return {
       content: JSON.stringify({

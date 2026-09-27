@@ -16,6 +16,7 @@ function result(
       content: [{ type: 'output_text', text: '{"quantity":null}', annotations: [] }],
     },
   ],
+  usage: Record<string, number> = { input_tokens: 10, output_tokens: 20, total_tokens: 30 },
 ) {
   return new Response(
     JSON.stringify({
@@ -23,7 +24,7 @@ function result(
       object: 'response',
       status,
       output,
-      usage: { input_tokens: 10, output_tokens: 20, total_tokens: 30 },
+      usage,
     }),
     { status: 200, headers: { 'Content-Type': 'application/json', 'x-request-id': 'req_1' } },
   );
@@ -162,13 +163,7 @@ it('retries a rate limit only once', async () => {
 it('treats missing third-party usage fields as unknown', async () => {
   vi.stubGlobal(
     'fetch',
-    vi.fn(async () => {
-      const payload = await result().json();
-      payload.usage = {};
-      return new Response(JSON.stringify(payload), {
-        headers: { 'Content-Type': 'application/json' },
-      });
-    }),
+    vi.fn(async () => result('completed', undefined, {})),
   );
   const response = await new LlmClient().chat(opts);
   expect(response.usage).toBeUndefined();

@@ -4,7 +4,7 @@ import { PrismaService } from '../src/prisma/prisma.service';
 import { ImportsService } from '../src/imports/imports.service';
 import { AiConfigService } from '../src/ai/ai-config.service';
 import { OcrClient } from '../src/imports/ocr.client';
-import { LlmClient } from '../src/ai/llm.client';
+import { AiResponseError, LlmClient } from '../src/ai/llm.client';
 import { config } from '../src/config';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -223,6 +223,7 @@ describe('trusted import', () => {
       filename: 'auto.png',
       size: 3,
     });
+    if (!taskId) throw new Error('Expected a new upload task');
     const t = await settle(taskId);
     expect(t.aiStatus).toBe('DONE');
     expect(t.aiResult[0].items[0].quantity).toBe(8);
@@ -321,5 +322,185 @@ describe('trusted import', () => {
     expect(t.aiStatus).toBe('FAILED');
     expect(llm.chat.mock.calls.length - before).toBe(1);
     ocr.inspect.mockResolvedValue({ pageCount: 1 });
+  });
+});
+
+async function enableImport(budget: number | null = null) {
+  const service = ctx.app.get(AiConfigService);
+  const cfg = await service.updateConfig({
+    enabled: true,
+    baseUrl: 'https://example.com/v1',
+    model: 'test-gpt',
+    apiKey: 'test-key',
+    semanticSearch: false,
+    autoImport: false,
+    inputPrice: 2,
+    outputPrice: 4,
+    monthlyBudget: budget,
+  });
+  await service.saveCapabilities(cfg, {
+    checkedAt: new Date().toISOString(),
+    text: true,
+    image: true,
+    structured: true,
+    tools: true,
+  });
+  await service.updateConfig({ ...cfg, autoImport: true });
+}
+async function freshUpload() {
+  const buffer = Buffer.from(randomUUID());
+  const uploaded = await imports.upload({ buffer, filename: 'review.png', size: buffer.length });
+  if (!uploaded.taskId) throw new Error('Expected a new upload');
+  return settle(uploaded.taskId);
+}
+async function completedDraft(id: string) {
+  const task = await imports.task(id);
+  if (!task.draft) throw new Error('Expected draft');
+  const draft = {
+    ...task.draft,
+    serialNumber: randomUUID(),
+    items: [{ ...task.draft.items[0], quantity: 5 }],
+  };
+  await imports.saveDraft(id, task.version, draft);
+  return { draft, version: task.version + 1 };
+}
+
+describe('release blocking review and accounting regressions', () => {
+  it('blocks local-success/GPT-timeout confirmation until an explicit manual page review', async () => {
+    await enableImport();
+    llm.chat.mockRejectedValueOnce(new AiResponseError('timeout', 'UNKNOWN'));
+    const task = await freshUpload();
+    expect(task.result?.pages?.[0].status).toBe('DONE');
+    expect(task.calls[0].status).toBe('UNKNOWN');
+    expect(task.reviewPages).toEqual([{ page: 1, reasons: ['GPT 复核未完成'], reviewed: false }]);
+    const { draft, version } = await completedDraft(task.id);
+    const rejected = await post('/api/imports/confirm', { ...draft, taskId: task.id, version });
+    expect(rejected.statusCode).toBe(400);
+    expect(rejected.json().message).toContain('第 1 页未完成核对');
+    expect(await prisma.item.count({ where: { serialNumber: draft.serialNumber } })).toBe(0);
+    draft.reviewedPages = [{ page: 1, note: '核对原件，数量为5，无漏行' }];
+    await imports.saveDraft(task.id, version, draft);
+    expect((await imports.task(task.id)).reviewPages[0].reviewed).toBe(true);
+    expect(
+      (await post('/api/imports/confirm', { ...draft, taskId: task.id, version: version + 1 }))
+        .statusCode,
+    ).toBe(201);
+  });
+
+  it.each(['FAILED', 'CANCELLED', 'DONE'])(
+    'requires review of a missing middle page even with AI status %s',
+    async (aiStatus) => {
+      const id = await seedTask();
+      await prisma.importTask.update({
+        where: { id },
+        data: {
+          aiStatus,
+          result: JSON.stringify({
+            ...local,
+            pageCount: 3,
+            pages: [1, 2, 3].map((page) => ({ page, status: 'DONE', mode: 'IMAGE_OCR' })),
+          }),
+          aiResult: JSON.stringify([1, 3].map((page) => ({ page, items: [], warnings: [] }))),
+        },
+      });
+      expect((await imports.task(id)).reviewPages.map((p) => p.page)).toEqual([2]);
+      const { draft, version } = await completedDraft(id);
+      expect(
+        (await post('/api/imports/confirm', { ...draft, taskId: id, version })).statusCode,
+      ).toBe(400);
+    },
+  );
+
+  it('keeps cancelled queued GPT pages subject to manual review', async () => {
+    const id = await seedTask();
+    await prisma.importTask.update({ where: { id }, data: { aiStatus: 'PENDING' } });
+    await imports.cancel(id);
+    expect((await imports.task(id)).reviewPages[0].reasons).toContain('GPT 复核未完成');
+  });
+
+  it('does not impose GPT review when AI was disabled, including local cancellation', async () => {
+    const service = ctx.app.get(AiConfigService);
+    await service.updateConfig({ ...(await service.getConfig()), enabled: false });
+    const task = await freshUpload();
+    await imports.cancel(task.id);
+    const after = await imports.task(task.id);
+    expect(after.aiStatus).toBe('DISABLED');
+    expect(after.reviewPages).toEqual([]);
+    const { draft, version } = await completedDraft(task.id);
+    expect(
+      (await post('/api/imports/confirm', { ...draft, taskId: task.id, version })).statusCode,
+    ).toBe(201);
+  });
+
+  it.each(['INCOMPLETE', 'REFUSAL'])(
+    'records known usage and cost for %s responses',
+    async (kind) => {
+      await enableImport();
+      llm.chat.mockRejectedValueOnce(
+        new AiResponseError(kind, kind, {
+          usage: { input: 20, output: 30 },
+          requestId: 'failed-request',
+        }),
+      );
+      const task = await freshUpload();
+      expect(task.calls[0]).toMatchObject({ status: 'FAILED', inputTokens: 20, outputTokens: 30 });
+      expect(task.calls[0].cost).toBeCloseTo(0.00016);
+      expect(
+        (await prisma.aiCall.findUniqueOrThrow({ where: { id: task.calls[0].id } })).requestId,
+      ).toBe('failed-request');
+    },
+  );
+
+  it.each(['not-json', '{}'])(
+    'retains usage when a completed response has invalid content %s',
+    async (content) => {
+      await enableImport();
+      llm.chat.mockResolvedValueOnce({ content, toolCalls: [], usage: { input: 20, output: 30 } });
+      const task = await freshUpload();
+      expect(task.calls[0].status).toBe('FAILED');
+      expect(task.calls[0].cost).toBeCloseTo(0.00016);
+    },
+  );
+
+  it.each(['known', 'unknown'])(
+    'includes failed calls with %s cost in the next budget decision',
+    async (usageKind) => {
+      // Prior scenarios belong to another billing month in this fixture.
+      await prisma.aiCall.updateMany({ data: { createdAt: new Date('2020-01-01') } });
+      await enableImport(0.0001);
+      llm.chat.mockRejectedValueOnce(
+        new AiResponseError(
+          'truncated',
+          'INCOMPLETE',
+          usageKind === 'known' ? { usage: { input: 20, output: 30 } } : undefined,
+        ),
+      );
+      const first = await freshUpload();
+      expect(first.calls[0].status).toBe('FAILED');
+      if (usageKind === 'unknown') expect(first.calls[0].cost).toBeNull();
+      const before = llm.chat.mock.calls.length;
+      const second = await freshUpload();
+      expect(llm.chat.mock.calls.length).toBe(before);
+      expect(second.error).toContain('预算');
+      expect(second.reviewPages[0].reasons).toContain('GPT 复核未完成');
+    },
+  );
+
+  it('does not charge or block a budget for a request that failed before dispatch', async () => {
+    await prisma.aiCall.updateMany({ data: { createdAt: new Date('2020-01-01') } });
+    await enableImport(1);
+    const before = llm.chat.mock.calls.length;
+    ocr.page.mockRejectedValueOnce(new Error('render failed'));
+    const first = await freshUpload();
+    expect(first.calls[0]).toMatchObject({
+      status: 'NOT_SENT',
+      cost: 0,
+      inputTokens: null,
+      outputTokens: null,
+    });
+    expect(llm.chat.mock.calls.length).toBe(before);
+    const second = await freshUpload();
+    expect(second.aiStatus).toBe('DONE');
+    expect(llm.chat.mock.calls.length).toBe(before + 1);
   });
 });

@@ -71,11 +71,7 @@ const box = computed(() =>
   selectedLine.value?.source?.page === page.value ? selectedLine.value.source.box : null,
 );
 const pageCount = computed(() => task.value?.result?.pageCount ?? 1);
-const issuePages = computed(
-  () =>
-    task.value?.result?.pages?.filter((p) => p.status !== 'DONE') ??
-    (task.value && !active.value ? [{ page: 1, status: 'FAILED' }] : []),
-);
+const issuePages = computed(() => task.value?.reviewPages ?? []);
 const revisions = ref<
   { id: number; kind: string; version: number; snapshot: string; createdAt: string }[]
 >([]);
@@ -491,11 +487,7 @@ onUnmounted(() => {
             :checked="reviewedPages.some((r) => r.page === p.page)"
             @change="reviewed(p.page, $event)"
           />
-          {{
-            task.result?.pages?.length
-              ? `第 ${p.page} 页识别未完成：我已核对该页全部明细`
-              : '未能取得页数：我已打开原件并核对全部页面与全部明细'
-          }}</label
+          {{ `第 ${p.page} 页${p.reasons.join('、')}：我已核对原件全部相关明细` }}</label
         >
       </div>
       <div class="flex gap-2 lg:hidden">
@@ -730,7 +722,13 @@ onUnmounted(() => {
         <p v-for="call in task.calls" :key="call.id">
           第 {{ call.page }} 页 · {{ call.model }} · {{ call.status }} {{ call.error ?? '' }} · 输入
           {{ call.inputTokens ?? '未知' }} / 输出 {{ call.outputTokens ?? '未知' }} tokens · 费用
-          {{ call.cost == null ? '未知' : call.cost.toFixed(6) }}
+          {{
+            call.status === 'NOT_SENT'
+              ? '未发送，不计费'
+              : call.cost == null
+                ? '未知'
+                : call.cost.toFixed(6)
+          }}
         </p>
       </details>
     </template>

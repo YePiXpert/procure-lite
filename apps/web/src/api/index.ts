@@ -120,6 +120,7 @@ export interface ImportTaskView {
   draft?: ImportDraft;
   aiStatus: string;
   aiResult: AiImportPage[];
+  reviewPages: { page: number; reasons: string[]; reviewed: boolean }[];
   confirmed: boolean;
   originalAvailable: boolean;
   calls: {

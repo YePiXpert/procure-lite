@@ -14,6 +14,7 @@ import { z } from 'zod';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { OcrClient } from './ocr.client';
+import { reviewPages, type ReviewPage } from './import-review';
 import { config } from '../config';
 import { AiConfigService } from '../ai/ai-config.service';
 import { AiResponseError, LlmClient } from '../ai/llm.client';
@@ -72,6 +73,7 @@ export interface ImportTaskView {
   draft?: ImportDraft;
   aiStatus: string;
   aiResult: AiPage[];
+  reviewPages: ReviewPage[];
   confirmed: boolean;
   originalAvailable: boolean;
   calls: {
@@ -180,6 +182,11 @@ export class ImportsService implements OnModuleInit, OnModuleDestroy {
           if (stage === 'local') await this.runLocal(id, generation, pages);
           else await this.runAi(id, generation, pages);
         } catch (error) {
+          if (stage === 'local')
+            await this.prisma.importTask.updateMany({
+              where: { id, generation, aiStatus: 'PENDING', confirmedAt: null },
+              data: { aiStatus: 'CANCELLED' },
+            });
           await this.prisma.importTask
             .updateMany({
               where: { id, generation, confirmedAt: null },
@@ -219,8 +226,16 @@ export class ImportsService implements OnModuleInit, OnModuleDestroy {
       storagePath = `imports/${id}${ext}`;
     fs.mkdirSync(path.join(config.uploadsDir, 'imports'), { recursive: true });
     fs.writeFileSync(path.join(config.uploadsDir, storagePath), file.buffer);
+    const auto = await this.aiConfig.canImport(await this.aiConfig.getConfig());
     await this.prisma.importTask.create({
-      data: { id, filename, storagePath, contentHash, status: 'PENDING' },
+      data: {
+        id,
+        filename,
+        storagePath,
+        contentHash,
+        status: 'PENDING',
+        aiStatus: auto ? 'PENDING' : 'DISABLED',
+      },
     });
     await this.audit.log('IMPORT_UPLOAD', { detail: { id, filename }, ip });
     this.enqueue(id, 0, 'local');
@@ -321,6 +336,12 @@ export class ImportsService implements OnModuleInit, OnModuleDestroy {
       ...call,
       error: call.status !== 'DONE' && response ? JSON.parse(response).error : undefined,
     }));
+    const draft = row.draft
+      ? importDraftSchema.parse(JSON.parse(row.draft))
+      : result
+        ? this.draftFrom(result)
+        : undefined;
+    const aiResult: AiPage[] = row.aiResult ? JSON.parse(row.aiResult) : [];
     return {
       id: row.id,
       filename: row.filename,
@@ -330,13 +351,10 @@ export class ImportsService implements OnModuleInit, OnModuleDestroy {
       createdAt: row.createdAt.toISOString(),
       finishedAt: row.finishedAt?.toISOString(),
       version: row.version,
-      draft: row.draft
-        ? importDraftSchema.parse(JSON.parse(row.draft))
-        : result
-          ? this.draftFrom(result)
-          : undefined,
+      draft,
       aiStatus: row.aiStatus,
-      aiResult: row.aiResult ? JSON.parse(row.aiResult) : [],
+      aiResult,
+      reviewPages: reviewPages(result, row.aiStatus, aiResult, draft),
       confirmed: !!row.confirmedAt,
       originalAvailable:
         !!row.storagePath && fs.existsSync(path.join(config.uploadsDir, row.storagePath)),
@@ -402,7 +420,7 @@ export class ImportsService implements OnModuleInit, OnModuleDestroy {
       data: {
         generation,
         error: null,
-        ...(stage === 'local' ? { aiResult: null, aiStatus: 'DISABLED' } : {}),
+        ...(stage === 'local' ? { aiResult: null } : {}),
         [stage === 'local' ? 'status' : 'aiStatus']: 'PENDING',
       },
     });
@@ -412,11 +430,12 @@ export class ImportsService implements OnModuleInit, OnModuleDestroy {
   }
   async cancel(id: string) {
     this.controllers.get(id)?.abort();
+    const row = await this.prisma.importTask.findUnique({ where: { id } });
     await this.prisma.importTask.updateMany({
-      where: { id, confirmedAt: null },
+      where: { id, confirmedAt: null, generation: row?.generation },
       data: {
         generation: { increment: 1 },
-        aiStatus: 'CANCELLED',
+        aiStatus: row?.aiStatus === 'DISABLED' ? 'DISABLED' : 'CANCELLED',
         status: 'DONE',
         error: '已取消后台处理，请核对未完成页面',
       },
@@ -492,8 +511,7 @@ export class ImportsService implements OnModuleInit, OnModuleDestroy {
       create: { taskId: id, kind: 'LOCAL', version: generation, snapshot: JSON.stringify(result) },
       update: { snapshot: JSON.stringify(result) },
     });
-    const cfg = await this.aiConfig.getConfig(),
-      auto = await this.aiConfig.canImport(cfg);
+    const auto = row.aiStatus !== 'DISABLED';
     await this.prisma.importTask.updateMany({
       where: { id, generation, confirmedAt: null },
       data: {
@@ -507,7 +525,20 @@ export class ImportsService implements OnModuleInit, OnModuleDestroy {
       where: { id, generation, draft: null, confirmedAt: null },
       data: { draft: JSON.stringify(this.draftFrom(result)) },
     });
-    if (auto) await this.runAi(id, generation);
+    if (auto) {
+      try {
+        await this.runAi(id, generation);
+      } catch (error) {
+        // Local parsing already completed; a GPT preflight/budget failure belongs to its own stage.
+        await this.prisma.importTask.updateMany({
+          where: { id, generation, confirmedAt: null },
+          data: {
+            aiStatus: 'FAILED',
+            error: error instanceof Error ? error.message : 'GPT 复核失败',
+          },
+        });
+      }
+    }
   }
   private async runAi(id: string, generation: number, requested?: number[]) {
     const row = await this.live(id, generation);
@@ -516,7 +547,7 @@ export class ImportsService implements OnModuleInit, OnModuleDestroy {
     if (!(await this.aiConfig.canImport(cfg))) {
       await this.prisma.importTask.updateMany({
         where: { id, generation },
-        data: { aiStatus: 'DISABLED' },
+        data: { aiStatus: 'CANCELLED', error: 'GPT 配置已停用，请逐页人工核对或重新启用后重试' },
       });
       return;
     }
@@ -558,7 +589,7 @@ export class ImportsService implements OnModuleInit, OnModuleDestroy {
                 where: {
                   createdAt: { gte: new Date(new Date().getFullYear(), new Date().getMonth(), 1) },
                   cost: null,
-                  status: { in: ['DONE', 'UNKNOWN'] },
+                  status: { not: 'NOT_SENT' },
                 },
               })
             : 0;
@@ -576,10 +607,18 @@ export class ImportsService implements OnModuleInit, OnModuleDestroy {
           start = Date.now(),
           model = cfg.importModel || cfg.model;
         await this.prisma.aiCall.create({
-          data: { id: callId, taskId: id, page, generation, model, status: 'RUNNING' },
+          data: { id: callId, taskId: id, page, generation, model, status: 'NOT_SENT' },
         });
+        let metadata: { usage?: { input: number; output: number }; requestId?: string } | undefined;
+        let callStatus = 'NOT_SENT';
+        let parsed: z.infer<typeof aiPageSchema> | undefined;
+        let detail: string | undefined;
         try {
           const png = await this.ocr.page(bytes, source.filename, page);
+          controller.signal.throwIfAborted();
+          // Persist the dispatch boundary before calling the provider. A crash after it is uncertain.
+          await this.prisma.aiCall.update({ where: { id: callId }, data: { status: 'RUNNING' } });
+          callStatus = 'RUNNING';
           const response = await this.llm.chat({
             baseUrl: cfg.baseUrl,
             apiKey: cfg.apiKey,
@@ -604,21 +643,8 @@ export class ImportsService implements OnModuleInit, OnModuleDestroy {
               },
             ],
           });
-          const billed =
-            response.usage && cfg.inputPrice != null && cfg.outputPrice != null
-              ? (response.usage.input * cfg.inputPrice + response.usage.output * cfg.outputPrice) /
-                1_000_000
-              : null;
-          await this.prisma.aiCall.update({
-            where: { id: callId },
-            data: {
-              inputTokens: response.usage?.input,
-              outputTokens: response.usage?.output,
-              cost: billed,
-              requestId: response.requestId,
-            },
-          });
-          const parsed = aiPageSchema.parse(JSON.parse(response.content ?? ''));
+          metadata = response;
+          parsed = aiPageSchema.parse(JSON.parse(response.content ?? ''));
           const validIds = new Set(
             local?.items.filter((i) => i.source?.page === page).map((i) => i.lineId),
           );
@@ -626,34 +652,17 @@ export class ImportsService implements OnModuleInit, OnModuleDestroy {
             ...item,
             lineId: item.lineId && validIds.has(item.lineId) ? item.lineId : `ai-${callId}-${i}`,
           }));
-          const estimate =
-            response.usage && cfg.inputPrice != null && cfg.outputPrice != null
-              ? (response.usage.input * cfg.inputPrice + response.usage.output * cfg.outputPrice) /
-                1_000_000
-              : null;
-          await this.prisma.aiCall.update({
-            where: { id: callId },
-            data: {
-              status: 'DONE',
-              response: JSON.stringify(parsed),
-              inputTokens: response.usage?.input,
-              outputTokens: response.usage?.output,
-              cost: estimate,
-              requestId: response.requestId,
-              durationMs: Date.now() - start,
-            },
-          });
-          const index = previous.findIndex((p) => p.page === page);
-          if (index >= 0) previous.splice(index, 1);
-          previous.push({ ...parsed, page });
-          await this.prisma.importTask.updateMany({
-            where: { id, generation, confirmedAt: null },
-            data: { aiResult: JSON.stringify(previous) },
-          });
+          callStatus = 'DONE';
         } catch (error) {
           failed = true;
-          const meta = error instanceof AiResponseError ? error.metadata : undefined;
-          const detail =
+          metadata = error instanceof AiResponseError ? (error.metadata ?? metadata) : metadata;
+          callStatus =
+            callStatus === 'NOT_SENT'
+              ? 'NOT_SENT'
+              : error instanceof AiResponseError && error.kind === 'UNKNOWN'
+                ? 'UNKNOWN'
+                : 'FAILED';
+          detail =
             error instanceof z.ZodError
               ? 'SCHEMA_ERROR：响应字段不符合识别契约'
               : error instanceof SyntaxError
@@ -661,17 +670,33 @@ export class ImportsService implements OnModuleInit, OnModuleDestroy {
                 : error instanceof Error
                   ? error.message
                   : '识别失败';
+        } finally {
+          // Account for every completed attempt, including refusal, truncation and invalid JSON.
+          const usage = metadata?.usage;
+          const cost =
+            callStatus === 'NOT_SENT'
+              ? 0
+              : usage && cfg.inputPrice != null && cfg.outputPrice != null
+                ? (usage.input * cfg.inputPrice + usage.output * cfg.outputPrice) / 1_000_000
+                : null;
           await this.prisma.aiCall.update({
             where: { id: callId },
             data: {
-              status:
-                error instanceof AiResponseError && error.kind === 'UNKNOWN' ? 'UNKNOWN' : 'FAILED',
-              response: JSON.stringify({ error: detail }),
-              requestId: meta?.requestId,
-              inputTokens: meta?.usage?.input,
-              outputTokens: meta?.usage?.output,
+              status: callStatus,
+              response: JSON.stringify(detail ? { error: detail } : parsed),
+              requestId: metadata?.requestId,
+              inputTokens: usage?.input,
+              outputTokens: usage?.output,
+              cost,
               durationMs: Date.now() - start,
             },
+          });
+        }
+        if (callStatus === 'DONE' && parsed) {
+          previous.push({ ...parsed, page });
+          await this.prisma.importTask.updateMany({
+            where: { id, generation, confirmedAt: null },
+            data: { aiResult: JSON.stringify(previous) },
           });
         }
       }
@@ -738,11 +763,18 @@ export class ImportsService implements OnModuleInit, OnModuleDestroy {
                 `请明确处理 GPT 对「${suggestion.itemName}」的数量、价格或新增候选建议`,
               );
           }
-        if (task && !local?.pages?.length && !draft?.reviewedPages.some((p) => p.page === 1))
-          throw new BadRequestException('请先完成人工原件核对');
-        for (const p of local?.pages ?? [])
-          if (p.status !== 'DONE' && !draft?.reviewedPages.some((r) => r.page === p.page))
-            throw new BadRequestException(`第 ${p.page} 页未完成核对`);
+        if (task) {
+          const pending = reviewPages(
+            local,
+            task.aiStatus,
+            task.aiResult ? JSON.parse(task.aiResult) : [],
+            draft,
+          ).filter((p) => !p.reviewed);
+          if (pending.length)
+            throw new BadRequestException(
+              `第 ${pending[0].page} 页未完成核对：${pending[0].reasons.join('、')}`,
+            );
+        }
         const source = task?.storagePath
           ? {
               full: path.join(config.uploadsDir, task.storagePath),
