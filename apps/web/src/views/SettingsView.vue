@@ -59,9 +59,6 @@ const aiForm = reactive({
   model: '',
   semanticSearch: true,
   autoImport: false,
-  importModel: '',
-  askModel: '',
-  searchModel: '',
 });
 const aiCapabilities = ref<import('@procure-lite/shared').AiConfigView['capabilities']>();
 const aiErrors = reactive<Record<string, string>>({});
@@ -141,9 +138,6 @@ async function load(): Promise<void> {
       aiForm.model = ai.model;
       aiForm.semanticSearch = ai.semanticSearch;
       aiForm.autoImport = ai.autoImport ?? false;
-      aiForm.importModel = ai.importModel ?? '';
-      aiForm.askModel = ai.askModel ?? '';
-      aiForm.searchModel = ai.searchModel ?? '';
       applyAiView(ai);
     }
   } catch (e) {
@@ -275,9 +269,6 @@ function aiPayload() {
     semanticSearch: aiForm.semanticSearch,
     protocol: 'responses' as const,
     autoImport: aiForm.autoImport,
-    importModel: aiForm.importModel,
-    askModel: aiForm.askModel,
-    searchModel: aiForm.searchModel,
     // 留空 = 保留已保存的 Key（服务端语义）
     ...(aiForm.apiKey.trim() ? { apiKey: aiForm.apiKey.trim() } : {}),
   };
@@ -563,7 +554,7 @@ const totalBackupSize = computed(() => backups.value.reduce((sum, b) => sum + b.
           <ModelSelect
             class="flex-1 min-w-0"
             v-model="aiForm.model"
-            label="主模型"
+            label="模型"
             :models="availableModels"
             :error="aiErrors.model"
           />
@@ -621,45 +612,6 @@ const totalBackupSize = computed(() => backups.value.reduce((sum, b) => sum + b.
           }}</span>
           <span v-else class="text-xs text-muted">首次开启自动识别前，请先检测连接。</span>
         </div>
-
-        <details class="border-t border-line pt-3">
-          <summary class="text-xs text-muted cursor-pointer w-fit">高级设置</summary>
-          <div class="grid sm:grid-cols-2 gap-3 mt-4">
-            <p class="text-xs text-faint sm:col-span-2">以下均为可选项，不设置时统一使用主模型。</p>
-            <ModelSelect
-              v-model="aiForm.importModel"
-              label="单据识别模型"
-              :models="availableModels"
-              inherit
-            />
-            <ModelSelect
-              v-model="aiForm.askModel"
-              label="台账问答模型"
-              :models="availableModels"
-              inherit
-            />
-            <ModelSelect
-              v-model="aiForm.searchModel"
-              label="搜索扩展模型"
-              :models="availableModels"
-              inherit
-            />
-            <label class="flex items-center gap-2 text-sm cursor-pointer self-center">
-              <input
-                v-model="aiForm.semanticSearch"
-                type="checkbox"
-                class="size-4 accent-primary"
-              />搜索时扩展同义词
-            </label>
-            <p v-if="aiCapabilities" class="text-xs text-muted sm:col-span-2">
-              检测时间 {{ aiCapabilities.checkedAt }} · 文本
-              {{ aiCapabilities.text ? '通过' : '失败' }} · 图像
-              {{ aiCapabilities.image ? '通过' : '失败' }} · 结构化输出
-              {{ aiCapabilities.structured ? '通过' : '失败' }} · 工具往返
-              {{ aiCapabilities.tools ? '通过' : '失败' }}
-            </p>
-          </div>
-        </details>
       </div>
     </section>
 

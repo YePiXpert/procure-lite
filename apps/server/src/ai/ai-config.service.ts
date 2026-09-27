@@ -13,9 +13,6 @@ export interface StoredAiConfig {
   semanticSearch: boolean;
   protocol: 'responses';
   autoImport: boolean;
-  importModel: string;
-  askModel: string;
-  searchModel: string;
   inputPrice: number | null;
   outputPrice: number | null;
   monthlyBudget: number | null;
@@ -34,9 +31,6 @@ export class AiConfigService {
       semanticSearch: true,
       protocol: 'responses',
       autoImport: false,
-      importModel: '',
-      askModel: '',
-      searchModel: '',
       inputPrice: null,
       outputPrice: null,
       monthlyBudget: null,
@@ -51,22 +45,16 @@ export class AiConfigService {
       /* corrupt config stays disabled */
     }
     const result = { ...this.defaults(), ...stored };
+    // Ignore legacy overrides immediately, including when loading an old backup.
+    for (const key of ['importModel', 'askModel', 'searchModel'])
+      Reflect.deleteProperty(result, key);
     if (config.llmDefaults.apiKey) result.apiKey = config.llmDefaults.apiKey;
     return result;
   }
   fingerprint(cfg: StoredAiConfig) {
+    // Keep empty legacy slots so existing single-model capability checks stay valid.
     return createHash('sha256')
-      .update(
-        JSON.stringify([
-          cfg.baseUrl,
-          cfg.apiKey,
-          cfg.model,
-          cfg.importModel,
-          cfg.askModel,
-          cfg.searchModel,
-          'responses',
-        ]),
-      )
+      .update(JSON.stringify([cfg.baseUrl, cfg.apiKey, cfg.model, '', '', '', 'responses']))
       .digest('hex');
   }
   async capabilities(cfg: StoredAiConfig): Promise<Capabilities | undefined> {
@@ -82,9 +70,9 @@ export class AiConfigService {
       baseUrl: cfg.baseUrl,
       models: {
         text: cfg.model,
-        import: cfg.importModel || cfg.model,
-        ask: cfg.askModel || cfg.model,
-        search: cfg.searchModel || cfg.model,
+        import: cfg.model,
+        ask: cfg.model,
+        search: cfg.model,
       },
     };
     await this.prisma.setting.upsert({

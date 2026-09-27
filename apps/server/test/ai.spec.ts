@@ -203,6 +203,42 @@ describe('AI 配置', () => {
     });
   });
 
+  it('旧的分任务模型不再生效，旧页面提交也只能保存一个模型', async () => {
+    const prisma = ctx.app.get(PrismaService);
+    const row = await prisma.setting.findUniqueOrThrow({ where: { key: 'aiConfig' } });
+    const legacy = {
+      ...JSON.parse(row.value),
+      importModel: 'old-import',
+      askModel: 'old-ask',
+      searchModel: 'old-search',
+    };
+    await prisma.setting.update({
+      where: { key: 'aiConfig' },
+      data: { value: JSON.stringify(legacy) },
+    });
+    const loaded = await ctx.inject({ method: 'GET', url: '/api/ai/config', ...auth() });
+    for (const field of ['importModel', 'askModel', 'searchModel'])
+      expect(loaded.json()).not.toHaveProperty(field);
+    const before = fake.calls.length;
+    fake.queue = [{ content: '统一模型回答', toolCalls: [] }];
+    const answer = await ctx.inject({
+      method: 'POST',
+      url: '/api/ai/ask',
+      ...auth({ payload: { question: '你好' } }),
+    });
+    expect(answer.statusCode).toBe(201);
+    expect(fake.calls[before].model).toBe(legacy.model);
+    const saved = await ctx.inject({
+      method: 'PUT',
+      url: '/api/ai/config',
+      ...auth({ payload: legacy }),
+    });
+    expect(saved.statusCode).toBe(200);
+    const stored = await prisma.setting.findUniqueOrThrow({ where: { key: 'aiConfig' } });
+    for (const field of ['importModel', 'askModel', 'searchModel'])
+      expect(JSON.parse(stored.value)).not.toHaveProperty(field);
+  });
+
   it('health 返回假客户端的连通结果', async () => {
     const res = await ctx.inject({ method: 'GET', url: '/api/ai/health', ...auth() });
     expect(res.statusCode).toBe(200);

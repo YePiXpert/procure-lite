@@ -84,7 +84,7 @@ export class AiSearchService {
     const res = await this.llm.chat({
       baseUrl: cfg.baseUrl,
       apiKey: cfg.apiKey,
-      model: cfg.searchModel || cfg.model,
+      model: cfg.model,
       messages: [
         {
           role: 'system',

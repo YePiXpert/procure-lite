@@ -377,9 +377,6 @@ export const aiConfigSchema = z.object({
   semanticSearch: z.boolean(),
   protocol: z.literal('responses').optional(),
   autoImport: z.boolean().optional(),
-  importModel: z.string().trim().max(100).optional(),
-  askModel: z.string().trim().max(100).optional(),
-  searchModel: z.string().trim().max(100).optional(),
   inputPrice: z.number().nonnegative().nullish(),
   outputPrice: z.number().nonnegative().nullish(),
   monthlyBudget: z.number().positive().nullish(),
@@ -395,9 +392,6 @@ export interface AiConfigView {
   apiKeySet: boolean;
   protocol?: 'responses';
   autoImport?: boolean;
-  importModel?: string;
-  askModel?: string;
-  searchModel?: string;
   inputPrice?: number | null;
   outputPrice?: number | null;
   monthlyBudget?: number | null;

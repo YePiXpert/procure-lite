@@ -69,7 +69,7 @@ export class AiService {
       const res = await this.llm.chat({
         baseUrl: cfg.baseUrl,
         apiKey: cfg.apiKey,
-        model: cfg.askModel || cfg.model,
+        model: cfg.model,
         messages,
         tools: defs,
         maxTokens: 2048,
@@ -83,7 +83,7 @@ export class AiService {
         return {
           answer: res.content?.trim() || '（模型没有返回内容，请重试）',
           steps,
-          model: cfg.askModel || cfg.model,
+          model: cfg.model,
         };
       }
 
@@ -127,7 +127,7 @@ export class AiService {
     const final = await this.llm.chat({
       baseUrl: cfg.baseUrl,
       apiKey: cfg.apiKey,
-      model: cfg.askModel || cfg.model,
+      model: cfg.model,
       messages,
       maxTokens: 2048,
     });
@@ -138,7 +138,7 @@ export class AiService {
     return {
       answer: final.content?.trim() || '（多轮查询后未能生成回答，请换个问法重试）',
       steps,
-      model: cfg.askModel || cfg.model,
+      model: cfg.model,
     };
   }
 
@@ -162,7 +162,7 @@ export class AiService {
       const res = await this.llm.chat({
         baseUrl: cfg.baseUrl,
         apiKey: cfg.apiKey,
-        model: cfg.importModel || cfg.model,
+        model: cfg.model,
         messages: [
           { role: 'system', content: system },
           {

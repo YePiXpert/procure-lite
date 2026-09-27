@@ -605,7 +605,7 @@ export class ImportsService implements OnModuleInit, OnModuleDestroy {
           );
         const callId = randomUUID(),
           start = Date.now(),
-          model = cfg.importModel || cfg.model;
+          model = cfg.model;
         await this.prisma.aiCall.create({
           data: { id: callId, taskId: id, page, generation, model, status: 'NOT_SENT' },
         });

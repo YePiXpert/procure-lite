@@ -28,12 +28,12 @@ test('服务器已配置密钥时可直接选择模型，列表故障保留手�
   await page.goto('/settings');
   await expect(page.getByText('服务已配置 · 修改连接', { exact: true })).toBeVisible();
   await expect(page.getByLabel('接口地址', { exact: true })).not.toBeVisible();
-  await expect(page.getByRole('combobox', { name: '单据识别模型', exact: true })).not.toBeVisible();
+  await expect(page.getByText('高级设置', { exact: true })).toHaveCount(0);
   await page.getByText('服务已配置 · 修改连接', { exact: true }).click();
   await expect(page.getByText('服务器已配置 Key，无需填写')).toBeVisible();
   await page.getByText('服务已配置 · 修改连接', { exact: true }).click();
   await expect(page.getByLabel('API Key', { exact: true })).toHaveCount(0);
-  const model = page.getByRole('combobox', { name: '主模型', exact: true });
+  const model = page.getByRole('combobox', { name: '模型', exact: true });
   await expect(model).toContainText('saved-gpt（当前配置）');
   await model.click();
   await page.getByRole('option', { name: 'listed-gpt', exact: true }).click();
@@ -44,7 +44,7 @@ test('服务器已配置密钥时可直接选择模型，列表故障保留手�
   );
   await page.getByRole('button', { name: '获取模型列表', exact: true }).click();
   await expect(page.getByText('无法获取模型列表', { exact: true })).toBeVisible();
-  await expect(page.getByLabel('主模型', { exact: true })).toHaveValue('listed-gpt');
+  await expect(page.getByLabel('模型', { exact: true })).toHaveValue('listed-gpt');
 });
 
 for (const scenario of ['local', 'gpt', 'timeout']) {

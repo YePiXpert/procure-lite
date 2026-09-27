@@ -74,7 +74,7 @@ export class AiController {
     const base = {
       baseUrl: cfg.baseUrl,
       apiKey: cfg.apiKey,
-      model: cfg.importModel || cfg.model,
+      model: cfg.model,
       maxTokens: 512,
       timeoutMs: 30000,
     };
@@ -102,26 +102,18 @@ export class AiController {
         required: ['value'],
         additionalProperties: false,
       };
-      const values = await Promise.all(
-        [...new Set([cfg.importModel || cfg.model, cfg.searchModel || cfg.model])].map((model) =>
-          this.llm.chat({
-            ...base,
-            model,
-            schema,
-            messages: [{ role: 'user', content: 'Return value 7.' }],
-          }),
-        ),
-      );
-      result.structured = values.every(
-        (v) => JSON.stringify(JSON.parse(v.content || '{}')) === '{"value":7}',
-      );
+      const value = await this.llm.chat({
+        ...base,
+        schema,
+        messages: [{ role: 'user', content: 'Return value 7.' }],
+      });
+      result.structured = JSON.stringify(JSON.parse(value.content || '{}')) === '{"value":7}';
     } catch {
       /* report unsupported schema */
     }
     try {
-      const opts = { ...base, model: cfg.askModel || cfg.model };
       const first = await this.llm.chat({
-        ...opts,
+        ...base,
         messages: [{ role: 'user' as const, content: 'Call capability_check with value 7.' }],
         tools: [
           {
@@ -142,7 +134,7 @@ export class AiController {
       const call = first.toolCalls[0];
       if (call?.name === 'capability_check' && (call.args as { value?: number }).value === 7) {
         const second = await this.llm.chat({
-          ...opts,
+          ...base,
           messages: [
             { role: 'user', content: 'Call capability_check and repeat its result exactly.' },
             { role: 'assistant', content: null, responseItems: first.outputItems },
