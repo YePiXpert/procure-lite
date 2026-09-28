@@ -239,11 +239,21 @@
   }
 
   /*
-   * 长表格滚动时表头钉住，配合外层容器的 max-height + overflow-auto 使用。
-   * border-collapse 下表头的 border 不跟着 sticky，底线改用内阴影画。
+   * 长表格滚动时表头钉住。border-collapse 下表头的 border 不跟着 sticky，底线改用内阴影画。
+   * - 默认相对 <main> 钉住、贴住 <main> 的上边（桌面 = 视口顶边，手机 = 顶栏下沿）：
+   *   sticky 的 top 从滚动容器的内边距内侧算起，所以用 --main-pt（AppShell 声明）抵掉；
+   *   前提是表格和 <main> 之间没有别的滚动容器——overflow-x-auto / overflow-hidden 的外层
+   *   都会变成 sticky 的参照物（横向滚动的表格没法同时相对 <main> 钉表头，这是 CSS 的限制）。
+   * - 表格直接放在自己的纵向滚动容器里（max-h-* overflow-auto）时，钉在那个容器的顶边。
+   * - 不在 <main> 里（弹窗）时变量不存在，按 0 算。
    */
   .table-sticky thead th {
-    @apply sticky top-0 z-10 shadow-[inset_0_-1px_0_var(--color-line)];
+    /* 底线只靠内阴影画（滚动时不会丢），去掉 .table-base th 的 border-b，避免叠成 2px */
+    @apply sticky z-10 border-b-0 shadow-[inset_0_-1px_0_var(--color-line)];
+    top: calc(var(--main-pt, 0px) * -1);
+  }
+  :is(.overflow-auto, .overflow-y-auto, .overflow-scroll, .overflow-y-scroll) > .table-sticky thead th {
+    top: 0;
   }
 
   /*
@@ -260,16 +270,86 @@
   .row-action:focus-visible {
     @apply opacity-100;
   }
-  /* 放了 32px 操作按钮的单元格收紧上下留白，行高与普通行一样保持约 44px */
+  /*
+   * 行高统一在 44px：放了 24px 药丸（Badge / StatusBadge 根元素带 .badge）的单元格上下各 10px，
+   * 放了 32px 操作按钮的单元格上下各 6px；页面不用再手写 py-*。
+   */
+  .table-base td:has(.badge) {
+    @apply py-2.5;
+  }
   .table-base td:has(.row-action) {
     @apply py-1.5;
   }
   .row-action-danger:hover:not(:disabled) {
     @apply text-red bg-red-soft;
   }
+  /* 触屏：没有悬停所以常亮；按钮放大到 40px 触控目标，单元格上下再收到 2px，行高仍是 44px */
   @media (hover: none) {
+    .row-action {
+      @apply h-10 min-w-10;
+    }
     .row-action:not(:disabled) {
       @apply opacity-100;
+    }
+    .table-base td:has(.row-action) {
+      @apply py-0.5;
+    }
+  }
+
+  /*
+   * 手机卡片化表格：<table class="table-base table-cards">，每个 td 写 data-label="列名"。
+   * < 640px：表头只留给读屏；每行一张卡片，每格一行「列名（左，12px faint）…… 值（右）」；
+   * 没有 data-label（或为空串）的格整行显示，给品名这类主字段；td.card-actions 是卡片底部的操作行。
+   * 卡片区四周留 12px（表格通常贴边放在面板里）；表格上桌面用的 min-w-[…] 在这里失效（见文件末尾）。
+   * ≥ 640px 完全是普通表格。选择器只认直接子元素，单元格里嵌套的表格不受影响；
+   * 写在 :has() 行高规则之后、特异性更高，卡片里的单元格不吃表格行的 py-*。
+   */
+  @media (width < 40rem) {
+    .table-base.table-cards,
+    .table-base.table-cards > tbody {
+      display: block;
+    }
+    /* relative：sr-only 的表头以表格为包含块，不会跑出 <main> 的滚动区 */
+    .table-base.table-cards {
+      @apply relative p-3;
+    }
+    .table-base.table-cards > thead {
+      @apply sr-only;
+    }
+    /* 卡片是纵向 flex：td.card-title 可以把不在第一列的主字段（如流水表的物品名）排到首行 */
+    .table-base.table-cards > tbody > tr {
+      @apply mb-3 flex flex-col rounded-(--radius-card) border border-line bg-surface p-4;
+    }
+    .table-base.table-cards > tbody > tr > td.card-title {
+      order: -1;
+    }
+    .table-base.table-cards > tbody:last-child > tr:last-child {
+      @apply mb-0;
+    }
+    /* 列名在左、值靠右；值由多个节点组成时一起靠右排 */
+    .table-base.table-cards > tbody > tr > td {
+      @apply flex items-baseline justify-between gap-3 border-0 px-0 py-1 text-right;
+    }
+    .table-base.table-cards > tbody > tr > td::before {
+      content: attr(data-label);
+      /* font-normal：列名不继承单元格上的 font-semibold；页面里不能用 before: 变体覆盖（会注入空 content） */
+      @apply mr-auto shrink-0 whitespace-nowrap text-left font-sans text-xs font-normal text-faint;
+    }
+    .table-base.table-cards > tbody > tr > td:is(:not([data-label]), [data-label='']) {
+      @apply block text-left;
+    }
+    .table-base.table-cards > tbody > tr > td:is(:not([data-label]), [data-label=''])::before {
+      content: none;
+    }
+    /* 操作行：40px 的触控按钮自带留白，底部不再加 py */
+    .table-base.table-cards > tbody > tr > td.card-actions {
+      /* 负右边距：让图标按钮里的图形与上方靠右的值对齐（按钮自带 8px / 触屏 12px 内留白） */
+      @apply mt-2 -mr-2 flex justify-end border-t border-line pt-2 pb-0;
+    }
+    @media (hover: none) {
+      .table-base.table-cards > tbody > tr > td.card-actions {
+        @apply -mr-3;
+      }
     }
   }
 
@@ -365,6 +445,15 @@
   .radio:disabled {
     opacity: 0.4;
     cursor: not-allowed;
+  }
+  /* 14px 小号（Checkbox / Radio 组件的 size="sm"）：class="checkbox checkbox-sm" / "radio radio-sm" */
+  .checkbox-sm,
+  .radio-sm {
+    width: 0.875rem;
+    height: 0.875rem;
+  }
+  .radio-sm:checked {
+    background-image: radial-gradient(circle, var(--color-primary-fg) 0 2px, transparent 2.5px);
   }
   /* 高对比度模式下自绘外观会丢，退回系统控件 */
   @media (forced-colors: active) {
@@ -469,6 +558,16 @@
   }
   .md a {
     @apply text-accent underline underline-offset-2 hover:text-accent-hover;
+  }
+}
+
+/*
+ * 卡片化表格（.table-cards，见上）在手机上不再需要桌面端的横向滚动宽度：
+ * 表格上的 min-w-[…] 是工具类，只有层外规则才压得过（理由同下方的减少动态效果）。
+ */
+@media (width < 40rem) {
+  .table-base.table-cards {
+    min-width: 0;
   }
 }
 

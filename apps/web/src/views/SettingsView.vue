@@ -11,6 +11,7 @@ import ConfirmDialog from '@/components/ui/ConfirmDialog.vue';
 import ErrorState from '@/components/ui/ErrorState.vue';
 import Skeleton from '@/components/ui/Skeleton.vue';
 import Dialog from '@/components/ui/Dialog.vue';
+import Panel from '@/components/ui/Panel.vue';
 import Switch from '@/components/ui/Switch.vue';
 import Tabs from '@/components/ui/Tabs.vue';
 import type { TabItem } from '@/components/ui/tabs';
@@ -387,15 +388,11 @@ const totalBackupSize = computed(() => backups.value.reduce((sum, b) => sum + b.
     <ErrorState :message="loadError" @retry="load" />
   </div>
 
-  <!-- 每个区块一个面板：头部标题 + 说明（发丝线分隔），内容 p-5；宽度由 SettingsLayout 限制在 960px -->
+  <!-- 每个区块一个 Panel：头部标题 + 说明 + 右侧动作（#actions），内容 p-5；宽度由 SettingsLayout 限制在 960px -->
   <div v-else class="space-y-6">
     <!-- 外观 -->
-    <section class="card">
-      <div class="px-5 py-4 border-b border-line">
-        <h2 class="text-[15px] leading-6 font-semibold text-ink">外观</h2>
-        <p class="mt-0.5 text-[13px] text-muted">界面明暗主题，跟随系统时随操作系统的显示设置切换</p>
-      </div>
-      <div class="flex flex-wrap items-center justify-between gap-3 p-5">
+    <Panel title="外观" description="界面明暗主题，跟随系统时随操作系统的显示设置切换">
+      <div class="flex flex-wrap items-center justify-between gap-3">
         <p class="text-sm font-medium text-text">主题</p>
         <Tabs
           :model-value="theme.mode"
@@ -405,345 +402,318 @@ const totalBackupSize = computed(() => backups.value.reduce((sum, b) => sum + b.
           @change="theme.setMode"
         />
       </div>
-    </section>
+    </Panel>
 
     <!-- 账号安全 -->
-    <section class="card">
-      <div class="flex items-start justify-between gap-3 px-5 py-4 border-b border-line">
-        <div class="min-w-0">
-          <h2 class="text-[15px] leading-6 font-semibold text-ink">账号安全</h2>
-          <p class="mt-0.5 text-[13px] text-muted">单管理员模式，会话 30 分钟无操作自动过期</p>
-        </div>
+    <Panel title="账号安全" description="单管理员模式，会话 30 分钟无操作自动过期">
+      <template #actions>
         <Button variant="ghost" size="sm" class="-mr-2" @click="logout">
           <Icon name="logout" :size="14" /> 退出登录
         </Button>
+      </template>
+      <div class="grid gap-4 sm:grid-cols-2">
+        <Input
+          v-model="passwordForm.currentPassword"
+          type="password"
+          label="当前密码"
+          autocomplete="current-password"
+          :error="passwordErrors.currentPassword"
+        />
+        <Input
+          v-model="passwordForm.newPassword"
+          type="password"
+          label="新密码"
+          placeholder="至少 8 位"
+          autocomplete="new-password"
+          class="sm:col-start-1"
+          :error="passwordErrors.newPassword"
+        />
+        <Input
+          v-model="passwordForm.confirm"
+          type="password"
+          label="确认新密码"
+          autocomplete="new-password"
+          :error="passwordErrors.confirm"
+        />
       </div>
-      <div class="p-5">
-        <div class="grid gap-4 sm:grid-cols-2">
-          <Input
-            v-model="passwordForm.currentPassword"
-            type="password"
-            label="当前密码"
-            autocomplete="current-password"
-            :error="passwordErrors.currentPassword"
-          />
-          <Input
-            v-model="passwordForm.newPassword"
-            type="password"
-            label="新密码"
-            placeholder="至少 8 位"
-            autocomplete="new-password"
-            class="sm:col-start-1"
-            :error="passwordErrors.newPassword"
-          />
-          <Input
-            v-model="passwordForm.confirm"
-            type="password"
-            label="确认新密码"
-            autocomplete="new-password"
-            :error="passwordErrors.confirm"
-          />
-        </div>
-        <div class="mt-5 flex flex-wrap items-center justify-between gap-3">
-          <p class="text-meta">修改密码会让所有已登录会话失效，你需要用新密码重新登录。</p>
-          <div class="ml-auto flex flex-wrap gap-2">
-            <Button variant="secondary" @click="recoveryDialogOpen = true">
-              <Icon name="key" :size="16" /> 重置恢复码
-            </Button>
-            <Button variant="primary" :loading="changing" @click="changePassword">修改密码</Button>
-          </div>
+      <div class="mt-5 flex flex-wrap items-center justify-between gap-3">
+        <p class="text-meta">修改密码会让所有已登录会话失效，你需要用新密码重新登录。</p>
+        <div class="ml-auto flex flex-wrap gap-2">
+          <Button variant="secondary" @click="recoveryDialogOpen = true">
+            <Icon name="key" :size="16" /> 重置恢复码
+          </Button>
+          <Button variant="primary" :loading="changing" @click="changePassword">修改密码</Button>
         </div>
       </div>
-    </section>
+    </Panel>
 
     <!-- 系统状态 -->
-    <section class="card">
-      <div class="flex items-center justify-between gap-3 px-5 py-4 border-b border-line">
-        <h2 class="text-[15px] leading-6 font-semibold text-ink">系统状态</h2>
+    <Panel title="系统状态">
+      <template #actions>
         <Button variant="ghost" size="sm" class="-mr-2" @click="load">
           <Icon name="refresh" :size="14" /> 刷新
         </Button>
-      </div>
-      <div class="p-5">
-        <dl class="grid grid-cols-2 gap-x-6 gap-y-5 sm:grid-cols-3">
-          <div>
-            <dt class="text-xs text-faint">版本</dt>
-            <dd class="mt-1 text-sm font-medium text-ink num">v{{ status?.version }}</dd>
-          </div>
-          <div>
-            <dt class="text-xs text-faint">运行时长</dt>
-            <dd class="mt-1 text-sm font-medium text-ink">{{ fmtUptime(status?.uptimeSeconds ?? 0) }}</dd>
-          </div>
-          <div>
-            <dt class="text-xs text-faint">数据库大小</dt>
-            <dd class="mt-1 text-sm font-medium text-ink num">{{ formatBytes(status?.dbSizeBytes ?? 0) }}</dd>
-          </div>
-          <div>
-            <dt class="text-xs text-faint">OCR 解析服务</dt>
-            <dd class="mt-1 flex flex-wrap items-center gap-x-2.5 gap-y-1">
-              <Badge :tone="ocrOk ? 'teal' : 'red'" dot>{{ ocrOk ? '正常' : '不可用' }}</Badge>
-              <button
-                type="button"
-                class="text-xs text-accent hover:underline underline-offset-2 cursor-pointer disabled:cursor-default disabled:text-faint disabled:no-underline"
-                :disabled="ocrChecking"
-                @click="recheckOcr"
-              >
-                {{ ocrChecking ? '检测中…' : '重测' }}
-              </button>
-            </dd>
-          </div>
-          <div>
-            <dt class="text-xs text-faint">台账记录</dt>
-            <dd class="mt-1 text-sm font-medium text-ink num">{{ status?.counts.items }}</dd>
-          </div>
-          <div>
-            <dt class="text-xs text-faint">物品 / 发放单</dt>
-            <dd class="mt-1 text-sm font-medium text-ink num">{{ status?.counts.products }} / {{ status?.counts.distributions }}</dd>
-          </div>
-        </dl>
-        <p
-          v-if="ocrOk === false"
-          class="mt-5 flex items-start gap-2 px-3 py-2 bg-amber-soft text-amber rounded-lg text-[13px]"
-        >
-          <Icon name="alert" :size="14" class="mt-0.5 shrink-0" />
-          OCR 不可用时导入页仍能打开，但上传后会解析失败。可以先手工新增台账记录。
-        </p>
-      </div>
-    </section>
+      </template>
+      <dl class="grid grid-cols-2 gap-x-6 gap-y-5 sm:grid-cols-3">
+        <div>
+          <dt class="text-xs text-faint">版本</dt>
+          <dd class="mt-1 text-sm font-medium text-ink num">v{{ status?.version }}</dd>
+        </div>
+        <div>
+          <dt class="text-xs text-faint">运行时长</dt>
+          <dd class="mt-1 text-sm font-medium text-ink">{{ fmtUptime(status?.uptimeSeconds ?? 0) }}</dd>
+        </div>
+        <div>
+          <dt class="text-xs text-faint">数据库大小</dt>
+          <dd class="mt-1 text-sm font-medium text-ink num">{{ formatBytes(status?.dbSizeBytes ?? 0) }}</dd>
+        </div>
+        <div>
+          <dt class="text-xs text-faint">OCR 解析服务</dt>
+          <dd class="mt-1 flex flex-wrap items-center gap-x-2.5 gap-y-1">
+            <Badge :tone="ocrOk ? 'teal' : 'red'" dot>{{ ocrOk ? '正常' : '不可用' }}</Badge>
+            <button
+              type="button"
+              class="text-xs text-accent hover:underline underline-offset-2 cursor-pointer disabled:cursor-default disabled:text-faint disabled:no-underline"
+              :disabled="ocrChecking"
+              @click="recheckOcr"
+            >
+              {{ ocrChecking ? '检测中…' : '重测' }}
+            </button>
+          </dd>
+        </div>
+        <div>
+          <dt class="text-xs text-faint">台账记录</dt>
+          <dd class="mt-1 text-sm font-medium text-ink num">{{ status?.counts.items }}</dd>
+        </div>
+        <div>
+          <dt class="text-xs text-faint">物品 / 发放单</dt>
+          <dd class="mt-1 text-sm font-medium text-ink num">{{ status?.counts.products }} / {{ status?.counts.distributions }}</dd>
+        </div>
+      </dl>
+      <p
+        v-if="ocrOk === false"
+        class="mt-5 flex items-start gap-2 px-3 py-2 bg-amber-soft text-amber rounded-lg text-[13px]"
+      >
+        <Icon name="alert" :size="14" class="mt-0.5 shrink-0" />
+        OCR 不可用时导入页仍能打开，但上传后会解析失败。可以先手工新增台账记录。
+      </p>
+    </Panel>
 
     <!-- AI 助手 -->
-    <section class="card">
-      <div class="px-5 py-4 border-b border-line">
-        <h2 class="text-[15px] leading-6 font-semibold text-ink">AI 助手</h2>
-        <p class="mt-0.5 text-[13px] text-muted">连接一次服务，选好模型即可使用。</p>
-      </div>
-      <div class="p-5 space-y-5">
-        <details :open="!aiKeySet" class="group rounded-lg bg-surface-2 p-4">
-          <summary
-            class="flex items-center gap-2 -mx-1 px-1 py-0.5 rounded-md cursor-pointer select-none list-none text-sm font-medium text-ink [&::-webkit-details-marker]:hidden"
+    <Panel title="AI 助手" description="连接一次服务，选好模型即可使用。" body-class="space-y-5 p-5">
+      <details :open="!aiKeySet" class="group rounded-lg bg-surface-2 p-4">
+        <summary
+          class="flex items-center gap-2 -mx-1 px-1 py-0.5 rounded-md cursor-pointer select-none list-none text-sm font-medium text-ink [&::-webkit-details-marker]:hidden"
+        >
+          <Icon name="chevron-right" :size="16" class="shrink-0 text-faint transition-transform duration-150 group-open:rotate-90" />
+          {{ aiKeySet ? '服务已配置 · 修改连接' : '连接 AI 服务' }}
+        </summary>
+        <div class="grid gap-4 mt-4 sm:grid-cols-2">
+          <Input
+            v-model="aiForm.baseUrl"
+            label="接口地址"
+            placeholder="https://服务商地址/v1"
+            :error="aiErrors.baseUrl"
+          />
+          <div
+            v-if="aiKeySet && !aiChangeKey"
+            class="flex flex-wrap items-center gap-x-3 gap-y-1 min-h-9 text-sm text-muted sm:mt-6.5 sm:self-start"
           >
-            <Icon name="chevron-right" :size="16" class="shrink-0 text-faint transition-transform duration-150 group-open:rotate-90" />
-            {{ aiKeySet ? '服务已配置 · 修改连接' : '连接 AI 服务' }}
-          </summary>
-          <div class="grid gap-4 mt-4 sm:grid-cols-2">
-            <Input
-              v-model="aiForm.baseUrl"
-              label="接口地址"
-              placeholder="https://服务商地址/v1"
-              :error="aiErrors.baseUrl"
-            />
-            <div
-              v-if="aiKeySet && !aiChangeKey"
-              class="flex flex-wrap items-center gap-x-3 gap-y-1 min-h-9 text-sm text-muted sm:mt-6.5 sm:self-start"
+            <p class="flex items-center gap-1.5">
+              <Icon name="check-circle" :size="15" class="shrink-0 text-accent" />
+              {{
+                aiKeySource === 'server'
+                  ? '服务器已配置 Key，无需填写'
+                  : 'Key 已保存，无需重复填写'
+              }}
+            </p>
+            <button
+              v-if="aiKeySource !== 'server'"
+              type="button"
+              class="text-[13px] text-accent hover:underline underline-offset-2 cursor-pointer"
+              @click="aiChangeKey = true"
             >
-              <p class="flex items-center gap-1.5">
-                <Icon name="check-circle" :size="15" class="shrink-0 text-accent" />
-                {{
-                  aiKeySource === 'server'
-                    ? '服务器已配置 Key，无需填写'
-                    : 'Key 已保存，无需重复填写'
-                }}
-              </p>
-              <button
-                v-if="aiKeySource !== 'server'"
-                type="button"
-                class="text-[13px] text-accent hover:underline underline-offset-2 cursor-pointer"
-                @click="aiChangeKey = true"
-              >
-                更换密钥
-              </button>
-            </div>
-            <Input
-              v-else
-              v-model="aiForm.apiKey"
-              type="password"
-              label="API Key"
-              :placeholder="aiKeySet ? '留空保留已保存的密钥' : '只需填写一次'"
-              autocomplete="new-password"
-              :error="aiErrors.apiKey"
-            />
+              更换密钥
+            </button>
           </div>
-        </details>
-
-        <div class="space-y-2">
-          <div class="flex items-start gap-3">
-            <ModelSelect
-              class="flex-1 min-w-0"
-              v-model="aiForm.model"
-              label="模型"
-              :models="availableModels"
-              :error="aiErrors.model"
-            />
-            <Button
-              class="mt-6.5"
-              variant="secondary"
-              :loading="aiModelsLoading"
-              :disabled="aiConnectionDirty || !aiKeySet || aiSaving || aiTesting"
-              @click="loadAiModels"
-              >获取模型列表</Button
-            >
-          </div>
-          <p v-if="aiConnectionDirty" class="text-xs text-muted">
-            连接信息已修改，保存后即可获取模型。
-          </p>
-          <p v-if="aiModelsError" role="status" class="text-xs text-amber">{{ aiModelsError }}</p>
-        </div>
-
-        <div class="flex flex-col divide-y divide-line border-y border-line">
-          <Switch v-model="aiForm.enabled" label="启用 AI 助手" label-position="left" class="w-full justify-between py-3.5" />
-          <Switch
-            v-model="aiForm.autoImport"
-            label="上传后自动识别单据"
-            description="自动识别会将原件发送给所选服务商，入账仍需你确认。"
-            label-position="left"
-            class="w-full justify-between py-3.5"
+          <Input
+            v-else
+            v-model="aiForm.apiKey"
+            type="password"
+            label="API Key"
+            :placeholder="aiKeySet ? '留空保留已保存的密钥' : '只需填写一次'"
+            autocomplete="new-password"
+            :error="aiErrors.apiKey"
           />
         </div>
+      </details>
 
-        <div class="flex flex-wrap items-center justify-between gap-3">
-          <p
-            v-if="aiCapabilities"
-            class="flex items-center gap-1.5 text-xs"
-            :class="aiCapabilities.image && aiCapabilities.structured ? 'text-accent' : 'text-amber'"
-          >
-            <Icon
-              :name="aiCapabilities.image && aiCapabilities.structured ? 'check-circle' : 'alert'"
-              :size="14"
-              class="shrink-0"
-            />{{
-              aiCapabilities.image && aiCapabilities.structured
-                ? '已通过识别检测'
-                : '检测未通过，请检查连接或模型'
-            }}
-          </p>
-          <p v-else class="text-xs text-muted">首次开启自动识别前，请先检测连接。</p>
-          <div class="ml-auto flex flex-wrap gap-2">
-            <Button
-              variant="secondary"
-              :loading="aiTesting"
-              :disabled="aiSaving"
-              @click="testAi"
-              >检测连接</Button
-            >
-            <Button
-              variant="primary"
-              :loading="aiSaving"
-              :disabled="aiTesting"
-              @click="saveAiConfig"
-              >保存</Button
-            >
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <!-- 自动备份 -->
-    <section class="card">
-      <div class="px-5 py-4 border-b border-line">
-        <h2 class="text-[15px] leading-6 font-semibold text-ink">自动备份</h2>
-        <p class="mt-0.5 text-[13px] text-muted">定期打包数据库与附件，保留最近 N 份</p>
-      </div>
-      <div class="p-5">
-        <Switch v-model="backupForm.enabled" label="启用" label-position="left" class="w-full justify-between" />
-        <div class="mt-5 pt-5 border-t border-line grid grid-cols-2 gap-4 sm:flex sm:flex-wrap sm:items-start">
-          <Input
-            v-model="backupForm.intervalHours"
-            label="间隔（小时）"
-            type="number"
-            min="1"
-            max="720"
-            class="sm:w-32"
-            :error="backupErrors.intervalHours"
-          />
-          <Input
-            v-model="backupForm.keepCount"
-            label="保留份数"
-            type="number"
-            min="1"
-            max="100"
-            class="sm:w-32"
-            :error="backupErrors.keepCount"
+      <div class="space-y-2">
+        <div class="flex items-start gap-3">
+          <ModelSelect
+            class="flex-1 min-w-0"
+            v-model="aiForm.model"
+            label="模型"
+            :models="availableModels"
+            :error="aiErrors.model"
           />
           <Button
+            class="mt-6.5"
+            variant="secondary"
+            :loading="aiModelsLoading"
+            :disabled="aiConnectionDirty || !aiKeySet || aiSaving || aiTesting"
+            @click="loadAiModels"
+            >获取模型列表</Button
+          >
+        </div>
+        <p v-if="aiConnectionDirty" class="text-xs text-muted">
+          连接信息已修改，保存后即可获取模型。
+        </p>
+        <p v-if="aiModelsError" role="status" class="text-xs text-amber">{{ aiModelsError }}</p>
+      </div>
+
+      <div class="flex flex-col divide-y divide-line border-y border-line">
+        <Switch v-model="aiForm.enabled" label="启用 AI 助手" label-position="left" class="w-full justify-between py-3.5" />
+        <Switch
+          v-model="aiForm.autoImport"
+          label="上传后自动识别单据"
+          description="自动识别会将原件发送给所选服务商，入账仍需你确认。"
+          label-position="left"
+          class="w-full justify-between py-3.5"
+        />
+      </div>
+
+      <div class="flex flex-wrap items-center justify-between gap-3">
+        <p
+          v-if="aiCapabilities"
+          class="flex items-center gap-1.5 text-xs"
+          :class="aiCapabilities.image && aiCapabilities.structured ? 'text-accent' : 'text-amber'"
+        >
+          <Icon
+            :name="aiCapabilities.image && aiCapabilities.structured ? 'check-circle' : 'alert'"
+            :size="14"
+            class="shrink-0"
+          />{{
+            aiCapabilities.image && aiCapabilities.structured
+              ? '已通过识别检测'
+              : '检测未通过，请检查连接或模型'
+          }}
+        </p>
+        <p v-else class="text-xs text-muted">首次开启自动识别前，请先检测连接。</p>
+        <div class="ml-auto flex flex-wrap gap-2">
+          <Button
+            variant="secondary"
+            :loading="aiTesting"
+            :disabled="aiSaving"
+            @click="testAi"
+            >检测连接</Button
+          >
+          <Button
             variant="primary"
-            class="col-span-2 justify-self-end sm:ml-auto sm:mt-6.5"
-            :loading="backupSaving"
-            @click="saveBackupConfig"
+            :loading="aiSaving"
+            :disabled="aiTesting"
+            @click="saveAiConfig"
             >保存</Button
           >
         </div>
       </div>
-    </section>
+    </Panel>
 
-    <!-- 备份管理 -->
-    <section class="card overflow-hidden">
-      <div class="flex items-start justify-between gap-3 px-5 py-4 border-b border-line">
-        <div class="min-w-0">
-          <h2 class="text-[15px] leading-6 font-semibold text-ink">备份管理</h2>
-          <p class="mt-0.5 text-[13px] text-muted">恢复会覆盖当前数据库与附件，操作前请先创建备份</p>
-        </div>
+    <!-- 自动备份 -->
+    <Panel title="自动备份" description="定期打包数据库与附件，保留最近 N 份">
+      <Switch v-model="backupForm.enabled" label="启用" label-position="left" class="w-full justify-between" />
+      <div class="mt-5 pt-5 border-t border-line grid grid-cols-2 gap-4 sm:flex sm:flex-wrap sm:items-start">
+        <Input
+          v-model="backupForm.intervalHours"
+          label="间隔（小时）"
+          type="number"
+          min="1"
+          max="720"
+          class="sm:w-32"
+          :error="backupErrors.intervalHours"
+        />
+        <Input
+          v-model="backupForm.keepCount"
+          label="保留份数"
+          type="number"
+          min="1"
+          max="100"
+          class="sm:w-32"
+          :error="backupErrors.keepCount"
+        />
+        <Button
+          variant="primary"
+          class="col-span-2 justify-self-end sm:ml-auto sm:mt-6.5"
+          :loading="backupSaving"
+          @click="saveBackupConfig"
+          >保存</Button
+        >
+      </div>
+    </Panel>
+
+    <!-- 备份管理：表格贴边；手机（< 640px）每份备份一张卡片，操作在卡片底部 -->
+    <Panel title="备份管理" description="恢复会覆盖当前数据库与附件，操作前请先创建备份" flush>
+      <template #actions>
         <Button variant="secondary" size="sm" :loading="creating" @click="createBackup">
           <Icon name="plus" :size="14" /> 立即备份
         </Button>
-      </div>
-      <p v-if="backups.length === 0" class="px-5 py-10 text-center text-[13px] text-faint">还没有备份</p>
-      <template v-else>
-        <div class="max-h-96 overflow-auto">
-          <table class="table-base table-sticky">
-            <thead>
-              <tr>
-                <th class="pl-5">备份文件</th>
-                <th class="hidden sm:table-cell">创建时间</th>
-                <th class="hidden sm:table-cell text-right">大小</th>
-                <th class="pr-5 text-right"><span class="sr-only">操作</span></th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="b in backups" :key="b.name">
-                <td class="w-full max-w-0 pl-5">
-                  <p class="truncate text-ink" :title="b.name">{{ b.name }}</p>
-                  <p class="text-meta num sm:hidden">
-                    {{ formatDateTime(b.createdAt) }} · {{ formatBytes(b.sizeBytes) }}
-                  </p>
-                </td>
-                <td class="hidden sm:table-cell num text-muted whitespace-nowrap">{{ formatDateTime(b.createdAt) }}</td>
-                <td class="hidden sm:table-cell num text-right text-muted">{{ formatBytes(b.sizeBytes) }}</td>
-                <td class="py-2 pr-3 text-right whitespace-nowrap">
-                  <button
-                    type="button"
-                    class="inline-flex items-center gap-1.5 h-8 px-2 rounded-md text-[13px] text-muted hover:text-ink hover:bg-primary-soft transition-colors duration-150 cursor-pointer disabled:opacity-50 disabled:cursor-default"
-                    :disabled="downloadingBackup === b.name"
-                    @click="download(b)"
-                  >
-                    <Icon name="download" :size="14" class="hidden sm:block" />
-                    {{ downloadingBackup === b.name ? '下载中…' : '下载' }}
-                  </button>
-                  <button
-                    type="button"
-                    class="inline-flex items-center gap-1.5 h-8 px-2 rounded-md text-[13px] text-muted hover:text-amber hover:bg-amber-soft transition-colors duration-150 cursor-pointer"
-                    @click="restoreTarget = b"
-                  >
-                    <Icon name="restore" :size="14" class="hidden sm:block" />
-                    恢复
-                  </button>
-                  <button
-                    type="button"
-                    class="inline-flex items-center gap-1.5 h-8 px-2 rounded-md text-[13px] text-muted hover:text-red hover:bg-red-soft transition-colors duration-150 cursor-pointer"
-                    @click="deleteBackupTarget = b"
-                  >
-                    <Icon name="trash" :size="14" class="hidden sm:block" />
-                    删除
-                  </button>
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-        <p class="px-5 py-3 border-t border-line text-meta num">
-          {{ backups.length }} 份 · 共 {{ formatBytes(totalBackupSize) }}
-        </p>
       </template>
-    </section>
+      <p v-if="backups.length === 0" class="px-5 py-10 text-center text-[13px] text-faint">还没有备份</p>
+      <!-- 桌面：最高 384px 内部滚动、表头钉在滚动框顶边；手机卡片不设高度上限，随页面滚动 -->
+      <div v-else class="overflow-auto sm:max-h-96">
+        <table class="table-base table-sticky table-cards">
+          <thead>
+            <tr>
+              <th class="pl-5">备份文件</th>
+              <th>创建时间</th>
+              <th class="text-right">大小</th>
+              <th class="pr-5 text-right"><span class="sr-only">操作</span></th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="b in backups" :key="b.name">
+              <!-- 主字段：表格里占满剩余宽度、单行截断；卡片里整行显示，长文件名折行 -->
+              <td class="sm:w-full sm:max-w-0 sm:pl-5">
+                <p class="break-words text-ink sm:truncate" :title="b.name">{{ b.name }}</p>
+              </td>
+              <td data-label="创建时间" class="num text-muted">{{ formatDateTime(b.createdAt) }}</td>
+              <td data-label="大小" class="num text-right text-muted">{{ formatBytes(b.sizeBytes) }}</td>
+              <!-- 表格：32px 按钮 + 上下 6px = 44px 行高；卡片：留白由 .card-actions 给，按钮 40px 触控高度，最后一个 -mr-2 与上方数值右对齐 -->
+              <td class="card-actions text-right whitespace-nowrap sm:py-1.5 sm:pr-3">
+                <button
+                  type="button"
+                  class="inline-flex items-center gap-1.5 h-8 max-sm:h-10 px-2 rounded-md text-[13px] text-muted hover:text-ink hover:bg-primary-soft transition-colors duration-150 cursor-pointer disabled:opacity-50 disabled:cursor-default"
+                  :disabled="downloadingBackup === b.name"
+                  @click="download(b)"
+                >
+                  <Icon name="download" :size="14" />
+                  {{ downloadingBackup === b.name ? '下载中…' : '下载' }}
+                </button>
+                <button
+                  type="button"
+                  class="inline-flex items-center gap-1.5 h-8 max-sm:h-10 px-2 rounded-md text-[13px] text-muted hover:text-amber hover:bg-amber-soft transition-colors duration-150 cursor-pointer"
+                  @click="restoreTarget = b"
+                >
+                  <Icon name="restore" :size="14" />
+                  恢复
+                </button>
+                <button
+                  type="button"
+                  class="inline-flex items-center gap-1.5 h-8 max-sm:h-10 max-sm:-mr-2 px-2 rounded-md text-[13px] text-muted hover:text-red hover:bg-red-soft transition-colors duration-150 cursor-pointer"
+                  @click="deleteBackupTarget = b"
+                >
+                  <Icon name="trash" :size="14" />
+                  删除
+                </button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <template v-if="backups.length > 0" #footer>
+        <p class="text-meta num">{{ backups.length }} 份 · 共 {{ formatBytes(totalBackupSize) }}</p>
+      </template>
+    </Panel>
 
     <!-- 恢复中：全屏挡住，避免用户在数据被覆盖的过程中继续操作 -->
     <div

@@ -11,6 +11,7 @@ import NativeSelect from '@/components/ui/NativeSelect.vue';
 import PageHeader from '@/components/ui/PageHeader.vue';
 import Select from '@/components/ui/Select.vue';
 import Skeleton from '@/components/ui/Skeleton.vue';
+import StickyActionBar from '@/components/ui/StickyActionBar.vue';
 import Tabs from '@/components/ui/Tabs.vue';
 import { useCatalogStore } from '@/stores/catalog';
 import { importsApi, type ImportTaskView, type AiImportPage } from '@/api';
@@ -150,7 +151,7 @@ const aiState = computed(
     })[task.value?.aiStatus ?? 'DISABLED'],
 );
 /*
- * 以下两项只服务于展示，不参与任何业务判断。
+ * 以下几项只服务于展示，不参与任何业务判断。
  * 步骤条：上传原件 → 本地识别 → GPT 复核 → 核对入账，从 task.status / aiStatus / confirmed / finished 推导。
  * warn = 该步没有完整完成（本地解析失败、GPT 部分失败或被停止）；skipped = 未启用 GPT。
  */
@@ -205,6 +206,11 @@ const stateDot: Partial<Record<string, string>> = {
   DONE: 'bg-accent',
   FAILED: 'bg-amber',
 };
+/**
+ * 明细的数量 / 单位 / 单价：Input 用 hideLabel（可访问名称仍是 label），
+ * 面板窄、明细堆叠时列头不在，另显示这行字（aria-hidden，与 Input 的 label 同款样式）；表格形态（@xl）隐藏。
+ */
+const stackedLabel = 'mb-1.5 block text-[13px] leading-5 font-medium text-text @xl:hidden';
 function line(item?: ImportDraft['items'][number]): Line {
   return {
     lineId: item?.lineId ?? crypto.randomUUID(),
@@ -662,7 +668,11 @@ onUnmounted(() => {
           ]"
         />
         <div class="grid items-start gap-6 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)]">
-          <!-- 原件预览：桌面端钉在顶部，图片高度不超过视口，整页可见 -->
+          <!--
+            原件预览：桌面端钉在顶部，图片高度不超过视口，整页可见。
+            图片最高 = 视口 − 外壳顶部留白 --main-pt − 10rem（钉住位置 top-6 1.5rem、工具行约 3.1rem、
+            图片区上下内边距 1.5rem 与描边、底部操作条约 3.8rem），面板底边正好停在操作条上沿。
+          -->
           <section
             :class="[
               mobileTab === 'original' ? 'block' : 'hidden',
@@ -689,7 +699,7 @@ onUnmounted(() => {
                 <img
                   :src="`/api/imports/tasks/${taskId}/pages/${page}`"
                   alt="单据原件页面"
-                  class="block h-auto max-w-full rounded-lg border border-line bg-white lg:max-h-[calc(100dvh-12rem)]"
+                  class="block h-auto max-w-full rounded-lg border border-line bg-white lg:max-h-[calc(100dvh_-_var(--main-pt)_-_10rem)]"
                   @error="previewFailed = true"
                 /><svg
                   v-if="box?.length"
@@ -758,7 +768,8 @@ onUnmounted(() => {
 
             <!--
               明细表：面板够宽（≥ 36rem）时是表格，窄时（手机、1280 以下的双栏）每条明细堆叠成
-              「品名 / 数量·单位·单价 / 链接」三行。数量、单位、单价的 label 在表格形态下只留给读屏。
+              「品名 / 数量·单位·单价 / 链接」三行。数量、单位、单价的 Input 用 hideLabel（label 只留给读屏），
+              堆叠时列头不在，另显示一行 aria-hidden 的字段名（stackedLabel）。
             -->
             <section class="card @container divide-y divide-line overflow-hidden">
               <div v-if="!loaded" class="space-y-2.5 p-4">
@@ -798,34 +809,31 @@ onUnmounted(() => {
                       />
                     </td>
                     <td class="border-b-0 px-1.5 pb-2 pt-3 @max-xl:p-0">
+                      <span aria-hidden="true" :class="stackedLabel">数量</span>
                       <Input
                         v-model="l.quantity"
                         size="sm"
                         label="数量"
+                        hide-label
                         type="number"
                         step="any"
                         placeholder="数量：待确认"
-                        class="@xl:[&>span:first-child]:sr-only"
                       />
                     </td>
                     <td class="border-b-0 px-1.5 pb-2 pt-3 @max-xl:p-0">
-                      <Input
-                        v-model="l.unit"
-                        size="sm"
-                        label="单位"
-                        placeholder="单位"
-                        class="@xl:[&>span:first-child]:sr-only"
-                      />
+                      <span aria-hidden="true" :class="stackedLabel">单位</span>
+                      <Input v-model="l.unit" size="sm" label="单位" hide-label placeholder="单位" />
                     </td>
                     <td class="border-b-0 px-1.5 pb-2 pt-3 @max-xl:p-0">
+                      <span aria-hidden="true" :class="stackedLabel">单价</span>
                       <Input
                         v-model="l.unitPrice"
                         size="sm"
                         label="单价"
+                        hide-label
                         type="number"
                         step="any"
                         placeholder="单价：可空"
-                        class="@xl:[&>span:first-child]:sr-only"
                       />
                     </td>
                     <td class="border-b-0 pb-2 pl-1.5 pr-4 pt-3 @max-xl:col-span-3 @max-xl:p-0">
@@ -996,21 +1004,23 @@ onUnmounted(() => {
       </div>
 
       <!--
-        底部操作条：钉在视口底部，本阶段的提示与错误也放在这里（点确认后不用回到页顶找报错）。
-        sticky 的底边从 <main> 的内容框算起（会扣掉 AppShell 给 main 的底部留白），所以用负值抵回：
-        手机 main 底部留白 6rem、底部标签栏 3.75rem（安全区两边相消）→ -2.25rem 正好贴在标签栏上方；
-        桌面留白 2.5rem → -2.5rem 贴住视口底边。左右负边距同理抵掉 main 的水平内边距，做成通栏。
+        底部操作条：钉在 <main> 底边（桌面贴视口底边，手机贴在底部标签栏之上），通栏与贴边由 StickyActionBar 负责。
+        本阶段的提示与错误（含已确认任务的只读提示）放在条内左侧，点确认后不用回到页顶找报错。
+        有意放在草稿之后、历史与上传区之前（不是页面根元素的最后）：键盘顺序是「明细 → 保存 / 确认」，
+        滚过草稿看历史、导入下一份时它跟着草稿走，不会压在上传区上面。父元素仍是页面根元素，通栏宽度不受影响。
       -->
-      <div
-        class="sticky -bottom-9 z-20 -mx-4 border-t border-line bg-surface/95 px-4 py-3 backdrop-blur lg:-bottom-10 lg:-mx-8 lg:px-8"
-      >
-        <div class="flex flex-wrap items-center justify-end gap-x-4 gap-y-2.5">
+      <StickyActionBar>
+        <template #start>
+          <!--
+            文字按内容宽度（不 flex-1）：两个恢复按钮紧跟在报错后面，空白留在它们与「保存草稿」之间，
+            不会与右侧的主按钮连成一排四个。
+          -->
           <div
             v-if="saveError"
             role="alert"
-            class="flex basis-full flex-wrap items-center gap-x-3 gap-y-2 text-[13px] leading-5 text-red"
+            class="flex flex-wrap items-center gap-x-3 gap-y-2 text-[13px] leading-5 text-red"
           >
-            <p class="flex min-w-0 flex-1 basis-64 items-start gap-1.5">
+            <p class="flex min-w-0 items-start gap-1.5">
               <Icon name="alert" :size="15" class="mt-0.5 shrink-0" />
               <span>草稿保存失败：{{ saveError }}。请保留当前页面，避免丢失编辑。</span>
             </p>
@@ -1019,33 +1029,27 @@ onUnmounted(() => {
               <Button size="sm" variant="ghost" @click="reloadDraft">重新载入已保存版本</Button>
             </div>
           </div>
-          <div
-            v-if="error"
-            role="alert"
-            class="mr-auto flex min-w-0 basis-full items-start gap-1.5 text-[13px] leading-5 text-amber sm:basis-0 sm:flex-1"
-          >
+          <p v-if="error" role="alert" class="flex items-start gap-1.5 text-[13px] leading-5 text-amber">
             <Icon name="alert" :size="15" class="mt-0.5 shrink-0" />
-            <p class="min-w-0">{{ error }}</p>
-          </div>
-          <div class="flex items-center gap-2 max-sm:w-full">
-            <Button
-              variant="secondary"
-              class="max-sm:flex-1"
-              :disabled="task.confirmed"
-              @click="persist"
-              >保存草稿</Button
-            >
-            <Button
-              variant="accent"
-              class="max-sm:flex-1"
-              :disabled="!!active || task.confirmed || !loaded"
-              :loading="busy"
-              @click="confirm"
-              >确认全部内容并导入</Button
-            >
-          </div>
-        </div>
-      </div>
+            <span class="min-w-0">{{ error }}</span>
+          </p>
+        </template>
+        <Button
+          variant="secondary"
+          class="max-sm:flex-1"
+          :disabled="task.confirmed"
+          @click="persist"
+          >保存草稿</Button
+        >
+        <Button
+          variant="accent"
+          class="max-sm:flex-1"
+          :disabled="!!active || task.confirmed || !loaded"
+          :loading="busy"
+          @click="confirm"
+          >确认全部内容并导入</Button
+        >
+      </StickyActionBar>
 
       <!-- 历史与用量：两个折叠区放在同一个面板里 -->
       <div class="card divide-y divide-line">

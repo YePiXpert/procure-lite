@@ -7,6 +7,7 @@ import Button from '@/components/ui/Button.vue';
 import Icon from '@/components/ui/Icon.vue';
 import StatCard from '@/components/ui/StatCard.vue';
 import PageHeader from '@/components/ui/PageHeader.vue';
+import Panel from '@/components/ui/Panel.vue';
 import Tabs from '@/components/ui/Tabs.vue';
 import type { TabItem } from '@/components/ui/tabs';
 import EChart from '@/components/charts/EChart.vue';
@@ -135,21 +136,15 @@ const barOption = computed<EChartsOption>(() => {
     color: ct.colors,
     textStyle: ct.textStyle,
     // 两个系列：图例常驻，身份不只靠颜色区分；只作图例用，不做显隐切换
-    legend: {
-      top: 0,
-      left: 'center',
-      selectedMode: false,
-      itemWidth: 14,
-      itemHeight: 8,
-      itemGap: 16,
-      textStyle: { color: ct.muted, fontSize: 12 },
-    },
+    legend: { ...ct.legend, top: 0, selectedMode: false },
     tooltip: {
       ...ct.tooltip,
       textStyle: { ...ct.tooltip.textStyle, fontFamily: ct.textStyle.fontFamily },
       trigger: 'axis',
-      // 阴影带垫在系列下面（系列默认 z = 2）：盖在上面会把柱子和折线洗白
-      axisPointer: { type: 'shadow', z: 1, shadowStyle: { color: ct.splitLine, opacity: 0.6 } },
+      // 类目轴悬停阴影带（垫在系列下面，见 chartTheme）
+      axisPointer: ct.axisPointer,
+      // 限制在图表区域内：Panel 按圆角裁切（overflow-clip），窄屏上越出面板的部分会被切掉
+      confine: true,
       // 金额轴带上货币符号与千分位，光看裸数字很难读
       formatter: (params: unknown) => {
         const rows = params as { axisValue: string; seriesName: string; value: number; marker: string }[];
@@ -278,81 +273,75 @@ const maxRecipientQuantity = computed(() => Math.max(1, ...recipients.value.map(
       </div>
 
       <!-- 金额统计 -->
-      <section class="card">
-        <div class="flex flex-wrap items-start justify-between gap-x-4 gap-y-3 px-5 pt-4">
-          <div class="min-w-0">
-            <h2 class="text-[15px] leading-6 font-semibold text-ink">采购金额统计（{{ groupLabel }}）</h2>
-            <p class="mt-0.5 text-[13px] text-muted">未填单价的记录只计笔数不计金额</p>
-          </div>
-          <div v-if="points.length > 0" class="flex flex-wrap items-center gap-x-4 gap-y-2">
-            <p class="text-[13px] text-muted">
-              合计 <b class="num text-[15px] font-semibold text-ink">{{ formatCurrency(totalAmount) }}</b> · <span class="num">{{ totalCount }}</span> 笔
-            </p>
-            <Button variant="secondary" size="sm" @click="exportAmount">
-              <Icon name="download" :size="14" /> 导出
-            </Button>
-          </div>
+      <Panel :title="`采购金额统计（${groupLabel}）`" description="未填单价的记录只计笔数不计金额" body-class="px-3 pt-3 pb-4 sm:px-4">
+        <template v-if="points.length > 0" #actions>
+          <p class="mr-2 text-[13px] text-muted">
+            合计 <b class="num text-[15px] font-semibold text-ink">{{ formatCurrency(totalAmount) }}</b> · <span class="num">{{ totalCount }}</span> 笔
+          </p>
+          <Button variant="secondary" size="sm" @click="exportAmount">
+            <Icon name="download" :size="14" /> 导出
+          </Button>
+        </template>
+        <Skeleton v-if="loading" class="h-60 lg:h-[300px]" />
+        <EmptyState v-else-if="points.length === 0" icon="report" title="所选范围内没有数据" description="换个时间区间或统计维度试试" />
+        <div v-else class="h-60 lg:h-[300px] transition-opacity duration-150" :class="refreshing ? 'opacity-50' : ''">
+          <EChart :option="barOption" height="100%" />
         </div>
-        <div class="px-3 pt-3 pb-4 sm:px-4">
-          <Skeleton v-if="loading" class="h-60 lg:h-[300px]" />
-          <EmptyState v-else-if="points.length === 0" icon="report" title="所选范围内没有数据" description="换个时间区间或统计维度试试" />
-          <div v-else class="h-60 lg:h-[300px] transition-opacity duration-150" :class="refreshing ? 'opacity-50' : ''">
-            <EChart :option="barOption" height="100%" />
-          </div>
-        </div>
-      </section>
+      </Panel>
 
       <!-- 领用排行 -->
-      <section class="card overflow-hidden">
-        <div class="flex flex-wrap items-center justify-between gap-3 px-5 py-4 border-b border-line">
-          <h2 class="text-[15px] leading-6 font-semibold text-ink">领用排行（按人）</h2>
-          <Button v-if="recipients.length > 0" variant="secondary" size="sm" @click="exportRecipients">
+      <Panel title="领用排行（按人）" flush>
+        <template v-if="recipients.length > 0" #actions>
+          <Button variant="secondary" size="sm" @click="exportRecipients">
             <Icon name="download" :size="14" /> 导出全部 {{ recipients.length }} 人
           </Button>
-        </div>
+        </template>
         <div v-if="loading" class="p-4 space-y-2">
           <Skeleton v-for="i in 8" :key="i" class="h-10" />
         </div>
         <EmptyState v-else-if="recipients.length === 0" illustration="chart" title="还没有领用数据" />
-        <div v-else class="transition-opacity duration-150" :class="refreshing ? 'opacity-50' : ''">
-          <div class="overflow-x-auto">
-            <!-- 手机上部门并进领用人一格（副行），比例条收窄，整表不用横向滚动 -->
-            <table class="table-base">
-              <thead>
-                <tr>
-                  <th class="w-12 text-right">#</th>
-                  <th>领用人</th>
-                  <th class="hidden sm:table-cell">部门</th>
-                  <th class="text-right">领用次数</th>
-                  <th class="text-right sm:w-64">累计数量</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr v-for="(r, i) in recipients.slice(0, 20)" :key="`${r.recipient}|${r.department}`">
-                  <td class="text-right num text-xs text-faint">{{ i + 1 }}</td>
-                  <td class="whitespace-nowrap">
-                    <p class="font-medium text-ink">{{ r.recipient }}</p>
-                    <p class="text-meta sm:hidden">{{ r.department || '—' }}</p>
-                  </td>
-                  <td class="hidden sm:table-cell text-[13px] text-muted whitespace-nowrap">{{ r.department || '—' }}</td>
-                  <td class="text-right num">{{ r.times }}</td>
-                  <td>
-                    <div class="flex items-center justify-end gap-3">
-                      <span class="h-1 w-12 sm:w-28 shrink-0 overflow-hidden rounded-full bg-accent-soft" aria-hidden="true">
-                        <span class="block h-full rounded-full bg-accent/70" :style="{ width: `${(r.quantity / maxRecipientQuantity) * 100}%` }" />
-                      </span>
-                      <span class="num min-w-10 text-right font-semibold text-ink">{{ r.quantity }}</span>
-                    </div>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-          <p v-if="recipients.length > 20" class="px-5 py-3 border-t border-line text-meta">
+        <div v-else class="overflow-x-auto transition-opacity duration-150" :class="refreshing ? 'opacity-50' : ''">
+          <!-- 手机（< 640px）每人一张卡片：名次 + 领用人一行，部门、领用次数、累计数量（比例条 + 数值）各一行 -->
+          <table class="table-base table-cards">
+            <thead>
+              <tr>
+                <th class="w-12 text-right">#</th>
+                <th>领用人</th>
+                <th>部门</th>
+                <th class="text-right">领用次数</th>
+                <th class="text-right sm:w-64">累计数量</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="(r, i) in recipients.slice(0, 20)" :key="`${r.recipient}|${r.department}`">
+                <!-- 名次列只在表格里单独成列；卡片里并进领用人那一行（下面的 sm:hidden） -->
+                <td class="text-right num text-xs text-faint max-sm:hidden">{{ i + 1 }}</td>
+                <td class="sm:whitespace-nowrap">
+                  <p class="font-medium text-ink">
+                    <span class="inline-block min-w-6 num text-xs font-normal text-faint sm:hidden">{{ i + 1 }}</span>{{ r.recipient }}
+                  </p>
+                </td>
+                <td data-label="部门" class="text-[13px] text-muted sm:whitespace-nowrap">{{ r.department || '—' }}</td>
+                <td data-label="领用次数" class="text-right num">{{ r.times }}</td>
+                <td data-label="累计数量">
+                  <!-- self-baseline：卡片里这一格按基线与左侧列名对齐，取的是数值的基线而不是比例条 -->
+                  <div class="flex items-center justify-end gap-3">
+                    <span class="h-1 w-24 sm:w-28 shrink-0 overflow-hidden rounded-full bg-accent-soft" aria-hidden="true">
+                      <span class="block h-full rounded-full bg-accent/70" :style="{ width: `${(r.quantity / maxRecipientQuantity) * 100}%` }" />
+                    </span>
+                    <span class="num min-w-10 self-baseline text-right font-semibold text-ink">{{ r.quantity }}</span>
+                  </div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <template v-if="!loading && recipients.length > 20" #footer>
+          <p class="text-meta transition-opacity duration-150" :class="refreshing ? 'opacity-50' : ''">
             页面只列前 20 名，共 {{ recipients.length }} 人；完整名单请用上方导出。
           </p>
-        </div>
-      </section>
+        </template>
+      </Panel>
     </template>
   </div>
 </template>

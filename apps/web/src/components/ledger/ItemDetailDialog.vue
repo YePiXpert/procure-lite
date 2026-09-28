@@ -6,6 +6,7 @@ import { buttonClass } from '@/components/ui/button';
 import Icon from '@/components/ui/Icon.vue';
 import StatusBadge from '@/components/ui/StatusBadge.vue';
 import Badge from '@/components/ui/Badge.vue';
+import Radio from '@/components/ui/Radio.vue';
 import ConfirmDialog from '@/components/ui/ConfirmDialog.vue';
 import { attachmentsApi, itemsApi, downloadFile, type AttachmentRow, type ItemRow } from '@/api';
 import { useToastStore } from '@/stores/toast';
@@ -226,13 +227,10 @@ const amount = computed(() =>
         <div class="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
           <h3 class="text-[13px] font-semibold text-ink">附件</h3>
           <div class="flex items-center gap-4">
-            <div class="flex items-center gap-3">
-              <label class="inline-flex items-center gap-1.5 text-[13px] text-muted cursor-pointer select-none">
-                <input v-model="uploadKind" type="radio" value="INVOICE" class="radio" /> 发票
-              </label>
-              <label class="inline-flex items-center gap-1.5 text-[13px] text-muted cursor-pointer select-none">
-                <input v-model="uploadKind" type="radio" value="SIGNOFF" class="radio" /> 签收单
-              </label>
+            <!-- 与 sm 上传按钮同一行：14px 圆框 + 13px 文字；同一个 name，方向键可在两项间切换 -->
+            <div class="flex items-center gap-4">
+              <Radio v-model="uploadKind" name="attachment-kind" value="INVOICE" label="发票" size="sm" />
+              <Radio v-model="uploadKind" name="attachment-kind" value="SIGNOFF" label="签收单" size="sm" />
             </div>
             <!-- 文件框 sr-only 而不是 hidden：键盘也能 Tab 到并打开选择框，焦点环画在外层 -->
             <label
@@ -248,7 +246,7 @@ const amount = computed(() =>
           暂无附件（从 OA 导入的单据会自动留存原件）
         </p>
         <ul v-else class="mt-3 divide-y divide-line border-t border-line">
-          <li v-for="a in attachments" :key="a.id" class="flex items-center gap-3 py-2">
+          <li v-for="a in attachments" :key="a.id" class="group flex items-center gap-3 py-2">
             <Badge :tone="kindTone(a.kind)" class="shrink-0">
               {{ ATTACHMENT_KIND_LABELS[a.kind as AttachmentKind] ?? a.kind }}
             </Badge>
@@ -264,9 +262,10 @@ const amount = computed(() =>
               </button>
               <span class="text-meta num sm:ml-auto sm:shrink-0">{{ formatBytes(a.sizeBytes) }} · {{ formatDateTime(a.createdAt) }}</span>
             </div>
+            <!-- 与表格行内操作同一套：行悬停时显出、触屏常亮且放大到 40px；「删除中…」要留字距、别淡到看不清 -->
             <button
               type="button"
-              class="inline-flex h-8 min-w-8 shrink-0 items-center justify-center rounded-md px-1.5 text-xs text-faint cursor-pointer transition-colors duration-150 hover:bg-red-soft hover:text-red disabled:cursor-not-allowed disabled:opacity-50"
+              class="row-action row-action-danger px-1.5 text-xs disabled:opacity-50"
               title="删除附件"
               :disabled="removingAttachmentId === a.id"
               @click="deleteAttachment = a"

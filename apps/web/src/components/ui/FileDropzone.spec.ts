@@ -1,5 +1,7 @@
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 import { mount } from '@vue/test-utils';
+import { createPinia, setActivePinia } from 'pinia';
+import { useToastStore } from '@/stores/toast';
 import FileDropzone from './FileDropzone.vue';
 
 const ACCEPT = '.pdf,.png,.jpg,.jpeg,.webp,.bmp';
@@ -11,6 +13,9 @@ function drop(target: Element, files: File[]): void {
 }
 
 describe('FileDropzone', () => {
+  // 拒收文件时组件自己弹 toast，需要一个活动的 pinia
+  beforeEach(() => setActivePinia(createPinia()));
+
   it('只有一个 file input（拍照上传复用它），e2e 的 input[type=file] 定位不受影响', () => {
     const wrapper = mount(FileDropzone, { props: { accept: ACCEPT, capture: true } });
     expect(wrapper.findAll('input[type=file]')).toHaveLength(1);
@@ -35,6 +40,22 @@ describe('FileDropzone', () => {
     drop(wrapper.get('label').element, [doc, pdf, png]);
     expect(wrapper.emitted('files')?.[0]).toEqual([[pdf]]);
     expect(wrapper.emitted('rejected')?.[0]).toEqual([[doc]]);
+  });
+
+  it('拒收不支持的文件时弹出错误提示，调用方不用处理', () => {
+    const wrapper = mount(FileDropzone, { props: { accept: ACCEPT } });
+    drop(wrapper.get('label').element, [new File(['x'], 'c.docx', { type: 'application/msword' })]);
+    expect(wrapper.emitted('files')).toBeUndefined();
+    expect(useToastStore().toasts).toMatchObject([
+      { kind: 'error', message: '不支持的文件类型，请选择 PDF / PNG / JPG / WEBP' },
+    ]);
+  });
+
+  it('全部符合 accept 时不弹提示', () => {
+    const wrapper = mount(FileDropzone, { props: { accept: ACCEPT } });
+    drop(wrapper.get('label').element, [new File(['x'], 'b.png', { type: 'image/png' })]);
+    expect(wrapper.emitted('files')).toHaveLength(1);
+    expect(useToastStore().toasts).toHaveLength(0);
   });
 
   it('禁用时拖入不响应', () => {

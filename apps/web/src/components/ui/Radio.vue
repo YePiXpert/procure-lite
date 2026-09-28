@@ -17,8 +17,10 @@ const props = withDefaults(
     disabled?: boolean;
     name?: string;
     id?: string;
+    /** sm = 14px 圆框 + 13px 文字；md = 16px + 14px（默认） */
+    size?: 'sm' | 'md';
   }>(),
-  { modelValue: undefined, value: undefined, checked: undefined },
+  { modelValue: undefined, value: undefined, checked: undefined, size: 'md' },
 );
 const emit = defineEmits<{
   'update:modelValue': [value: T];
@@ -52,14 +54,18 @@ const domValue = computed(() =>
 <template>
   <label
     v-if="label || description || $slots.default"
-    class="inline-flex items-start gap-2.5 text-sm leading-5 select-none"
-    :class="disabled ? 'cursor-not-allowed text-faint' : 'cursor-pointer text-text'"
+    class="inline-flex items-start select-none"
+    :class="[
+      size === 'sm' ? 'gap-2 text-[13px] leading-[18px]' : 'gap-2.5 text-sm leading-5',
+      disabled ? 'cursor-not-allowed text-faint' : 'cursor-pointer text-text',
+    ]"
   >
     <input
       :id="id"
       ref="inputEl"
       type="radio"
       class="radio mt-0.5"
+      :class="size === 'sm' ? 'radio-sm' : ''"
       :checked="isChecked"
       :disabled="disabled"
       :name="name"
@@ -79,6 +85,7 @@ const domValue = computed(() =>
     ref="inputEl"
     type="radio"
     class="radio"
+    :class="size === 'sm' ? 'radio-sm' : ''"
     :checked="isChecked"
     :disabled="disabled"
     :name="name"

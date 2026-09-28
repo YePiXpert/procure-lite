@@ -10,6 +10,7 @@ import EmptyState from '@/components/ui/EmptyState.vue';
 import ErrorState from '@/components/ui/ErrorState.vue';
 import Skeleton from '@/components/ui/Skeleton.vue';
 import Tabs from '@/components/ui/Tabs.vue';
+import Panel from '@/components/ui/Panel.vue';
 import Dialog from '@/components/ui/Dialog.vue';
 import ConfirmDialog from '@/components/ui/ConfirmDialog.vue';
 import { suppliersApi, type PriceRecordRow, type SupplierRow } from '@/api';
@@ -230,11 +231,9 @@ async function runSuggest(): Promise<void> {
 
 <template>
   <div class="space-y-6">
-    <!-- 比价查询：surface-2 搜索条（不是独立卡片），结果表就跟在条里 -->
-    <section class="bg-surface-2 rounded-(--radius-card) p-4 sm:p-5">
-      <h2 class="text-[15px] leading-6 font-semibold text-ink">比价建议</h2>
-      <p class="mt-0.5 text-[13px] text-muted">按品名查各家最新报价；下单登记时也会自动提示</p>
-      <div class="mt-3 flex items-center gap-2">
+    <!-- 比价建议：Panel 头部给标题与说明；body 贴边——查价搜索行在上，结果表（或空态）接在发丝线下面 -->
+    <Panel title="比价建议" description="按品名查各家最新报价；下单登记时也会自动提示" flush>
+      <div class="flex items-center gap-2 px-5 py-4">
         <SearchInput
           v-model="state.suggest"
           class="min-w-0 flex-1 sm:max-w-md"
@@ -247,13 +246,14 @@ async function runSuggest(): Promise<void> {
 
       <EmptyState
         v-if="suggestedFor && suggestions.length === 0 && !suggestLoading"
-        class="mt-4 bg-surface border border-line rounded-lg"
+        class="border-t border-line"
         illustration="search"
         :title="`「${suggestedFor}」还没有报价记录`"
         description="品名需要与记价时完全一致才能匹配上。"
       />
-      <div v-else-if="suggestions.length > 0" class="mt-4 overflow-x-auto bg-surface border border-line rounded-lg">
-        <table class="table-base min-w-[560px]">
+      <!-- 手机（< 640px）是卡片：供应商 + 「最低价」整行作标题，其余各列一行「列名 …… 值」 -->
+      <div v-else-if="suggestions.length > 0" class="overflow-x-auto border-t border-line">
+        <table class="table-base table-cards min-w-[560px]">
           <thead>
             <tr>
               <th>供应商</th>
@@ -264,15 +264,16 @@ async function runSuggest(): Promise<void> {
           </thead>
           <tbody>
             <tr v-for="(s, i) in suggestions" :key="s.id">
-              <!-- 这格可能带 24px 的「最低价」药丸：上下内边距收 2px，行高与其它行一致（44px） -->
-              <td class="py-2.5">
+              <!-- 带「最低价」药丸的格子，上下留白由 td:has(.badge) 统一收到 10px，行高仍是 44px -->
+              <td>
                 <div class="flex items-center gap-2">
                   <span class="font-medium text-ink">{{ s.supplier.name }}</span>
                   <Badge v-if="i === 0" tone="teal">最低价</Badge>
                 </div>
               </td>
-              <td class="text-right num font-semibold text-ink">{{ formatCurrency(s.unitPrice) }}</td>
-              <td>
+              <!-- 字重写在内部 span 上（§11.12 .table-cards 约定：卡片列名 ::before 固定 font-normal） -->
+              <td data-label="单价" class="text-right num"><span class="font-semibold text-ink">{{ formatCurrency(s.unitPrice) }}</span></td>
+              <td data-label="链接">
                 <a
                   v-if="s.purchaseLink"
                   :href="s.purchaseLink"
@@ -282,15 +283,15 @@ async function runSuggest(): Promise<void> {
                 >打开链接<Icon name="external" :size="12" class="shrink-0" /></a>
                 <span v-else class="text-faint">—</span>
               </td>
-              <td class="text-muted num">{{ formatDate(s.createdAt) }}</td>
+              <td data-label="报价时间" class="text-muted num">{{ formatDate(s.createdAt) }}</td>
             </tr>
           </tbody>
         </table>
       </div>
-    </section>
+    </Panel>
 
-    <!-- 供应商 / 价格记忆：一个面板，顶部工具栏 = 分段切换 + 过滤 + 本页动作 -->
-    <section class="card overflow-hidden">
+    <!-- 供应商 / 价格记忆：一个贴边面板，顶部工具栏 = 分段切换 + 过滤 + 本页动作 -->
+    <Panel flush>
       <div class="flex flex-wrap items-center gap-2 px-4 py-3 border-b border-line">
         <Tabs
           :model-value="tab"
@@ -319,9 +320,9 @@ async function runSuggest(): Promise<void> {
         </div>
         <ErrorState v-else-if="loadError" :message="loadError" @retry="loadSuppliers" />
         <EmptyState v-else-if="suppliers.length === 0" illustration="truck" title="还没有供应商" description="把常用的几家加进来，采购时快速选择" />
-        <!-- 操作列放的是 32px 的 .row-action，单元格上下内边距收到 6px，行高才是 44px -->
+        <!-- 手机（< 640px）是卡片：名称整行作标题，其余各列一行，编辑 / 删除在卡片底部；操作格的上下留白由 td:has(.row-action) 统一 -->
         <div v-else class="overflow-x-auto">
-          <table class="table-base min-w-[640px]">
+          <table class="table-base table-cards min-w-[640px]">
             <thead>
               <tr>
                 <th>名称</th>
@@ -335,17 +336,17 @@ async function runSuggest(): Promise<void> {
             <tbody>
               <tr v-for="s in suppliers" :key="s.id">
                 <td class="font-medium text-ink">{{ s.name }}</td>
-                <td>
+                <td data-label="联系人">
                   <template v-if="s.contact">{{ s.contact }}</template>
                   <span v-else class="text-faint">—</span>
                 </td>
-                <td class="num">
+                <td data-label="电话" class="num">
                   <a v-if="s.phone" :href="`tel:${s.phone}`" class="hover:text-accent hover:underline underline-offset-2">{{ s.phone }}</a>
                   <span v-else class="text-faint">—</span>
                 </td>
-                <td class="text-right num">{{ s._count?.items ?? 0 }}</td>
-                <td class="text-right num">{{ s._count?.priceRecords ?? 0 }}</td>
-                <td class="py-1.5">
+                <td data-label="关联台账" class="text-right num">{{ s._count?.items ?? 0 }}</td>
+                <td data-label="报价数" class="text-right num">{{ s._count?.priceRecords ?? 0 }}</td>
+                <td class="card-actions">
                   <div class="flex items-center gap-1">
                     <button class="row-action" title="编辑" @click="openSupplierDialog(s)"><Icon name="edit" :size="16" /></button>
                     <button
@@ -377,8 +378,9 @@ async function runSuggest(): Promise<void> {
           :title="state.priceSearch ? '没有匹配的价格记录' : '暂无价格记录'"
           description="下单时顺手记下单价，下次自动比价"
         />
+        <!-- 手机（< 640px）是卡片：品名整行作标题，删除在卡片底部 -->
         <div v-else class="overflow-x-auto">
-          <table class="table-base min-w-[640px]">
+          <table class="table-base table-cards min-w-[640px]">
             <thead>
               <tr>
                 <th>品名</th>
@@ -392,9 +394,9 @@ async function runSuggest(): Promise<void> {
             <tbody>
               <tr v-for="p in prices" :key="p.id">
                 <td class="font-medium text-ink">{{ p.itemName }}</td>
-                <td>{{ p.supplier.name }}</td>
-                <td class="text-right num">{{ formatCurrency(p.unitPrice) }}</td>
-                <td>
+                <td data-label="供应商">{{ p.supplier.name }}</td>
+                <td data-label="单价" class="text-right num">{{ formatCurrency(p.unitPrice) }}</td>
+                <td data-label="链接">
                   <a
                     v-if="p.purchaseLink"
                     :href="p.purchaseLink"
@@ -404,8 +406,8 @@ async function runSuggest(): Promise<void> {
                   >链接<Icon name="external" :size="12" class="shrink-0" /></a>
                   <span v-else class="text-faint">—</span>
                 </td>
-                <td class="text-muted num">{{ formatDate(p.createdAt) }}</td>
-                <td class="py-1.5">
+                <td data-label="时间" class="text-muted num">{{ formatDate(p.createdAt) }}</td>
+                <td class="card-actions">
                   <button
                     class="row-action row-action-danger"
                     :class="removingPriceId === p.id ? 'w-auto px-2 text-xs' : ''"
@@ -422,7 +424,7 @@ async function runSuggest(): Promise<void> {
           </table>
         </div>
       </template>
-    </section>
+    </Panel>
 
     <!-- 供应商对话框 -->
     <Dialog :open="supplierDialogOpen" :title="supplierDialogTarget ? '编辑供应商' : '新增供应商'" width="440px" @update:open="supplierDialogOpen = $event">

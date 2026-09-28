@@ -25,8 +25,10 @@ const props = withDefaults(
     required?: boolean;
     name?: string;
     id?: string;
+    /** sm = 14px 方框 + 13px 文字（明细行、密集列表）；md = 16px + 14px（默认） */
+    size?: 'sm' | 'md';
   }>(),
-  { modelValue: undefined, checked: undefined, value: undefined, indeterminate: false },
+  { modelValue: undefined, checked: undefined, value: undefined, indeterminate: false, size: 'md' },
 );
 const emit = defineEmits<{
   'update:modelValue': [value: T];
@@ -79,14 +81,18 @@ const domValue = computed(() =>
 <template>
   <label
     v-if="label || description || $slots.default"
-    class="inline-flex items-start gap-2.5 text-sm leading-5 select-none"
-    :class="disabled ? 'cursor-not-allowed text-faint' : 'cursor-pointer text-text'"
+    class="inline-flex items-start select-none"
+    :class="[
+      size === 'sm' ? 'gap-2 text-[13px] leading-[18px]' : 'gap-2.5 text-sm leading-5',
+      disabled ? 'cursor-not-allowed text-faint' : 'cursor-pointer text-text',
+    ]"
   >
     <input
       :id="id"
       ref="inputEl"
       type="checkbox"
       class="checkbox mt-0.5"
+      :class="size === 'sm' ? 'checkbox-sm' : ''"
       :checked="isChecked"
       :indeterminate="indeterminate"
       :disabled="disabled"
@@ -108,6 +114,7 @@ const domValue = computed(() =>
     ref="inputEl"
     type="checkbox"
     class="checkbox"
+    :class="size === 'sm' ? 'checkbox-sm' : ''"
     :checked="isChecked"
     :indeterminate="indeterminate"
     :disabled="disabled"

@@ -239,7 +239,7 @@ function exportStats(): void {
           :model-value="tab"
           variant="segmented"
           block
-          class="w-full sm:w-44 sm:mr-2"
+          class="sm:w-auto sm:mr-2"
           :tabs="[{ value: 'records', label: '发放单' }, { value: 'recipients', label: '领用统计' }]"
           @change="(v) => switchTab(v as 'records' | 'recipients')"
         />
@@ -435,26 +435,25 @@ function exportStats(): void {
       <template v-else>
         <div v-if="statsLoading" class="py-14 text-center text-sm text-faint">统计中…</div>
         <EmptyState v-else-if="recipientStats.length === 0" icon="users" title="暂无领用数据" description="所选时间范围内没有发放记录" />
+        <!-- 手机（< 640px）每人一张卡片：领用人整行，部门 / 领用次数 / 累计数量（比例条）各一行 -->
         <div v-else class="overflow-x-auto">
-          <table class="table-base">
+          <table class="table-base table-cards">
             <thead>
               <tr>
                 <th>领用人</th>
-                <th class="hidden sm:table-cell">部门</th>
-                <th class="hidden sm:table-cell text-right">领用次数</th>
+                <th>部门</th>
+                <th class="text-right">领用次数</th>
                 <th class="w-1/2 text-right">累计数量</th>
               </tr>
             </thead>
             <tbody>
               <tr v-for="s in recipientStats" :key="`${s.recipient}|${s.department}`">
-                <td class="whitespace-nowrap">
-                  <p class="text-ink font-medium">{{ s.recipient }}</p>
-                  <p class="sm:hidden text-meta"><template v-if="s.department">{{ s.department }} · </template>{{ s.times }} 次</p>
-                </td>
-                <td class="hidden sm:table-cell text-muted">{{ s.department || '—' }}</td>
-                <td class="hidden sm:table-cell text-right num text-muted">{{ s.times }} 次</td>
-                <td>
-                  <div class="flex items-center gap-3">
+                <td class="text-ink font-medium sm:whitespace-nowrap">{{ s.recipient }}</td>
+                <td data-label="部门" class="text-muted">{{ s.department || '—' }}</td>
+                <td data-label="领用次数" class="text-right num text-muted">{{ s.times }} 次</td>
+                <td data-label="累计数量">
+                  <!-- 卡片里比例条吃满列名右侧的剩余宽度 -->
+                  <div class="flex items-center gap-3 max-sm:flex-1">
                     <div class="h-1 min-w-16 flex-1 overflow-hidden rounded-full bg-primary-soft" aria-hidden="true">
                       <div class="h-full rounded-full bg-accent/70" :style="{ width: `${(s.quantity / maxQty) * 100}%` }" />
                     </div>

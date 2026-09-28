@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue';
+import { useToastStore } from '@/stores/toast';
 import Icon from './Icon.vue';
 import { buttonClass } from './button';
 
@@ -26,9 +27,11 @@ const props = withDefaults(
 );
 const emit = defineEmits<{
   files: [files: File[]];
-  /** 拖入了不符合 accept 的文件 */
+  /** 拖入了不符合 accept 的文件（组件已经弹了错误提示，调用方不用再处理） */
   rejected: [files: File[]];
 }>();
+
+const toast = useToastStore();
 
 const inputEl = ref<HTMLInputElement | null>(null);
 const dragging = ref(false);
@@ -58,7 +61,10 @@ function deliver(list: FileList | null | undefined): void {
   const bad = all.filter((f) => !accepted(f));
   const picked = props.multiple ? ok : ok.slice(0, 1);
   if (picked.length) emit('files', picked);
-  if (bad.length) emit('rejected', bad);
+  if (bad.length) {
+    emit('rejected', bad);
+    toast.error('不支持的文件类型，请选择 PDF / PNG / JPG / WEBP');
+  }
 }
 
 /** 恢复成普通文件选择（拍照模式只对下一次生效） */

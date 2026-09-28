@@ -281,7 +281,7 @@ function toggleLow(): void {
           :model-value="tab"
           variant="segmented"
           block
-          class="w-full sm:w-44 sm:mr-2"
+          class="sm:w-auto sm:mr-2"
           :tabs="[{ value: 'products', label: '库存物品' }, { value: 'movements', label: '库存流水' }]"
           @change="(v) => switchTab(v as 'products' | 'movements')"
         />
@@ -289,17 +289,9 @@ function toggleLow(): void {
         <template v-if="tab === 'products'">
           <SearchInput v-model="state.search" class="w-full sm:w-auto sm:flex-1 sm:min-w-44 sm:max-w-72" placeholder="搜索物品名" @search="loadProducts" />
           <!-- 筛选开关：按下态 = 中性选中底，图标转红提示「正在只看低库存」 -->
-          <button
-            type="button"
-            class="inline-flex shrink-0 items-center justify-center gap-2 h-9 px-3.5 whitespace-nowrap rounded-(--radius-control) border text-sm font-medium cursor-pointer select-none transition duration-150 ease-out active:scale-[0.98]"
-            :class="state.low
-              ? 'bg-primary-soft border-line-strong text-ink'
-              : 'bg-surface border-line-strong text-text hover:bg-surface-2 hover:border-faint'"
-            :aria-pressed="!!state.low"
-            @click="toggleLow"
-          >
+          <Button :pressed="!!state.low" @click="toggleLow">
             <Icon name="alert" :size="16" :class="state.low ? 'text-red' : 'text-faint'" /> 只看低库存
-          </button>
+          </Button>
           <p v-if="!loadingProducts && products.length > 0" class="ml-auto text-xs text-muted">
             {{ products.length }} 种 · 合计 <b class="num font-semibold text-ink">{{ totalStock }}</b> 件<template v-if="lowCount > 0"> · <span class="text-red">{{ lowCount }} 项低库存</span></template>
           </p>
@@ -329,8 +321,9 @@ function toggleLow(): void {
           :description="state.search || state.low ? '试试清除筛选条件' : '台账入库或手动新增后出现在这里'"
         />
 
+        <!-- 手机（< 640px）每行一张卡片：物品名整行，其余各列一行「列名 …… 值」，操作在卡片底部 -->
         <div v-else class="overflow-x-auto">
-          <table class="table-base min-w-[700px]">
+          <table class="table-base table-cards min-w-[700px]">
             <thead>
               <tr>
                 <th>物品</th>
@@ -347,15 +340,18 @@ function toggleLow(): void {
                 <td>
                   <span class="text-ink font-medium">{{ p.name }}</span><span v-if="p.unit" class="ml-1 text-meta">（{{ p.unit }}）</span>
                 </td>
-                <td>
+                <td data-label="分类">
                   <Badge v-if="p.category">{{ p.category }}</Badge>
                   <span v-else class="text-faint">—</span>
                 </td>
-                <td class="text-right num font-semibold" :class="p.isLow ? 'text-red' : 'text-ink'">{{ p.stockQty }}</td>
-                <td class="text-right num text-muted">{{ p.lowStockThreshold ?? '—' }}</td>
-                <td><Badge :tone="p.isLow ? 'red' : 'teal'">{{ p.isLow ? '低库存' : '充足' }}</Badge></td>
-                <td class="text-right num text-muted">{{ p._count?.distributionLines ?? 0 }}</td>
-                <td class="py-1.5">
+                <!-- 粗细与颜色放在 span 上：卡片里的列名（::before）会继承单元格的字重 -->
+                <td data-label="当前库存" class="text-right num">
+                  <span class="font-semibold" :class="p.isLow ? 'text-red' : 'text-ink'">{{ p.stockQty }}</span>
+                </td>
+                <td data-label="预警阈值" class="text-right num text-muted">{{ p.lowStockThreshold ?? '—' }}</td>
+                <td data-label="状态"><Badge :tone="p.isLow ? 'red' : 'teal'">{{ p.isLow ? '低库存' : '充足' }}</Badge></td>
+                <td data-label="领用次数" class="text-right num text-muted">{{ p._count?.distributionLines ?? 0 }}</td>
+                <td class="card-actions">
                   <div class="flex items-center justify-end gap-0.5">
                     <button type="button" class="row-action" title="编辑" @click="openProductDialog(p)">
                       <Icon name="edit" :size="16" />
@@ -387,8 +383,9 @@ function toggleLow(): void {
         <ErrorState v-else-if="movementError" :message="movementError" @retry="loadMovements" />
         <EmptyState v-else-if="movements.length === 0" illustration="empty" title="暂无库存流水" />
 
+        <!-- 手机卡片：物品名是主字段，用 order 排到卡片第一行（桌面列序不变） -->
         <div v-else class="overflow-x-auto">
-          <table class="table-base min-w-[680px]">
+          <table class="table-base table-cards min-w-[680px]">
             <thead>
               <tr>
                 <th>时间</th>
@@ -400,26 +397,29 @@ function toggleLow(): void {
               </tr>
             </thead>
             <tbody>
-              <tr v-for="m in movements" :key="m.id">
-                <td class="num text-[13px] text-muted">{{ formatDateTime(m.createdAt) }}</td>
-                <td class="text-ink font-medium">{{ m.product.name }}</td>
-                <td>
+              <tr v-for="m in movements" :key="m.id" class="max-sm:flex max-sm:flex-col">
+                <td data-label="时间" class="num text-[13px] text-muted">{{ formatDateTime(m.createdAt) }}</td>
+                <td class="text-ink font-medium max-sm:order-first">{{ m.product.name }}</td>
+                <td data-label="类型">
                   <Badge :tone="m.type === 'INBOUND' ? 'teal' : m.type === 'OUTBOUND' ? 'blue' : 'amber'">
                     {{ MOVEMENT_TYPE_LABELS[m.type as MovementType] ?? m.type }}
                   </Badge>
                 </td>
-                <td class="text-right num font-semibold" :class="m.quantity >= 0 ? 'text-accent' : 'text-red'">
-                  {{ m.quantity >= 0 ? '+' : '' }}{{ m.quantity }}
+                <td data-label="数量变动" class="text-right num">
+                  <span class="font-semibold" :class="m.quantity >= 0 ? 'text-accent' : 'text-red'">{{ m.quantity >= 0 ? '+' : '' }}{{ m.quantity }}</span>
                 </td>
-                <td class="text-[13px] text-muted">
-                  {{ m.note ?? '—' }}
-                  <template v-if="m.relatedItemId">
-                    <router-link :to="{ path: '/ledger', query: { search: String(m.relatedItemId) } }" class="num text-accent hover:underline">
-                      （台账 #{{ m.relatedItemId }}）
-                    </router-link>
-                  </template>
+                <!-- 说明与台账链接包成一个节点：卡片里整体靠右、一起折行 -->
+                <td data-label="说明" class="text-[13px] text-muted">
+                  <span>
+                    {{ m.note ?? '—' }}
+                    <template v-if="m.relatedItemId">
+                      <router-link :to="{ path: '/ledger', query: { search: String(m.relatedItemId) } }" class="num text-accent hover:underline">
+                        （台账 #{{ m.relatedItemId }}）
+                      </router-link>
+                    </template>
+                  </span>
                 </td>
-                <td class="py-1.5 text-center">
+                <td class="card-actions text-center">
                   <button
                     v-if="!m.relatedItemId && !m.relatedDistributionId"
                     type="button"

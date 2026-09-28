@@ -26,8 +26,10 @@ const props = withDefaults(
     required?: boolean;
     /** 字段级错误：有值时触发框转红并在下方给出原因（与 Input 对齐） */
     error?: string;
+    /** sm = h-8 / 13px、弹层选项 h-7（明细行里与 Input size="sm" 同高）；md = h-9（默认） */
+    size?: 'sm' | 'md';
   }>(),
-  { placeholder: '请选择' },
+  { placeholder: '请选择', size: 'md' },
 );
 const emit = defineEmits<{ 'update:modelValue': [value: string] }>();
 
@@ -57,9 +59,10 @@ const selectedLabel = computed(() => items.value.find((o) => o.value === props.m
       <!-- 清除按钮独立于 trigger 之外，避免 button 嵌套 button 的非法 DOM -->
       <div class="relative">
         <SelectTrigger
-          class="group inline-flex w-full h-9 items-center justify-between gap-2 pl-3 pr-2.5 text-sm text-text bg-surface border rounded-(--radius-control) data-[placeholder]:text-faint transition-[color,background-color,border-color,box-shadow] duration-150 ease-out focus-visible:outline-hidden focus-visible:ring-2 data-[state=open]:ring-2 disabled:bg-surface-2 disabled:text-muted disabled:cursor-not-allowed cursor-pointer"
+          class="group inline-flex w-full items-center justify-between gap-2 text-text bg-surface border rounded-(--radius-control) data-[placeholder]:text-faint transition-[color,background-color,border-color,box-shadow] duration-150 ease-out focus-visible:outline-hidden focus-visible:ring-2 data-[state=open]:ring-2 disabled:bg-surface-2 disabled:text-muted disabled:cursor-not-allowed cursor-pointer"
           :class="[
-            clearable && modelValue ? 'pr-8' : '',
+            size === 'sm' ? 'h-8 pl-2.5 text-[13px]' : 'h-9 pl-3 text-sm',
+            clearable && modelValue ? (size === 'sm' ? 'pr-7' : 'pr-8') : size === 'sm' ? 'pr-2' : 'pr-2.5',
             error
               ? 'border-red focus-visible:border-red focus-visible:ring-red/20 data-[state=open]:ring-red/20'
               : 'border-line-strong hover:border-faint focus-visible:border-accent focus-visible:ring-accent/20 data-[state=open]:border-accent data-[state=open]:ring-accent/20 disabled:hover:border-line-strong',
@@ -73,7 +76,7 @@ const selectedLabel = computed(() => items.value.find((o) => o.value === props.m
           </span>
           <Icon
             name="chevron-down"
-            :size="16"
+            :size="size === 'sm' ? 14 : 16"
             class="shrink-0 text-faint transition-transform duration-150 group-data-[state=open]:rotate-180"
             :class="clearable && modelValue ? 'invisible' : ''"
           />
@@ -81,7 +84,8 @@ const selectedLabel = computed(() => items.value.find((o) => o.value === props.m
         <button
           v-if="clearable && modelValue"
           type="button"
-          class="absolute right-1.5 top-1/2 -translate-y-1/2 z-10 flex items-center justify-center size-6 rounded-full text-faint hover:text-ink hover:bg-primary-soft transition-colors duration-150 cursor-pointer disabled:pointer-events-none"
+          class="absolute top-1/2 -translate-y-1/2 z-10 flex items-center justify-center size-6 rounded-full text-faint hover:text-ink hover:bg-primary-soft transition-colors duration-150 cursor-pointer disabled:pointer-events-none"
+          :class="size === 'sm' ? 'right-1' : 'right-1.5'"
           aria-label="清除选择"
           :disabled="disabled"
           @click.prevent.stop="emit('update:modelValue', '')"
@@ -104,7 +108,8 @@ const selectedLabel = computed(() => items.value.find((o) => o.value === props.m
               v-for="opt in items"
               :key="opt.value"
               :value="opt.value"
-              class="relative flex items-center h-8 pl-7 pr-2 text-[13.5px] text-text rounded-md cursor-pointer select-none outline-hidden data-[highlighted]:bg-primary-soft data-[highlighted]:text-ink data-[state=checked]:font-medium data-[state=checked]:text-ink data-[disabled]:opacity-50 data-[disabled]:pointer-events-none"
+              class="relative flex items-center pl-7 pr-2 text-text rounded-md cursor-pointer select-none outline-hidden data-[highlighted]:bg-primary-soft data-[highlighted]:text-ink data-[state=checked]:font-medium data-[state=checked]:text-ink data-[disabled]:opacity-50 data-[disabled]:pointer-events-none"
+              :class="size === 'sm' ? 'h-7 text-[13px]' : 'h-8 text-[13.5px]'"
             >
               <SelectItemIndicator class="absolute left-2 inline-flex items-center">
                 <Icon name="check" :size="14" class="text-accent" />

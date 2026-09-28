@@ -7,7 +7,8 @@ import { useThemeStore } from '@/stores/theme';
  * 主题切换后通过 useChartTheme() 的 computed 重新取色。
  *
  * 系列色顺序：accent（柱）→ blue（折线）→ amber → red → muted → faint。
- * 坐标轴无轴线、无刻度，标签 11px muted；网格线 line；tooltip 是 surface 底 + line 边 + shadow-pop。
+ * 坐标轴无轴线、无刻度，标签 11px muted；网格线 line；tooltip 是 surface 底 + line 边 + shadow-pop；
+ * 悬停阴影带 axisPointer = line 色 60%；图例 legend 居中 12px muted。
  */
 function token(name: string): string {
   return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
@@ -36,9 +37,25 @@ export interface ChartTheme {
     backgroundColor: string;
     borderColor: string;
     borderWidth: number;
+    /** 限制在图表容器内：图表都放在会裁圆角的 Panel 里，越界会被切掉 */
+    confine: boolean;
     padding: [number, number];
     textStyle: { color: string; fontSize: number };
     extraCssText: string;
+  };
+  /**
+   * 类目轴悬停的阴影带（放进 tooltip.axisPointer）：line 色、60% 不透明；
+   * z 1 垫在系列下面（系列默认 z 2），盖在上面会把柱子和折线洗白。
+   * tooltip: { ...ct.tooltip, trigger: 'axis', axisPointer: ct.axisPointer }
+   */
+  axisPointer: { type: 'shadow'; z: number; shadowStyle: { color: string; opacity: number } };
+  /** 图例：居中、12px muted、12×8 的图例项、项间距 16；位置（top / bottom）与 selectedMode 由调用方补 */
+  legend: {
+    left: 'center';
+    itemWidth: number;
+    itemHeight: number;
+    itemGap: number;
+    textStyle: { color: string; fontSize: number };
   };
 }
 
@@ -68,11 +85,14 @@ export function getChartTheme(): ChartTheme {
       backgroundColor: token('--color-surface'),
       borderColor: token('--color-line'),
       borderWidth: 1,
+      confine: true,
       padding: [8, 12],
       textStyle: { color: token('--color-text'), fontSize: 12 },
       // tooltip 是 HTML 元素，阴影直接用令牌变量，主题切换不用重建
       extraCssText: 'box-shadow: var(--shadow-pop); border-radius: 10px;',
     },
+    axisPointer: { type: 'shadow', z: 1, shadowStyle: { color: token('--color-line'), opacity: 0.6 } },
+    legend: { left: 'center', itemWidth: 12, itemHeight: 8, itemGap: 16, textStyle: { color: muted, fontSize: 12 } },
   };
 }
 

@@ -252,13 +252,17 @@ async function submit(): Promise<void> {
           <Icon name="info" :size="14" class="mt-0.5 shrink-0 text-faint" />库存里暂时没有可发放的物品。可以在库存页登记入库，或在工作台把采购单整单入库。
         </p>
 
-        <!-- 明细行 -->
+        <!--
+          明细行：行内控件统一 sm（h-8，DESIGN.md §7.9）。删除按钮用 .row-action：桌面 32px 与输入框同高、
+          整行悬停（.group）时显出，触屏放大到 40px 触控目标，所以这一行按垂直居中对齐。
+        -->
         <div class="mt-3 space-y-2">
-          <div v-for="(line, i) in lines" :key="line.id" class="p-3 bg-surface-2 border border-line rounded-lg space-y-2">
-            <div class="grid grid-cols-12 gap-2 items-end">
+          <div v-for="(line, i) in lines" :key="line.id" class="group p-3 bg-surface-2 border border-line rounded-lg space-y-2">
+            <div class="grid grid-cols-12 gap-2 items-center">
               <div class="col-span-12 sm:col-span-5">
                 <Select
                   v-if="mode === 'DIRECT'"
+                  size="sm"
                   :model-value="line.itemId ? String(line.itemId) : ''"
                   :options="itemOptions"
                   placeholder="选择待分发台账记录"
@@ -266,6 +270,7 @@ async function submit(): Promise<void> {
                 />
                 <Select
                   v-else
+                  size="sm"
                   :model-value="line.productId ? String(line.productId) : ''"
                   :options="productOptions"
                   placeholder="选择库存物品"
@@ -273,15 +278,15 @@ async function submit(): Promise<void> {
                 />
               </div>
               <div class="col-span-5 sm:col-span-3">
-                <Input v-model="line.recipient" placeholder="领用人" :suggestions="knownRecipients" />
+                <Input v-model="line.recipient" size="sm" placeholder="领用人" :suggestions="knownRecipients" />
               </div>
               <div class="col-span-5 sm:col-span-3">
-                <Input v-model="line.quantity" type="number" min="0" step="any" placeholder="数量" />
+                <Input v-model="line.quantity" size="sm" type="number" min="0" step="any" placeholder="数量" />
               </div>
               <div class="col-span-2 sm:col-span-1 flex justify-end">
                 <button
                   type="button"
-                  class="inline-flex items-center justify-center size-9 rounded-(--radius-control) text-faint transition-colors duration-150 enabled:cursor-pointer enabled:hover:text-red enabled:hover:bg-red-soft disabled:opacity-30 disabled:cursor-not-allowed"
+                  class="row-action row-action-danger"
                   :aria-label="`删除明细 ${i + 1}`"
                   :disabled="lines.length === 1"
                   @click="lines.splice(i, 1)"
@@ -291,7 +296,7 @@ async function submit(): Promise<void> {
               </div>
             </div>
             <!-- 签收备注：字段一直在提交，之前只是没有输入框 -->
-            <Input v-model="line.signoffNote" placeholder="签收备注（可空，如：本人签收 / 代领）" />
+            <Input v-model="line.signoffNote" size="sm" placeholder="签收备注（可空，如：本人签收 / 代领）" />
           </div>
 
           <Button variant="ghost" size="sm" @click="lines.push(emptyLine())">

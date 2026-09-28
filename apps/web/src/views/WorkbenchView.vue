@@ -297,8 +297,11 @@ function peopleLine(g: FormGroup): string {
       </Button>
     </PageHeader>
 
-    <!-- 概要：手机上贴边横向滑动，桌面端五列；加载中 hint 先占一行（不间断空格），数据到了不跳动 -->
-    <div class="-mx-4 flex gap-3 overflow-x-auto snap-x scroll-px-4 px-4 pb-1 lg:mx-0 lg:grid lg:grid-cols-5 lg:overflow-visible lg:px-0 lg:pb-0">
+    <!--
+      概要：手机上通栏横向滑动（-mx-(--main-px) 吃掉 <main> 的左右留白、px-(--main-px) 补回，首张卡片仍与页面内容对齐），
+      桌面端五列；加载中 hint 先占一行（不间断空格），数据到了不跳动
+    -->
+    <div class="-mx-(--main-px) flex gap-3 overflow-x-auto snap-x scroll-px-(--main-px) px-(--main-px) pb-1 lg:mx-0 lg:grid lg:grid-cols-5 lg:overflow-visible lg:px-0 lg:pb-0">
       <StatCard
         v-for="s in ACTIVE_ITEM_STATUSES"
         :key="s"
@@ -357,14 +360,14 @@ function peopleLine(g: FormGroup): string {
     </div>
     <!--
       看板：列与画布同色、无描边。桌面端三列撑满剩余视口、列内滚动：
-      lg:-mb-10 吃掉 <main> 的 lg:pb-10，列一直延伸到窗口底边（卡片从底边滑出，而不是在
-      窗口上方 40px 处被硬切）；那 40px 留白挪进列内（lg:pb-10），滚到底时最后一张卡片照样离底边 40px。
+      lg:-mb-(--main-pb) 吃掉 <main> 的底部留白（--main-pb，桌面 40px），列一直延伸到窗口底边（卡片从底边滑出，
+      而不是在窗口上方 40px 处被硬切）；这段留白挪进列内（lg:pb-(--main-pb)），滚到底时最后一张卡片照样离底边 40px。
       手机上三列上下排、随内容自然增高，<main> 是唯一的滚动容器（列没有边框，列内滚动会在看不见的边上把卡片切断）。
       列头用 subgrid 共享一行：某列提示折成两行时，三列的第一张卡片仍然对齐。
     -->
     <div
       v-else
-      class="mt-4 grid gap-8 lg:grid-cols-3 lg:grid-rows-[auto_minmax(0,1fr)] lg:gap-x-4 lg:gap-y-3 lg:flex-1 lg:min-h-80 lg:-mb-10"
+      class="mt-4 grid gap-8 lg:grid-cols-3 lg:grid-rows-[auto_minmax(0,1fr)] lg:gap-x-4 lg:gap-y-3 lg:flex-1 lg:min-h-80 lg:-mb-(--main-pb)"
     >
       <section
         v-for="status in ACTIVE_ITEM_STATUSES"
@@ -386,7 +389,7 @@ function peopleLine(g: FormGroup): string {
           </p>
         </header>
 
-        <div class="mt-3 space-y-3 lg:mt-0 lg:min-h-0 lg:overflow-y-auto lg:pb-10">
+        <div class="mt-3 space-y-3 lg:mt-0 lg:min-h-0 lg:overflow-y-auto lg:pb-(--main-pb)">
           <div v-if="groups[status].length === 0" class="rounded-(--radius-card) border border-dashed border-line-strong">
             <EmptyState
               :icon="COLUMN_META[status].icon"

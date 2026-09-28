@@ -14,7 +14,7 @@ const tabs: RouteTabItem[] = [
 <template>
   <!-- 设置类页面内容最宽 960px；子页面不再撑满视口高度，随内容自然增高 -->
   <div class="max-w-[960px]">
-    <PageHeader title="系统设置" />
+    <PageHeader title="系统设置" description="外观 · 账号安全 · AI 助手 · 备份 · 供应商 · 审计" />
     <RouteTabs :tabs="tabs" aria-label="设置分区" class="mb-6" />
     <router-view />
   </div>

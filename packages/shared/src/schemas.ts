@@ -11,8 +11,8 @@ import {
 export const dateString = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, '日期格式应为 YYYY-MM-DD');
 export type DateString = z.infer<typeof dateString>;
 
-const positiveNumber = z.coerce.number().positive();
-const nonNegativeNumber = z.coerce.number().nonnegative();
+const positiveNumber = z.coerce.number().positive('必须大于 0');
+const nonNegativeNumber = z.coerce.number().nonnegative('不能为负数');
 
 /* ---------------------------------- 台账 ---------------------------------- */
 

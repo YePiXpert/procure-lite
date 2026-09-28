@@ -2,7 +2,7 @@
  * 按钮外观的唯一来源：Button.vue 用它，需要「长得像按钮的链接」（router-link / <a>）时也直接用它，
  * 例如 <router-link :class="buttonClass({ variant: 'primary', size: 'sm' })">。
  */
-export type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger' | 'accent';
+export type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger' | 'danger-ghost' | 'accent';
 export type ButtonSize = 'sm' | 'md' | 'lg';
 
 export interface ButtonClassOptions {
@@ -10,6 +10,8 @@ export interface ButtonClassOptions {
   size?: ButtonSize;
   /** 只有图标：变成正方形（sm 32 / md 36 / lg 40） */
   iconOnly?: boolean;
+  /** 开关按钮的按下态（「只看低库存」「筛选」）：换成中性选中底，取代 variant 的配色 */
+  pressed?: boolean;
 }
 
 const BASE =
@@ -30,8 +32,16 @@ const VARIANTS: Record<ButtonVariant, string> = {
     'bg-surface text-text border-line-strong hover:bg-surface-2 hover:border-faint',
   ghost: 'bg-transparent text-muted border-transparent hover:text-ink hover:bg-primary-soft',
   danger: 'bg-red text-primary-fg border-transparent shadow-(--shadow-xs) hover:brightness-95',
+  /* 低强调的危险动作（「清空回收站」）：红字无底，悬停红色柔底 */
+  'danger-ghost': 'bg-transparent text-red border-transparent hover:bg-red-soft',
   accent: 'bg-accent text-primary-fg border-transparent shadow-(--shadow-xs) hover:bg-accent-hover',
 };
+
+/*
+ * 按下态整套替换 variant 的配色（而不是追加）：同一属性的两个工具类谁生效取决于样式表顺序，
+ * 不取决于 class 的先后，叠加会时灵时不灵。
+ */
+const PRESSED = 'bg-primary-soft text-ink border-line-strong hover:border-faint';
 
 const SIZES: Record<ButtonSize, string> = {
   sm: 'h-8 px-3 text-xs gap-1.5',
@@ -45,6 +55,11 @@ const ICON_SIZES: Record<ButtonSize, string> = {
   lg: 'size-10 text-sm',
 };
 
-export function buttonClass({ variant = 'secondary', size = 'md', iconOnly = false }: ButtonClassOptions = {}): string {
-  return `${BASE} ${VARIANTS[variant]} ${iconOnly ? ICON_SIZES[size] : SIZES[size]}`;
+export function buttonClass({
+  variant = 'secondary',
+  size = 'md',
+  iconOnly = false,
+  pressed = false,
+}: ButtonClassOptions = {}): string {
+  return `${BASE} ${pressed ? PRESSED : VARIANTS[variant]} ${iconOnly ? ICON_SIZES[size] : SIZES[size]}`;
 }

@@ -9,6 +9,7 @@ import Pagination from '@/components/ui/Pagination.vue';
 import EmptyState from '@/components/ui/EmptyState.vue';
 import ErrorState from '@/components/ui/ErrorState.vue';
 import Skeleton from '@/components/ui/Skeleton.vue';
+import Panel from '@/components/ui/Panel.vue';
 import { auditApi, type AuditRow } from '@/api';
 import { apiError } from '@/api/client';
 import { useToastStore } from '@/stores/toast';
@@ -188,8 +189,8 @@ const hasFilters = computed(() => !!(filters.search || filters.action));
 </script>
 
 <template>
-  <!-- 工具栏 + 表格 + 分页在同一个面板里，面板随内容增高（<main> 才是滚动容器） -->
-  <section class="card overflow-hidden">
+  <!-- 工具栏 + 表格 + 分页在同一个贴边面板里，面板随内容增高（<main> 才是滚动容器） -->
+  <Panel flush>
     <div class="flex flex-wrap items-center gap-2 px-4 py-3 border-b border-line">
       <SearchInput v-model="filters.search" class="w-full sm:w-72" placeholder="搜索详情内容" @search="applyFilters" />
       <NativeSelect
@@ -218,7 +219,7 @@ const hasFilters = computed(() => !!(filters.search || filters.action));
     />
 
     <div v-else class="overflow-x-auto">
-      <table class="table-base min-w-[760px]">
+      <table class="table-base table-cards min-w-[760px]">
         <thead>
           <tr>
             <th class="w-40">时间</th>
@@ -229,25 +230,30 @@ const hasFilters = computed(() => !!(filters.search || filters.action));
           </tr>
         </thead>
         <tbody>
-          <!-- 顶对齐（展开后多行）；Badge 那格少 2px 上下内边距，让药丸与各列首行文字同一条中线，行高仍是 44px -->
+          <!--
+            表格：顶对齐（展开后多行）；Badge 那格的上下留白由 td:has(.badge) 统一收到 10px，
+            药丸与各列首行文字同一条中线，行高仍是 44px。
+            手机卡片（< 640px）：tr 改成两列网格，时间 + 操作 Badge 并排作卡片头，对象 / 详情 / 来源 IP 各占一整行；
+            整张卡片可点，展开后「详情」的键值对换到列名下方、占满卡片宽度（has-[dl]：展开且有内容时才换行）。
+          -->
           <tr
             v-for="log in logs"
             :key="log.id"
-            class="cursor-pointer"
+            class="cursor-pointer max-sm:grid max-sm:grid-cols-[minmax(0,1fr)_auto] max-sm:items-center max-sm:gap-x-3"
             :class="expanded.has(log.id) ? 'bg-surface-2' : ''"
             @click="toggle(log.id)"
           >
-            <td class="align-top num whitespace-nowrap">{{ formatDateTime(log.createdAt, true) }}</td>
-            <td class="align-top py-2.5">
+            <td class="align-top num whitespace-nowrap max-sm:font-medium max-sm:text-ink">{{ formatDateTime(log.createdAt, true) }}</td>
+            <td class="align-top">
               <Badge :tone="ACTION_LABELS[log.action]?.tone ?? 'gray'">
                 {{ ACTION_LABELS[log.action]?.label ?? log.action }}
               </Badge>
             </td>
-            <td class="align-top text-[13px] text-muted whitespace-nowrap num">
+            <td data-label="对象" class="align-top text-[13px] text-muted whitespace-nowrap num max-sm:col-span-2">
               {{ log.entity ?? '—' }}<template v-if="log.entityId"> #{{ log.entityId }}</template>
             </td>
-            <td class="align-top text-[13px] text-muted">
-              <div class="flex items-start gap-2">
+            <td data-label="详情" class="align-top text-[13px] text-muted max-sm:col-span-2 max-sm:has-[dl]:flex-wrap max-sm:has-[dl]:gap-y-1.5">
+              <div class="flex min-w-0 items-start gap-2 max-sm:has-[dl]:basis-full max-sm:has-[dl]:text-left">
                 <div class="min-w-0 flex-1">
                   <dl
                     v-if="expanded.has(log.id) && detailEntries(log).length > 0"
@@ -270,7 +276,10 @@ const hasFilters = computed(() => !!(filters.search || filters.action));
                 />
               </div>
             </td>
-            <td class="align-top font-mono text-meta whitespace-nowrap">{{ log.operatorIp ?? '—' }}</td>
+            <!-- 等宽字体写在值上：卡片里的列名（td::before）会继承 td 的 font-family；卡片里长的 IPv6 可以折行 -->
+            <td data-label="来源 IP" class="align-top max-sm:col-span-2">
+              <span class="font-mono text-meta break-all sm:whitespace-nowrap">{{ log.operatorIp ?? '—' }}</span>
+            </td>
           </tr>
         </tbody>
       </table>
@@ -279,5 +288,5 @@ const hasFilters = computed(() => !!(filters.search || filters.action));
     <div v-if="!loading && !loadError && logs.length > 0" class="px-4 py-3 border-t border-line">
       <Pagination :page="filters.page" :page-size="pageSize" :total="total" @change="(p) => { filters.page = p; load(true); }" />
     </div>
-  </section>
+  </Panel>
 </template>

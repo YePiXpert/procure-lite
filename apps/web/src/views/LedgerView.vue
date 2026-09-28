@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue';
+import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue';
 import Button from '@/components/ui/Button.vue';
 import { buttonClass } from '@/components/ui/button';
 import Icon from '@/components/ui/Icon.vue';
@@ -71,6 +71,20 @@ const refreshing = ref(false);
 const loadError = ref('');
 const departments = ref<string[]>([]);
 const handlers = ref<string[]>([]);
+
+/*
+ * 排版：手机（< 640px，与 Tailwind 的 sm 同一条媒体查询）用卡片列表，其余用表格。
+ * 两份只渲染一份——同一批 aria-label / title 不会在页面里同时出现两次；模板上的 hidden / sm:hidden 只是兜底。
+ */
+const smQuery = typeof window !== 'undefined' && typeof window.matchMedia === 'function'
+  ? window.matchMedia('(min-width: 40rem)')
+  : null;
+const showTable = ref(smQuery?.matches ?? true);
+const syncLayout = (e: MediaQueryListEvent): void => {
+  showTable.value = e.matches;
+};
+onMounted(() => smQuery?.addEventListener('change', syncLayout));
+onBeforeUnmount(() => smQuery?.removeEventListener('change', syncLayout));
 
 /* 选择与对话框 */
 const selected = ref<Set<number>>(new Set());
@@ -357,10 +371,12 @@ async function exportXlsx(): Promise<void> {
       <!--
         多选时，工具栏的位置换成墨色批量条。盖住面板的上 / 左 / 右描边（-m*-px），
         高度 = 工具栏 60px + 被盖住的 1px 上描边，勾选时表格不跳。
+        手机上卡片列表很长，批量条钉在 <main> 上边（顶栏下沿），在列表深处勾选也够得着；
+        桌面端那个位置留给钉住的表头，不钉。
       -->
       <div
         v-if="selected.size > 0"
-        class="-mx-px -mt-px rounded-t-(--radius-card) bg-panel text-white"
+        class="-mx-px -mt-px rounded-t-(--radius-card) bg-panel text-white max-sm:sticky max-sm:-top-(--main-pt) max-sm:z-20"
       >
         <!-- .dark 局部翻转令牌：深底上的按钮、下拉用深色主题的配色 -->
         <div class="dark flex min-h-[61px] flex-wrap items-center gap-2 px-4 py-3 [color-scheme:dark]">
@@ -411,12 +427,8 @@ async function exportXlsx(): Promise<void> {
           <Select v-model="filters.department" :options="departmentOptions" placeholder="全部部门" clearable class="w-36" @update:model-value="applyFilters" />
           <Select v-model="filters.handler" :options="handlerOptions" placeholder="全部经办人" clearable class="w-30" @update:model-value="applyFilters" />
         </div>
-        <Button
-          variant="secondary"
-          class="aria-expanded:bg-primary-soft aria-expanded:text-ink"
-          :aria-expanded="filtersOpen"
-          @click="filtersOpen = !filtersOpen"
-        >
+        <!-- 展开器：借开关按钮的按下态样式；已经有 aria-expanded，Button 不会再加 aria-pressed -->
+        <Button :pressed="filtersOpen" :aria-expanded="filtersOpen" @click="filtersOpen = !filtersOpen">
           <Icon name="filter" :size="16" />筛选
           <span
             v-if="panelFilterCount + selectFilterCount > 0"
@@ -430,12 +442,7 @@ async function exportXlsx(): Promise<void> {
         <Button v-if="hasFilters" variant="ghost" class="max-sm:hidden" @click="resetFilters">
           <Icon name="close" :size="14" />清除筛选
         </Button>
-        <Button
-          v-if="tab === 'recycle' && total > 0"
-          variant="ghost"
-          class="ml-auto text-red hover:text-red hover:bg-red-soft"
-          @click="confirmPurgeAll = true"
-        >
+        <Button v-if="tab === 'recycle' && total > 0" variant="danger-ghost" class="ml-auto" @click="confirmPurgeAll = true">
           <Icon name="trash" :size="16" />清空回收站
         </Button>
       </div>
@@ -474,7 +481,8 @@ async function exportXlsx(): Promise<void> {
         </Button>
       </div>
 
-      <div class="border-t border-line">
+      <!-- @container：下面的表格按这一栏的实际宽度决定滚不滚（见表格处的说明） -->
+      <div class="@container border-t border-line">
         <div v-if="loading" class="space-y-2.5 px-4 py-4">
           <Skeleton v-for="i in 8" :key="i" class="h-9" />
         </div>
@@ -492,14 +500,16 @@ async function exportXlsx(): Promise<void> {
         </EmptyState>
 
         <!--
-          表格：窄屏横向滚动；宽到放得下（≥1400）时不再做滚动容器，表头才能相对 <main> 钉住。
-          sticky 的 top 从 <main> 的内边距内侧算起，-top-8 抵掉 AppShell 的 lg:pt-8，表头贴住视口顶边。
+          表格（≥ 640px）。放得下（这一栏 ≥ 1080px）时外层不做滚动容器，表头才能相对 <main> 钉住
+          （.table-sticky 默认贴 <main> 上边）；放不下时横向滚动，滚动容器会变成 sticky 的参照物，
+          这时表头不钉——横向滚动与钉表头不能兼得，是 CSS 的限制（DESIGN §11.0 第 14 条）。
+          用容器查询而不是视口断点：条件就是「表格放不放得下」，与侧栏宽度、外壳留白无关。
           列宽：品名 w-full 吃掉剩余宽度，其余列不折行、按内容收紧；
           十列在 1440 宽里放 px-4 太挤，内侧单元格改 px-3，首尾列仍留 16px。
         -->
-        <div v-else class="overflow-x-auto min-[1400px]:overflow-visible">
+        <div v-else-if="showTable" class="hidden overflow-x-auto sm:block @min-[1080px]:overflow-visible">
           <table
-            class="table-base table-sticky min-w-[1080px] min-[1400px]:[&_th]:-top-8 [&_td]:px-3 [&_th]:px-3 [&_tr>*:first-child]:pl-4 [&_tr>*:first-child]:pr-1 [&_tr>*:last-child]:pr-4"
+            class="table-base table-sticky min-w-[1080px] [&_td]:px-3 [&_th]:px-3 [&_tr>*:first-child]:pl-4 [&_tr>*:first-child]:pr-1 [&_tr>*:last-child]:pr-4"
           >
             <thead>
               <tr>
@@ -603,6 +613,110 @@ async function exportXlsx(): Promise<void> {
               </tr>
             </tbody>
           </table>
+        </div>
+
+        <!--
+          手机（< 640px）：卡片列表，与表格同一份 rows / selected / 事件处理，只是换一种排法。
+          卡片的尺寸与间距跟全局 .table-cards 一致（卡片区四周 12px、卡片 p-4、间距 12px）。
+          表头的「全选本页」在这里单独给一个入口。
+        -->
+        <div v-else class="p-3 sm:hidden">
+          <!-- border-x transparent + px-4 与卡片的描边 + p-4 同一套盒模型：全选框与每张卡片的复选框竖向对齐 -->
+          <label class="mb-1 flex min-h-10 cursor-pointer items-center gap-3 border-x border-transparent px-4 text-[13px] text-muted select-none">
+            <input
+              type="checkbox"
+              class="checkbox"
+              :checked="allChecked"
+              :indeterminate="selected.size > 0 && !allChecked"
+              aria-label="全选本页"
+              @change="toggleAll"
+            />
+            全选本页
+          </label>
+          <ul class="space-y-3">
+            <li
+              v-for="row in rows"
+              :key="row.id"
+              class="group rounded-(--radius-card) border border-line p-4 transition-colors duration-150"
+              :class="selected.has(row.id) ? 'bg-accent-soft/40' : 'bg-surface'"
+            >
+              <div class="flex items-start gap-3">
+                <!-- 左上角的行复选框：方框 16px，可点区域 40px（-m-3 抵掉 p-3，不多占位置） -->
+                <label class="-m-3 flex shrink-0 cursor-pointer p-3">
+                  <input
+                    v-model="selected"
+                    :value="row.id"
+                    type="checkbox"
+                    class="checkbox mt-1"
+                    :aria-label="`选择 ${row.itemName}`"
+                  />
+                </label>
+                <div class="min-w-0 flex-1">
+                  <div class="flex items-start justify-between gap-3">
+                    <button
+                      type="button"
+                      class="min-w-0 text-left text-[15px] leading-6 font-semibold text-ink wrap-anywhere underline-offset-2 cursor-pointer hover:text-accent hover:underline"
+                      @click="detailTarget = row; detailOpen = true"
+                    >
+                      {{ row.itemName }}
+                    </button>
+                    <StatusBadge :status="row.status" class="shrink-0" />
+                  </div>
+                  <p class="mt-1 flex flex-wrap items-baseline gap-x-1.5 text-[12.5px] leading-[18px] text-muted">
+                    <span class="font-mono">{{ row.serialNumber }}</span>
+                    <span class="text-faint" aria-hidden="true">·</span>
+                    <span class="num text-faint">{{ row.requestDate }}</span>
+                  </p>
+                  <p class="mt-0.5 text-meta">{{ row.department }} · {{ row.handler }}</p>
+                  <!-- 数量在左，单价与金额靠右；放不下时金额整组换到下一行、仍靠右 -->
+                  <div class="mt-3 flex flex-wrap items-baseline gap-x-3 gap-y-1">
+                    <p class="num text-[13.5px] text-text">
+                      <span class="mr-1.5 text-meta">数量</span>{{ row.quantity }}<span v-if="row.unit" class="ml-0.5 text-meta">{{ row.unit }}</span>
+                    </p>
+                    <p class="ml-auto flex items-baseline gap-2 num">
+                      <span v-if="row.unitPrice != null" class="text-meta">单价 {{ formatCurrency(row.unitPrice) }}</span>
+                      <span :class="row.unitPrice == null ? 'text-faint' : 'text-sm font-semibold text-ink'">{{ formatAmount(row.unitPrice, row.quantity) }}</span>
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div class="mt-3 flex items-center justify-between gap-3 border-t border-line pt-3">
+                <!-- 手机上用 md 尺寸：16px 字，iOS 聚焦时不会整页放大 -->
+                <NativeSelect
+                  v-if="tab === 'active'"
+                  class="w-28"
+                  :model-value="row.paymentStatus"
+                  :options="paymentOptions"
+                  :aria-label="`修改 ${row.itemName} 付款状态`"
+                  @update:model-value="(v) => quickChange(row, { paymentStatus: v as PaymentStatus }, `「${PAYMENT_STATUS_LABELS[v as PaymentStatus]}」`)"
+                />
+                <Badge v-else tone="gray">{{ PAYMENT_STATUS_LABELS[row.paymentStatus as PaymentStatus] }}</Badge>
+                <!-- 负右边距抵掉图标按钮自带的留白，最右一个图标与卡片内容右缘对齐（触屏上按钮是 40px，多抵 4px） -->
+                <div class="-mr-2 flex items-center [@media(hover:none)]:-mr-3">
+                  <template v-if="tab === 'active'">
+                    <button type="button" class="row-action" title="详情" @click="detailTarget = row; detailOpen = true">
+                      <Icon name="eye" :size="16" />
+                    </button>
+                    <button type="button" class="row-action" title="编辑" @click="editTarget = row; editOpen = true">
+                      <Icon name="edit" :size="16" />
+                    </button>
+                    <button type="button" class="row-action row-action-danger" title="移入回收站" @click="deleteTargets = [row]">
+                      <Icon name="trash" :size="16" />
+                    </button>
+                  </template>
+                  <template v-else>
+                    <button type="button" class="row-action" title="恢复" @click="restoreSelected([row])">
+                      <Icon name="restore" :size="16" />
+                    </button>
+                    <button type="button" class="row-action row-action-danger" title="彻底删除" @click="purgeTargets = [row]">
+                      <Icon name="trash" :size="16" />
+                    </button>
+                  </template>
+                </div>
+              </div>
+            </li>
+          </ul>
         </div>
       </div>
 

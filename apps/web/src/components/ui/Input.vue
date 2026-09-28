@@ -21,6 +21,8 @@ const props = withDefaults(
     suggestions?: string[];
     /** sm = h-8（表格行内、明细行）；md = h-9（默认） */
     size?: 'sm' | 'md';
+    /** label 只留给读屏（视觉隐藏，输入框的 aria-label 照旧）：表格里列头已经说明了字段时用 */
+    hideLabel?: boolean;
   }>(),
   { type: 'text', size: 'md' },
 );
@@ -36,6 +38,7 @@ const isDate = computed(() => props.type === 'date');
 const isEmpty = computed(() => props.modelValue === null || props.modelValue === undefined || props.modelValue === '');
 
 /*
+ * 根元素 <label> 带 relative：hideLabel 的 sr-only 标签以它为包含块，不会跑出滚动容器把文档撑高。
  * 手机上字号保持 16px：iOS Safari 对小于 16px 的输入框聚焦时会整页放大。
  * 日期框右侧要给 calendar 图标留位（.input-date），所以不用 px-*。
  */
@@ -48,8 +51,8 @@ const sizeClass = computed(() => {
 </script>
 
 <template>
-  <label class="block">
-    <span v-if="label" class="block mb-1.5 text-[13px] leading-5 font-medium text-text">
+  <label class="relative block">
+    <span v-if="label" :class="hideLabel ? 'sr-only' : 'block mb-1.5 text-[13px] leading-5 font-medium text-text'">
       {{ label }}<span v-if="required" class="text-red ml-0.5">*</span>
     </span>
     <input

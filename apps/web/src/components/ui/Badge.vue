@@ -2,6 +2,7 @@
 /**
  * 状态药丸：柔底 + 同色字，不描边。颜色只表达状态（teal = 品牌绿，gray = 中性）。
  * dot：文字前画 6px 圆点，适合「进行中 / 待处理」这类需要一眼扫到的状态。
+ * 根元素带稳定类 .badge：main.css 据此把放了药丸的表格单元格上下留白收到 10px，行高保持 44px。
  */
 withDefaults(
   defineProps<{
@@ -22,7 +23,7 @@ const tones = {
 
 <template>
   <span
-    class="inline-flex items-center gap-1.5 h-6 px-2.5 text-xs font-medium leading-none rounded-full whitespace-nowrap"
+    class="badge inline-flex items-center gap-1.5 h-6 px-2.5 text-xs font-medium leading-none rounded-full whitespace-nowrap"
     :class="tones[tone]"
   >
     <span v-if="dot" class="size-1.5 shrink-0 rounded-full bg-current" aria-hidden="true" />

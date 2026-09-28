@@ -16,7 +16,7 @@
                                                                 (GPT / Responses)
 ```
 
-- **apps/web** — Vue 3.5 + Vite + TypeScript + Tailwind v4 + Reka UI（shadcn 风格自建组件）+ ECharts + PWA
+- **apps/web** — Vue 3.5 + Vite + TypeScript + Tailwind v4 + Reka UI（自建组件）+ ECharts + PWA；视觉规范、设计令牌与组件 API 见 [apps/web/DESIGN.md](apps/web/DESIGN.md)
 - **apps/server** — NestJS 11 + Fastify + Prisma(SQLite) + argon2 认证 + 审计日志 + 备份恢复
 - **apps/ocr** — FastAPI + PaddleOCR：PDF 文本层优先、栅格化 OCR 兜底、OA 界面噪音过滤、表格重建
 - **packages/shared** — zod API 契约与状态枚举（前后端共享）

@@ -69,10 +69,6 @@ watch(() => route.path, () => {
   mainEl.value?.scrollTo({ top: 0 });
 });
 
-const pageTitle = computed(
-  () => (route.meta.title as string | undefined) ?? allItems.value.find((i) => i.path === route.path)?.title ?? '',
-);
-
 /** 已经在导入页时，主按钮换成别的入口（二级样式），不做无意义的自我跳转 */
 const primaryAction = computed(() =>
   route.path === '/import'
@@ -165,12 +161,12 @@ function navItemClass(active = false): string {
 
     <!-- 主区域 -->
     <div class="flex-1 flex flex-col min-w-0 min-h-0 h-dvh">
-      <!-- 移动端顶栏（桌面端没有顶栏，页标题由各页的 PageHeader 给出） -->
+      <!-- 移动端顶栏只放品牌（桌面端没有顶栏；页标题由各页的 PageHeader 给出，这里不再重复） -->
       <header class="lg:hidden flex items-center gap-2.5 h-13 px-4 shrink-0 bg-surface/90 backdrop-blur-md border-b border-line">
         <span class="flex items-center justify-center size-7 shrink-0 rounded-md bg-ink text-surface">
           <Icon name="inventory" :size="15" />
         </span>
-        <p class="min-w-0 truncate text-base font-semibold tracking-tight text-ink">{{ pageTitle }}</p>
+        <p class="min-w-0 truncate text-[15px] font-semibold tracking-tight text-ink">Procure Lite</p>
         <div class="ml-auto flex items-center gap-1.5">
           <button
             type="button"
@@ -192,10 +188,19 @@ function navItemClass(active = false): string {
         <main> 是唯一的滚动容器。桌面端内容最宽 1440px 居中：用 padding 算出两侧留白，
         不再套一层 max-w 容器——各页根元素仍是 main 的直接子元素（h-full 照常生效），
         底部 padding 也能正常计入滚动高度。
+
+        内边距只在这里用变量声明一次，padding 本身也读变量；页面里要「抵消外壳内边距」
+        （通栏条、贴边的粘性表头 / 操作条、撑到底边的看板）一律引用变量，别再写死 -top-8 / -mx-4：
+          --main-px  左右  手机 16px，桌面 max(32px, 居中留白)（视口 ≤ 1744px 时就是 32px）
+          --main-pt  顶部  手机 20px，桌面 32px
+          --main-pb  底部  手机 96px（另加安全区，与底部标签栏的安全区相消），桌面 40px
+        桌面 --main-px 用 100vw 减侧栏（w-60 = 15rem）算：变量在子元素里展开，写 100% 会按子元素的宽度算错。
+        relative：让页面里没有定位祖先的绝对定位元素（sr-only 的读屏文字等）以 main 为包含块、跟着 main 滚动；
+        否则它们按初始包含块定位，落在首屏以下时会把整个文档撑出滚动条（外壳跟着上下窜）。
       -->
       <main
         ref="mainEl"
-        class="flex-1 min-h-0 overflow-y-auto px-4 pt-5 pb-[calc(6rem+env(safe-area-inset-bottom))] lg:px-[max(2rem,calc((100%-1440px)/2))] lg:pt-8 lg:pb-10"
+        class="relative flex-1 min-h-0 overflow-y-auto [--main-px:1rem] [--main-pt:1.25rem] [--main-pb:6rem] lg:[--main-px:max(2rem,calc((100vw_-_15rem_-_1440px)/2))] lg:[--main-pt:2rem] lg:[--main-pb:2.5rem] px-(--main-px) pt-(--main-pt) pb-[calc(var(--main-pb)+env(safe-area-inset-bottom))] lg:pb-(--main-pb)"
       >
         <router-view />
       </main>

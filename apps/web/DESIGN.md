@@ -357,6 +357,8 @@ loading 态保留转圈，禁用 `opacity-50`。
 
 组件都在 `@/components/ui/`，全部 `<script setup lang="ts">`。旧组件的 props / emits / 插槽**完全兼容**，只新增了可选项；下面只写新增的东西和用法约定。
 
+第二轮（§12.1）新增的内容都标了 **R2**：新组件 `Panel`（§11.13）、`StickyActionBar`（§11.14）、外壳内边距变量（§11.15），以及各节里的新 prop / 全局类。
+
 ### 11.0 先看这几条（最容易踩的坑）
 
 1. **`primary` 现在是墨色**：`text-primary` / `bg-primary` / `border-primary` 在浅色下是 `#1b1a17`、深色下是近白，不再是蓝色。实心底上的字用 `text-primary-fg`（浅色白、深色墨）。**不要写 `bg-primary text-white`**：深色主题里是白字压近白底（`components/ai/AiPanel.vue` 现有 3 处就是这样，需要改成 `bg-ink text-surface` 或 `text-primary-fg`）。
@@ -370,13 +372,17 @@ loading 态保留转圈，禁用 `opacity-50`。
 9. **弹窗在手机（< 640px）上默认全屏、无圆角**；只有 `ConfirmDialog` 保持居中小卡片。
 10. **动效工具类**：`animate-fade-in`（遮罩）、`animate-pop-in`（下拉 / 弹层）、`animate-sheet-in`（底部抽屉），150～200ms ease-out；系统开启「减少动态效果」时全局自动失效，不用另写。
 11. **说明文字不要塞进 label**：`Checkbox` / `Radio` / `Switch` 的补充说明请用 `description` prop——它走 `aria-describedby`，不会并进可访问名称（e2e 用精确名称找复选框，比如「单价记入比价库（下次采购同一品名时自动提示）」）。
-12. 桌面端没有顶栏了：「导入 OA 单」「AI 助手」「深色模式」「退出登录」都在侧栏；页面里不要再做这些入口。
+12. 桌面端没有顶栏了：「导入 OA 单」「AI 助手」「深色模式」「退出登录」都在侧栏；页面里不要再做这些入口。手机顶栏只有品牌（R2），页标题只在 PageHeader 里。
+13. **R2 · 抵消外壳内边距只用变量**：`<main>` 上有 `--main-px` / `--main-pt` / `--main-pb`（§11.15）。通栏、贴边、撑到底边的写法一律引用变量（`-mx-(--main-px)`、`lg:-mb-(--main-pb)`），不要再写死 `-mx-4 lg:-mx-8`、`-top-8`、`-bottom-9 lg:-bottom-10`、`lg:-mb-10`；页面底部的操作条直接用 `StickyActionBar`。
+14. **R2 · 钉表头的前提**：`.table-sticky` 默认相对 `<main>` 钉住（桌面贴视口顶边、手机贴顶栏下沿），但表格和 `<main>` 之间只要夹着滚动容器（`overflow-x-auto` 的外层、`overflow-hidden` 的面板），那个容器就成了 sticky 的参照物——**横向滚动中的表格没法同时相对 `<main>` 钉表头**，这是 CSS 的限制，不是 bug。要钉就让外层在表格放得下时 `overflow-visible`（台账现有的 `overflow-x-auto min-[1400px]:overflow-visible` 就是这个写法，也可以换成容器查询）；面板用 `Panel`（`overflow-clip`，不是滚动容器）或不带 `overflow-hidden` 的 `.card`。
+15. **R2 · 首屏以下的绝对定位**：`<main>` 已是 `relative`，没有定位祖先的 `absolute` / `sr-only` 元素以 `<main>` 为包含块、跟着滚动。别在页面里给 `<main>` 以外的外壳元素加定位来「修」它。
 
-### 11.1 Button（新增 `accent` variant、`lg` 尺寸、`iconOnly`）
+### 11.1 Button（新增 `accent` variant、`lg` 尺寸、`iconOnly`；R2：`pressed`、`danger-ghost`）
 
 | prop | 类型 | 默认 | 说明 |
 | --- | --- | --- | --- |
-| `variant` | `'primary' \| 'secondary' \| 'ghost' \| 'danger' \| 'accent'` | `'secondary'` | `accent`（新）= 绿色实心，**只用于**「确认入账 / 确认发放 / 确认全部内容并导入」这类完成性动作 |
+| `variant` | `'primary' \| 'secondary' \| 'ghost' \| 'danger' \| 'danger-ghost' \| 'accent'` | `'secondary'` | `accent`（新）= 绿色实心，**只用于**「确认入账 / 确认发放 / 确认全部内容并导入」这类完成性动作；**`danger-ghost`（R2）** = 红字无底、悬停 `bg-red-soft`，低强调的危险动作（「清空回收站」） |
+| `pressed` | `boolean` | – | **R2**：开关按钮（「只看低库存」「筛选」）。传了就渲染 `aria-pressed`；`true` 时整套换成中性选中底 `bg-primary-soft text-ink border-line-strong`（取代 variant 的配色，悬停描边加深）。不传就是普通按钮、没有 `aria-pressed`。按钮上已经有 `aria-expanded`（展开器，如台账「筛选」）时只借样式、**不**加 `aria-pressed`——一个按钮不该既是开关又是展开器 |
 | `size` | `'sm' \| 'md' \| 'lg'` | `'md'` | sm h-8 · md h-9 · **lg h-10（新，登录按钮、整宽主动作）** |
 | `iconOnly` | `boolean` | `false` | 新：正方形图标按钮（sm 32 / md 36 / lg 40），**必须**配 `aria-label` |
 | `loading` | `boolean` | – | 显示转圈并禁用 |
@@ -390,6 +396,10 @@ loading 态保留转圈，禁用 `opacity-50`。
 <Button variant="secondary" size="sm" :loading="exporting" @click="exportXlsx"><Icon name="download" :size="14" />导出</Button>
 <Button variant="accent" :loading="saving" @click="confirmAll">确认全部内容并导入</Button>
 <Button variant="ghost" icon-only aria-label="刷新" @click="load()"><Icon name="refresh" :size="16" /></Button>
+<!-- R2：开关按钮 / 展开器按钮 / 低强调危险动作 -->
+<Button :pressed="!!state.low" @click="toggleLow"><Icon name="alert" :size="16" :class="state.low ? 'text-red' : 'text-faint'" />只看低库存</Button>
+<Button :pressed="filtersOpen" :aria-expanded="filtersOpen" @click="filtersOpen = !filtersOpen"><Icon name="filter" :size="16" />筛选</Button>
+<Button v-if="tab === 'recycle' && total > 0" variant="danger-ghost" class="ml-auto" @click="confirmPurgeAll = true"><Icon name="trash" :size="16" />清空回收站</Button>
 ```
 
 需要「长得像按钮的链接」时（router-link / `<a>`）用同一套类：
@@ -402,18 +412,24 @@ import { buttonClass } from '@/components/ui/button';
 <a :href="url" target="_blank" :class="buttonClass({ variant: 'ghost', size: 'sm' })"><Icon name="external" :size="14" />打开原件</a>
 ```
 
+`buttonClass({ variant, size, iconOnly, pressed })` 与组件同步（R2：认 `danger-ghost` 与 `pressed`）。
+
 ### 11.2 Input / Textarea / SearchInput / Select / NativeSelect
 
 - **Input**：新增 `size?: 'sm' | 'md'`（`sm` = h-8，表格行内与明细行用；默认 `md` = h-9）。
   - `type="date"` 时组件自动加 `.input-date`：右侧自绘 calendar 图标、点整个框都能打开日期面板，值为空时「年/月/日」显示成占位色。**不用另外做任何事**，也不要再给它写 `px-*`。
   - 根元素仍是 `<label>`：`class`、`aria-label`、`@change` 都落在 label 上（`change` 从 input 冒泡上来），台账 / 发放页现有的 `<Input type="date" class="w-38" aria-label="申请日期起" @change="applyFilters" />` 写法照常有效。
   - 其余 props 不变：`label` / `required`（红色星号）/ `hint`（12px faint）/ `error`（红框 + alert 图标 + 文案）/ `suggestions`（datalist，悬停时显示的是自绘 chevron）。
+  - **R2 · `hideLabel?: boolean`**：label 只留给读屏（`sr-only`），输入框的 `aria-label` 照旧是 label 文字；用在列头已经说明了字段的表格里（导入页明细表格模式）。它是整体开关——要随容器宽度切换（窄时显示、表格形态隐藏）就继续用 `class="@xl:[&>span:first-child]:sr-only"` 这类写法。
 - **Textarea**：新增 `hint?`、`error?`，与 Input 一致。
-- **SearchInput / Select / NativeSelect**：API 不变，已按 §5 换皮。`NativeSelect size="sm"`（h-7）用于表格行内。
+- **Select**：**R2 新增 `size?: 'sm' | 'md'`**：`sm` = h-8、13px 字、弹层选项 h-7，明细行（下单登记 / 发放登记）里与 `Input size="sm"` 同高；默认 `md` = h-9。其余 API 不变。
+- **SearchInput / NativeSelect**：API 不变，已按 §5 换皮。`NativeSelect size="sm"`（h-7）用于表格行内。
 - 手机上输入框字号是 16px（iOS 对小于 16px 的输入框聚焦会整页放大），桌面端 14px。
 
 ```vue
 <Input v-model="line.quantity" size="sm" type="number" placeholder="数量：待确认" />
+<Select v-model="line.supplierId" size="sm" :options="supplierOptions" placeholder="供应商" clearable />
+<Input v-model="l.quantity" size="sm" type="number" label="数量" hide-label placeholder="数量：待确认" />
 <Input v-model="form.arrivalDate" label="到货日期" type="date" hint="留空表示未到货" />
 <Textarea v-model="form.note" label="备注" placeholder="可空" :error="errors.note" />
 ```
@@ -429,6 +445,7 @@ import { buttonClass } from '@/components/ui/button';
 | `label` | `string` | 文字；也可以用默认插槽 |
 | `description` | `string` | label 下方 12px faint 说明（走 `aria-describedby`，不进可访问名称） |
 | `ariaLabel` | `string` | 没有可见文字时（表格行内）必须传 |
+| `size` | `'sm' \| 'md'` | **R2**：`sm` = 14px 方框 + 13px 文字（明细行、密集列表）；默认 `md` = 16px + 14px |
 | `disabled` / `required` / `name` / `id` | | 透传给 input |
 
 事件：`update:modelValue(value)`；`change(event: Event)`——**原生事件**，`($event.target as HTMLInputElement).checked` 照样能读。
@@ -452,6 +469,7 @@ import { buttonClass } from '@/components/ui/button';
 
 表格里也可以直接用全局类（最省事，保留原来的 `v-model` / `@change` 写法）：
 `<input v-model="selected" :value="row.id" type="checkbox" class="checkbox" :aria-label="`选择 ${row.itemName}`" />`
+14px 小号全局类（R2）：`class="checkbox checkbox-sm"`（`Checkbox size="sm"` 渲染的就是它）。
 
 ### 11.4 Radio（新）
 
@@ -462,8 +480,9 @@ import { buttonClass } from '@/components/ui/button';
 | `checked` | `boolean` | 受控单向 |
 | `name` | `string` | 同组请传同一个 name（方向键切换是原生行为） |
 | `label` / `description` / `ariaLabel` / `disabled` / `id` | | 同 Checkbox |
+| `size` | `'sm' \| 'md'` | **R2**：`sm` = 14px 圆框 + 13px 文字；默认 `md` |
 
-事件：`update:modelValue(value)`、`change(event)`（只在被选中时触发）。插槽：默认插槽 = label。全局类版：`<input type="radio" class="radio">`。
+事件：`update:modelValue(value)`、`change(event)`（只在被选中时触发）。插槽：默认插槽 = label。全局类版：`<input type="radio" class="radio">`（14px：`class="radio radio-sm"`）。
 
 ```vue
 <div class="flex items-center gap-4">
@@ -498,7 +517,7 @@ import { buttonClass } from '@/components/ui/button';
 | `modelValue` | `string \| number` | – | `v-model`，当前项的 value |
 | `tabs` | `{ value, label, count?, icon?, disabled? }[]` | – | `count` 以 faint 小字跟在标签后；`icon` 是 Icon 名 |
 | `variant` | `'underline' \| 'segmented'` | `'underline'` | segmented：面板顶部的视图切换（台账 / 回收站、发放单 / 领用统计、库存物品 / 流水、供应商 / 价格记忆）以及分段控件（快捷区间、主题、直发 / 库存发放、手机上的明细 / 原件）；underline：只用于 `RouteTabs` 这类页级分区（设置页三个子页），与 §5 一致 |
-| `block` | `boolean` | `false` | 撑满一行、各项等分（手机上的 segmented） |
+| `block` | `boolean` | `false` | 撑满一行、各项**等宽**（手机上的 segmented）。**R2**：改成等宽网格（`grid auto-cols-fr grid-flow-col`）：最长的标签决定列宽、不截断；宽度不受限时（如 `sm:w-auto`）各项也等宽，外面不用再给 `w-44` 这类固定宽度 |
 | `ariaLabel` | `string` | – | 给整组一个名字（`role="group"`） |
 
 事件：`update:modelValue(value)`、`change(value)`——点当前项不会触发。
@@ -569,7 +588,7 @@ segmented 放在面板顶部工具栏时：外层面板 `card overflow-hidden`�
 | `hint` | `string` | – | 副文案 12px faint |
 | `capture` | `boolean` | `false` | 手机（< lg）额外显示「拍照上传」按钮 |
 
-事件：`files(files: File[])`——点击选择或拖入后触发（组件会清空 input，同一个文件还能再选一次）；`rejected(files: File[])`——拖入了不符合 `accept` 的文件。插槽：默认插槽追加在文案下方。
+事件：`files(files: File[])`——点击选择或拖入后触发（组件会清空 input，同一个文件还能再选一次）；`rejected(files: File[])`——拖入了不符合 `accept` 的文件（**R2**：组件自己弹 `toast.error('不支持的文件类型，请选择 PDF / PNG / JPG / WEBP')`，调用方不用处理、也不要再弹一次；组件用到了 toast store，单测挂载时要有活动的 pinia，写法见 `FileDropzone.spec.ts`）。插槽：默认插槽追加在文案下方。
 
 内部**始终只有一个** `<input type="file">`（`sr-only`，整块是 `<label>`，可点、可键盘聚焦）；「拍照上传」临时给同一个 input 加 `capture="environment"` 再打开，不会多出第二个 file input——e2e 的 `page.locator('input[type=file]').setInputFiles(...)` 照常可用（走 `files` 事件）。
 
@@ -603,7 +622,7 @@ async function upload(files: File[]) {
 
 ### 11.10 Badge / StatusBadge
 
-- **Badge**：`tone?: 'blue' | 'teal' | 'amber' | 'red' | 'gray'`（默认 gray），新增 **`dot?: boolean`**：文字前画 6px 同色圆点。药丸 h-6、柔底同色字、不描边；`teal` = 绿，`gray` = `bg-primary-soft text-muted`。
+- **Badge**：`tone?: 'blue' | 'teal' | 'amber' | 'red' | 'gray'`（默认 gray），新增 **`dot?: boolean`**：文字前画 6px 同色圆点。药丸 h-6、柔底同色字、不描边；`teal` = 绿，`gray` = `bg-primary-soft text-muted`。**R2**：根元素带稳定类 `badge`（StatusBadge 同样有），`.table-base td:has(.badge)` 据此把单元格上下留白收到 10px，行高保持 44px——表格里放药丸不用再手写 `py-2.5`。
 
   ```vue
   <Badge tone="blue" dot>进行中</Badge>
@@ -626,20 +645,29 @@ async function upload(files: File[]) {
 - **ErrorState / Skeleton / ToastHost**：API 不变（Toast 已是墨色浮层，调用方式 `toast.success/error/info` 不变）。
 - **Icon** 新增：`calendar` `upload-cloud` `menu` `check-circle` `info` `external` `truck` `layers` `arrow-right` `bell` `minus` `eye` `eye-off` `package` `receipt` `wallet` `building` `user` `tag` `more-horizontal` `arrow-up-right` `x-circle` `clipboard` `scan` `dot`。
 - **图表**（`@/components/charts/chartTheme`）：系列色依次 accent → blue → amber → red → muted → faint（柱 = accent、折线 = blue）；`axis` 已是无轴线、无刻度、11px muted 标签，并多了 `axis.nameTextStyle`；新增 `ct.textStyle`（放进 `option.textStyle`，字体与页面一致）和 `ct.bar`（`{ barMaxWidth: 28, itemStyle: { borderRadius: [4, 4, 0, 0] } }`，展开进柱状系列）；tooltip 自带 `padding`。
+  **R2** 新增两个预设：`ct.axisPointer`（类目轴悬停阴影带：`{ type: 'shadow', z: 1, shadowStyle: { color: line 色, opacity: 0.6 } }`，`z: 1` 垫在系列下面，放进 `tooltip.axisPointer`）与 `ct.legend`（`left: 'center'`、12px muted 文字、`itemWidth 12 / itemHeight 8`、`itemGap 16`；`top` / `bottom`、`selectedMode` 由调用方补）：
+
+  ```ts
+  tooltip: { ...ct.tooltip, trigger: 'axis', axisPointer: ct.axisPointer, formatter: … },
+  legend: { ...ct.legend, top: 0, selectedMode: false },
+  ```
 
 ### 11.12 全局类（`src/styles/main.css`）
 
 | 类 | 用在哪 | 说明 |
 | --- | --- | --- |
-| `.card` | 所有面板 | `bg-surface border border-line rounded-(--radius-card)`，无阴影；表格面板再加 `overflow-hidden` |
+| `.card` | 所有面板 | `bg-surface border border-line rounded-(--radius-card)`，无阴影；表格面板再加 `overflow-hidden`（要钉表头的面板别加，见 §11.0 第 14 条；新写的面板优先用 `Panel`） |
 | `.table-base` | `<table>` | 表头 h-10 / 12px / 500 / muted / 白底；单元格 `px-4 py-3`、13.5px、行高约 44px；行悬停 `bg-surface-2`；最后一行无底线。数字列在 th / td 上加 `text-right`，选中行加 `bg-accent-soft/40` |
-| `.table-sticky` | 与 `.table-base` 同写 | 表头钉住（外层容器需 `max-h-* overflow-auto`）；钉住时底线用内阴影画，不会丢 |
-| `.row-action` / `.row-action-danger` | 表格操作列的图标按钮 | `size-8` 淡色、默认 60% 不透明，行悬停 / 聚焦时 100%（触屏常亮）；危险动作叠 `.row-action-danger`，悬停转红底 |
+| `.table-sticky` | 与 `.table-base` 同写 | 表头钉住；钉住时底线用内阴影画，不会丢。**R2**：默认相对 `<main>` 钉住、贴 `<main>` 上边（`top: calc(var(--main-pt) * -1)`：桌面 = 视口顶边，手机 = 顶栏下沿），页面不用再写 `-top-8`；表格直接放在自己的 `max-h-* overflow-auto`（或 `overflow-y-auto`）容器里时自动改为钉在容器顶边；不在 `<main>` 里（弹窗）按 0 算。外层是 `overflow-x-auto` 时钉不住（§11.0 第 14 条） |
+| `.row-action` / `.row-action-danger` | 表格操作列的图标按钮 | 32px（`h-8 min-w-8`）淡色、默认 60% 不透明，行悬停 / 聚焦时 100%（触屏常亮）；危险动作叠 `.row-action-danger`，悬停转红底。**R2**：触屏（`@media (hover: none)`）放大到 `h-10 min-w-10`（40px 触控目标） |
+| `td:has(.row-action)` / `td:has(.badge)`（R2） | 自动生效 | 放了操作按钮的单元格上下 6px（触屏 2px）、放了药丸（Badge / StatusBadge）的上下 10px，行高都保持 44px。**操作列、状态列不要再手写 `py-*`** |
+| `.table-cards`（R2） | `<table class="table-base table-cards">`，每个 `td` 加 `data-label="列名"` | 手机卡片化表格，见下方示例。`< 640px`：表头只留给读屏；每行一张卡片（`bg-surface border border-line rounded-(--radius-card) p-4`，卡片间距 12px、卡片区四周 12px）；每个 `td` 一行「列名（左，12px faint，取自 `data-label`）…… 值（靠右）」；没有 `data-label` 或 `data-label=""` 的格整行左对齐显示（品名这类主字段）；`td.card-actions` 是卡片底部的操作行（靠右、上方发丝线）。表格上桌面用的 `min-w-[…]` 在卡片模式自动失效。`≥ 640px` 完全是普通表格。只作用于直接子元素（`> tbody > tr > td`），格子里嵌套的表格不受影响 |
 | `.num` | 金额、数量、日期数字 | `tabular-nums`（不再换等宽字体）；在 `.table-base` 里自动不折行 |
 | `.text-meta` | 副行、时间戳、辅助说明 | 12px / 18px，默认 faint，可叠颜色类覆盖 |
 | `.field-error` | 表单字段错误 | `mt-1.5 flex items-start gap-1 text-xs text-red`，前面放 `<Icon name="alert" :size="12" class="mt-0.5 shrink-0" />` |
 | `.checkbox` | `<input type="checkbox">` | 16px 自绘复选框：选中墨底白勾、半选墨底白横（深色自动反转）、焦点绿环、禁用 40%。保留原生 `v-model` / `:indeterminate` / 键盘 |
 | `.radio` | `<input type="radio">` | 同上，圆形；选中 = 墨色圆 + 中心点 |
+| `.checkbox-sm` / `.radio-sm`（R2） | 与 `.checkbox` / `.radio` 同写 | 14px 小号：`class="checkbox checkbox-sm"`；`Checkbox` / `Radio` 的 `size="sm"` 就是它 |
 | `.input-date` | `<input type="date">` | 右侧自绘 calendar、原生指示器透明铺满（点哪都能开面板）、`min-w-36`；**不要同时写 `px-*`**（会盖掉右侧留位），用 `pl-3`；加 `data-empty` 属性时空值占位显示为 faint。用 Input 组件则全部自动处理 |
 | `.md` | AI 回复的 Markdown 容器 | 链接 `text-accent`；行内代码 `bg-primary-soft`；代码块白底描边 |
 
@@ -683,3 +711,148 @@ async function upload(files: File[]) {
   </div>
 </section>
 ```
+
+`.table-cards` 的写法（R2）：表格照常写，只多两件事——`table` 加 `table-cards`，每个 `td` 加 `data-label`。主字段不在第一列时（如流水表的物品名在第二列），给那个 `td` 加 `card-title`，卡片模式下它会排到首行（卡片是纵向 flex）。列名（`::before`）固定 `font-normal`，单元格上的 `font-semibold` 请写在内部的 `<span>` 上；页面不要用 `before:` 变体去改列名样式（Tailwind 会注入空的 `content`，列名会消失）。另外，`td` 上的工具类（`pl-5`、`py-*`、`w-full max-w-0`、`hidden`、`whitespace-nowrap` 等）优先级高于 `.table-cards` 的卡片规则，会把卡片布局打乱：这类桌面表格专用的类一律加 `sm:` 前缀。
+
+```vue
+<div class="overflow-x-auto">
+  <table class="table-base table-cards min-w-[700px]">
+    <thead>
+      <tr><th>物品</th><th>分类</th><th class="text-right">当前库存</th><th>状态</th><th><span class="sr-only">操作</span></th></tr>
+    </thead>
+    <tbody>
+      <tr v-for="p in products" :key="p.id">
+        <!-- 主字段：不写 data-label，卡片里整行显示 -->
+        <td><p class="font-medium text-ink">{{ p.name }}</p><p class="text-meta">{{ p.unit }}</p></td>
+        <td data-label="分类"><Badge>{{ p.category }}</Badge></td>
+        <td data-label="当前库存" class="text-right num">{{ p.stock }}</td>
+        <td data-label="状态"><Badge :tone="p.isLow ? 'red' : 'teal'">{{ p.isLow ? '低库存' : '充足' }}</Badge></td>
+        <!-- 操作：卡片底部一行 -->
+        <td class="card-actions">
+          <button type="button" class="row-action" title="编辑" @click="edit(p)"><Icon name="edit" :size="16" /></button>
+        </td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+```
+
+- `data-label` 用列头的原文；值由多个节点组成时（两行 `<p>`、图标 + 文字）在卡片里会并排靠右，必要时包一层 `<span>`。
+- 卡片里要显示的列别再用 `hidden sm:table-cell`（`hidden` 照常生效，会把这一行藏掉）；会很长的值别用 `whitespace-nowrap`，改成 `sm:whitespace-nowrap`。
+- 卡片模式下表头只剩读屏可见：全选复选框这类放在表头里的控件，手机上要另给入口（台账的手机卡片列表是单独渲染的，见 §12.2）。
+
+### 11.13 Panel（R2，一层面板 + 可选头部 / 页脚）
+
+`<section class="card overflow-clip">`：白底、发丝描边、12px 圆角；`overflow-clip` 按圆角裁掉贴边表格的角，但**不是**滚动容器——面板里的 `.table-sticky` 表头照样相对 `<main>` 钉住。
+
+| prop / 插槽 | 说明 |
+| --- | --- |
+| `title?: string` | 头部标题 `h2`：15px / 600 / ink |
+| `description?: string` | 标题下一行 13px muted |
+| `bodyClass?: string` | body 的类，默认 `p-5`；传了就整体替换（如 `px-3 pt-3 pb-4 sm:px-4` 给图表） |
+| `flush?: boolean` | body 无内边距（表格、列表贴边）；同时传了 `bodyClass` 时以 `bodyClass` 为准 |
+| `#actions` | 头部右侧动作（`flex flex-wrap items-center gap-2`）；窄屏放不下时换到标题下一行、靠左 |
+| 默认插槽 | 内容 |
+| `#footer` | 页脚：`px-5 py-3 border-t border-line`（分页、补充说明） |
+
+头部 `px-5 py-4 border-b border-line`，只在有 `title` / `description` / `#actions` 时渲染；有说明时顶对齐，只有标题时垂直居中。ghost 按钮放进 `#actions` 时照旧加 `class="-mr-2"` 做视觉右对齐。
+
+```vue
+<Panel title="账号安全" description="单管理员模式，会话 30 分钟无操作自动过期">
+  <template #actions>
+    <Button variant="ghost" size="sm" class="-mr-2" @click="logout"><Icon name="logout" :size="14" /> 退出登录</Button>
+  </template>
+  <div class="grid gap-4 sm:grid-cols-2">…</div>
+</Panel>
+
+<Panel title="备份管理" description="恢复会覆盖当前数据库与附件，操作前请先创建备份" flush>
+  <template #actions><Button variant="secondary" size="sm" @click="createBackup">…</Button></template>
+  <div class="max-h-96 overflow-auto"><table class="table-base table-sticky">…</table></div>
+</Panel>
+
+<Panel :title="`采购金额统计（${groupLabel}）`" description="未填单价的记录只计笔数不计金额" body-class="px-3 pt-3 pb-4 sm:px-4">
+  <template #actions>…合计 / 导出…</template>
+  <EChart :option="barOption" height="100%" />
+</Panel>
+```
+
+### 11.14 StickyActionBar（R2，页面底部粘性操作条）
+
+放在**页面根元素的最后**（根元素是 `<main>` 的直接子元素）。滚动时钉在 `<main>` 底边：桌面贴视口底边，手机贴在底部标签栏之上；内容不满一屏时就跟在内容后面。左右用 `--main-px` 吃满 `<main>` 的内边距做成通栏（`bg-surface/95 backdrop-blur border-t border-line`），里面的内容与页面内容对齐：`flex flex-wrap items-center justify-end gap-2 py-3`。
+
+| 插槽 | 说明 |
+| --- | --- |
+| 默认 | 按钮，靠右（`flex` 的直接子项；手机上要整宽就给按钮加 `max-sm:flex-1`） |
+| `#start` | 左侧的提示 / 错误（`role="alert"` 由调用方给）。桌面在按钮左边占满剩余宽度，手机单独占一行、在按钮上方；多个块竖排（`gap-2`）。插槽里什么都没渲染出来（`v-if` 为假）时整块隐藏，不留空行 |
+
+```vue
+<StickyActionBar>
+  <template #start>
+    <div v-if="saveError" role="alert" class="flex flex-wrap items-center gap-x-3 gap-y-2 text-[13px] leading-5 text-red">…</div>
+    <p v-if="error" role="alert" class="flex items-start gap-1.5 text-[13px] leading-5 text-amber"><Icon name="alert" :size="15" class="mt-0.5 shrink-0" />{{ error }}</p>
+  </template>
+  <Button variant="secondary" :loading="saving" @click="persist">保存草稿</Button>
+  <Button variant="accent" :loading="confirming" @click="confirmAll">确认全部内容并导入</Button>
+</StickyActionBar>
+```
+
+### 11.15 外壳内边距变量（R2，`AppShell.vue` 的 `<main>` 上声明）
+
+`<main>` 的 padding 本身就读这三个变量，所以引用它们一定与外壳留白严格相等：
+
+| 变量 | 手机（< lg） | 桌面（≥ lg） | 说明 |
+| --- | --- | --- | --- |
+| `--main-px` | 16px | `max(32px, (100vw − 240px − 1440px) / 2)` | 左右留白；视口 ≤ 1744px 时就是 32px，更宽时等于把内容居中到 1440 的留白 |
+| `--main-pt` | 20px | 32px | 顶部留白 |
+| `--main-pb` | 96px | 40px | 底部留白；手机上 `<main>` 实际还要加 `env(safe-area-inset-bottom)`，与底部标签栏（60px + 安全区）的安全区相消，所以贴标签栏用 `60px − --main-pb` |
+
+sticky 的 top / bottom 从 `<main>` 的内边距内侧算起，所以「贴边」要用负值抵回。常用写法（Tailwind v4 的变量简写，负号在前）：
+
+```vue
+<!-- 通栏（横向吃满 main 的留白），内容仍对齐 -->
+<div class="-mx-(--main-px) px-(--main-px)">…</div>
+<!-- 撑到视口底边（工作台看板，原来的 lg:-mb-10） -->
+<div class="lg:-mb-(--main-pb)">…</div>
+<!-- 贴住 main 上边的 sticky（原来的 -top-8；表格用 .table-sticky 就行，已内置） -->
+<div class="sticky -top-(--main-pt)">…</div>
+```
+
+等价的长写法：`[margin-inline:calc(var(--main-px)*-1)]`、`[top:calc(var(--main-pt)*-1)]`。`<main>` 还带 `relative`（§11.0 第 15 条）。
+
+## 12. 第二轮打磨（2026-09-28 下午）——收尾清单与新增规范
+
+第一轮交付后逐页复核（含六位执行者的遗留项）得到下面的清单。**共享层先做（§12.1），页面再改（§12.2）**，规则与 §9 一致：不改业务逻辑与 API，文案只允许本节明确列出的新增。
+
+### 12.1 共享层（AppShell / ui / main.css / chartTheme / shared 契约）
+
+1. **外壳内边距变量**：`AppShell.vue` 的 `<main>` 上声明 `--main-px`、`--main-pt`、`--main-pb`（移动端 16 / 20 / 96px，桌面 32 / 32 / 40px），工具类值继续用 Tailwind 写，但页面里所有「抵消外壳内边距」的写法（`-top-8`、`-bottom-9 lg:-bottom-10`、`-mx-4 lg:-mx-8`、`lg:-mb-10`）一律改为引用变量：`[top:calc(var(--main-pt)*-1)]`、`[margin-inline:calc(var(--main-px)*-1)]` 等。`.table-sticky thead th` 的默认 `top` 直接用 `calc(var(--main-pt) * -1)`，页面不用再写。
+2. **`StickyActionBar.vue`（新）**：页面底部粘性操作条。`sticky` 到 `<main>` 底边（用 `--main-pb` 抵消），`bg-surface/95 backdrop-blur border-t border-line`，左右吃满 `--main-px`，内容 `flex flex-wrap items-center gap-2 justify-end py-3`；默认插槽放按钮，`#start` 插槽放左侧提示 / 错误（`role="alert"` 由调用方给）。移动端贴在底部标签栏之上。
+3. **`Panel.vue`（新）**：一层面板 + 可选头部。props：`title?`、`description?`、`bodyClass?`（默认 `p-5`）、`flush?`（body 无内边距，给表格用）；插槽：`#actions`（头部右侧）、默认（内容）、`#footer`（`px-5 py-3 border-t border-line`）。头部 `px-5 py-4 border-b border-line`，标题 15px/600 ink，描述 13px muted。设置页 6 个区块、供应商比价搜索区、报表两个面板都用它。
+4. **`Select` 增加 `size: 'sm' | 'md'`**（sm：h-8、13px、弹层选项 h-7），与 `Input size="sm"`、`NativeSelect size="sm"` 对齐；`Checkbox` / `Radio` 增加 `size: 'sm'`（14px 方框、13px 文字）。
+5. **Button**：新增 `pressed?: boolean`（渲染 `aria-pressed` 并套 `bg-primary-soft text-ink border-line-strong`，用于「只看低库存」「筛选」这类开关按钮）；新增 `variant="danger-ghost"`（`text-red hover:bg-red-soft`，用于「清空回收站」等）。`buttonClass()` 同步。
+6. **Input**：新增 `hideLabel?: boolean`（label 视觉隐藏、`aria-label` 保留；导入页明细表格模式用）。
+7. **FileDropzone**：`rejected` 时由组件内调用 `useToastStore().error('不支持的文件类型，请选择 PDF / PNG / JPG / WEBP')`（**新增文案**，仅此一处）；调用方无需处理。
+8. **Badge** 根元素加稳定类 `badge`；`.table-base td:has(.badge)` 用 `py-2.5`，与 `td:has(.row-action)` 的 `py-1.5` 一起把行高统一在 44px。
+9. **`.row-action` 触控尺寸**：`@media (hover: none)` 下 `h-10 min-w-10`（≥ 40px 触控目标），此时 `td:has(.row-action)` 用 `py-0.5`。
+10. **`.table-cards`（新全局类，手机卡片化表格）**：加在 `<table class="table-base table-cards">` 上，`< 640px` 时：`thead` 隐藏（`sr-only`），每个 `tr` 变成 `bg-surface border border-line rounded-(--radius-card) p-4 mb-3` 的卡片，每个 `td` 变成 `flex justify-between gap-3 py-1` 的一行，左侧用 `::before { content: attr(data-label) }`（12px faint）显示列名；`td[data-label=""]` 或无 `data-label` 的单元格不显示标签（用于主字段整行显示）；`td.card-actions` 变成 `justify-end border-t border-line mt-2 pt-2`。页面给每个 `td` 加 `data-label="列名"` 即可，`≥ sm` 完全不受影响。
+11. **Tabs `block`** 改为 `grid auto-cols-fr grid-flow-col`，各段等宽且不截断标签。
+12. **chartTheme** 增加 `axisPointer`（阴影带：`shadowStyle.color` = `line` 色 60% 透明，`z: 1`）与 `legend`（居中、12px muted、图例项 `itemWidth 12 / itemHeight 8`）预设。
+13. **移动端顶栏只放品牌**：品牌标 + "Procure Lite" 字标（页标题已由 PageHeader 提供，不再重复）；右侧 AI 助手图标与「导入」按钮不变。
+14. **SettingsLayout** 的页头说明文字：「外观 · 账号安全 · AI 助手 · 备份 · 供应商 · 审计」（新增文案）。
+15. **`packages/shared/src/schemas.ts`**：`positiveNumber` / `nonNegativeNumber` 补中文错误信息（`'必须大于 0'` / `'不能为负数'`），并 `pnpm --filter @procure-lite/shared build`；服务端测试不依赖英文文案（已核对）。
+16. 把上述新组件 / 新 prop 追加到 §11 的速查里。
+
+### 12.2 页面
+
+- **工作台 A**：看板列的 `lg:-mb-10` 改用 `--main-pb`；下单登记 / 发放登记明细行的 `Select` 用 `size="sm"`，与 h-8 输入框同高。
+- **台账 B**：表头钉住改用 `.table-sticky` 默认值（删掉 `-top-8` 写法与 1400 断点判断，改回始终横向滚动 + 钉表头）；「清空回收站」用 `variant="danger-ghost"`；「筛选」按钮用 `pressed`；**手机（< 640px）改为卡片列表**：`sm:hidden` 渲染卡片（品名 15px/600 + 状态 Badge 一行，流水号 mono + 申请日期一行，部门 · 经办人 meta 一行，数量与金额右对齐一行，付款 NativeSelect + 操作按钮一行，卡片左上角保留复选框），表格 `hidden sm:block`；复用同一份 `rows` 与事件处理，不新增请求。
+- **导入 C**：底部操作条改用 `StickyActionBar`（把错误段落放进 `#start`，`role="alert"` 保留）；明细表格模式的隐藏标签改用 `Input hideLabel`；去掉页面里的外壳偏移写法。
+- **发放 / 库存 D**：物品表、流水表加 `table-cards` + `data-label`；「只看低库存」用 `Button pressed`；操作列不再手写 `py-*`（共享层已统一）；Tabs 的固定宽度去掉（`block` 已修）。
+- **报表 / 设置 E**：设置页 6 个区块换成 `Panel`；报表两个面板换成 `Panel`，图表 option 用 `ct.axisPointer` / `ct.legend`；领用排行表加 `table-cards`（手机上不再隐藏部门列）。
+- **供应商 / 审计 F**：比价建议区与两张表所在面板换成 `Panel`；供应商表、价格记录表、审计表加 `table-cards` + `data-label`（审计卡片：时间 + 操作 Badge 一行，对象 / 详情 / IP 各一行）。
+
+### 12.3 验收
+
+- 四条命令 + e2e 全绿；`pnpm --filter @procure-lite/shared build` 后服务端 `pnpm --filter @procure-lite/server test` 仍通过。
+- 手机截图：台账、库存、供应商、审计页在 390px 宽下无横向滚动。
+- 触发一次 Toast（登录成功）核对墨色浮层样式。

@@ -21,7 +21,7 @@ const props = withDefaults(
     modelValue: T;
     tabs: TabItem<T>[];
     variant?: 'underline' | 'segmented';
-    /** 撑满一行，各项等分（手机上的 segmented 常用） */
+    /** 撑满一行、各项等宽（等宽网格：最长的标签决定列宽，不截断；手机上的 segmented 常用） */
     block?: boolean;
     ariaLabel?: string;
   }>(),
@@ -44,7 +44,7 @@ function select(tab: TabItem<T>): void {
     v-if="variant === 'segmented'"
     :role="ariaLabel ? 'group' : undefined"
     :aria-label="ariaLabel"
-    :class="[SEGMENTED_LIST, block ? 'flex w-full' : 'inline-flex']"
+    :class="[SEGMENTED_LIST, block ? 'grid w-full auto-cols-fr grid-flow-col' : 'inline-flex']"
   >
     <button
       v-for="t in tabs"
@@ -52,11 +52,11 @@ function select(tab: TabItem<T>): void {
       type="button"
       :disabled="t.disabled"
       :aria-pressed="t.value === modelValue"
-      :class="[segmentedItemClass(t.value === modelValue), block ? 'flex-1 min-w-0' : '']"
+      :class="segmentedItemClass(t.value === modelValue)"
       @click="select(t)"
     >
       <Icon v-if="t.icon" :name="t.icon" :size="14" class="shrink-0" />
-      <span class="truncate">{{ t.label }}</span>
+      <span>{{ t.label }}</span>
       <span v-if="t.count !== undefined && t.count !== null" class="text-xs font-normal text-faint tabular-nums">{{ t.count }}</span>
     </button>
   </div>
