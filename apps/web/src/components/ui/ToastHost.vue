@@ -4,24 +4,21 @@ import Icon from './Icon.vue';
 
 const toast = useToastStore();
 
-const icons = { success: 'check', error: 'alert', info: 'clock' } as const;
-/* 左侧 3px 色条 + 图标着色指示类型 */
-const bars = {
-  success: 'bg-teal',
-  error: 'bg-red',
-  info: 'bg-primary',
-} as const;
+const icons = { success: 'check-circle', error: 'alert', info: 'info' } as const;
 const iconTones = {
-  success: 'text-teal',
+  success: 'text-accent',
   error: 'text-red',
-  info: 'text-primary',
+  info: 'text-blue',
 } as const;
 </script>
 
 <template>
-  <!-- bottom-20 让开移动端底部导航（h-14），桌面回到 bottom-4 -->
+  <!--
+    墨色浮层：两个主题下都是深底白字。
+    手机上居中、让开底部标签栏（60px + 安全区）；桌面右下角。
+  -->
   <div
-    class="fixed z-[100] bottom-20 lg:bottom-4 right-4 flex flex-col gap-2 w-[calc(100vw-2rem)] max-w-sm pointer-events-none"
+    class="fixed z-[100] left-1/2 -translate-x-1/2 bottom-[calc(5rem+env(safe-area-inset-bottom))] w-[calc(100vw-2rem)] max-w-sm flex flex-col gap-2 pointer-events-none lg:left-auto lg:translate-x-0 lg:right-6 lg:bottom-6"
     role="region"
     aria-label="通知"
   >
@@ -34,26 +31,28 @@ const iconTones = {
       <div
         v-for="t in toast.toasts"
         :key="t.id"
-        class="pointer-events-auto relative flex items-start gap-2.5 overflow-hidden bg-surface border border-line rounded-(--radius-card) shadow-(--shadow-pop) px-3.5 py-3"
+        class="pointer-events-auto flex items-start gap-3 bg-panel text-white rounded-[10px] shadow-(--shadow-pop) px-4 py-3 dark:ring-1 dark:ring-white/8"
         :role="t.kind === 'error' ? 'alert' : 'status'"
         :aria-live="t.kind === 'error' ? 'assertive' : 'polite'"
       >
-        <span class="absolute inset-y-0 left-0 w-[3px]" :class="bars[t.kind]" aria-hidden="true" />
-        <Icon :name="icons[t.kind]" :size="15" class="mt-0.5 shrink-0" :class="iconTones[t.kind]" />
-        <p class="flex-1 text-sm text-text leading-relaxed break-words">{{ t.message }}</p>
+        <!-- .dark 局部翻转令牌：深底上用深色主题里提亮过的语义色，浅色主题下也看得清 -->
+        <Icon :name="icons[t.kind]" :size="16" class="dark mt-0.5 shrink-0" :class="iconTones[t.kind]" />
+        <p class="flex-1 min-w-0 text-sm leading-relaxed break-words">{{ t.message }}</p>
         <button
           v-if="t.action"
-          class="shrink-0 -my-0.5 h-7 px-2 rounded-md border border-line-strong text-muted text-xs font-semibold cursor-pointer transition-colors duration-150 hover:text-primary hover:border-primary active:scale-[0.98]"
+          type="button"
+          class="shrink-0 text-sm font-medium text-white/90 underline underline-offset-2 decoration-white/40 hover:text-white hover:decoration-white cursor-pointer transition-colors duration-150"
           @click="toast.runAction(t)"
         >
           {{ t.action.label }}
         </button>
         <button
-          class="shrink-0 -mr-1 -mt-0.5 p-1 rounded-md text-faint hover:text-text cursor-pointer transition-colors duration-150"
+          type="button"
+          class="shrink-0 -mr-1.5 inline-flex items-center justify-center size-6 rounded-md text-white/60 hover:text-white hover:bg-white/10 cursor-pointer transition-colors duration-150"
           aria-label="关闭提示"
           @click="toast.dismiss(t.id)"
         >
-          <Icon name="close" :size="13" />
+          <Icon name="close" :size="14" />
         </button>
       </div>
     </TransitionGroup>

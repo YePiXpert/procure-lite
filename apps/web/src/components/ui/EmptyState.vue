@@ -10,7 +10,7 @@ import IlluSearch from '../illustrations/IlluSearch.vue';
 import IlluEmpty from '../illustrations/IlluEmpty.vue';
 import type { IlluTone } from '../illustrations/tone';
 
-/** 空态场景插画（手绘 SVG，见 components/illustrations/） */
+/** 空态场景插画（手绘 SVG，见 components/illustrations/）。动作按钮建议 variant="secondary" size="sm" */
 const scenes = {
   box: IlluBox,
   ledger: IlluLedger,
@@ -37,14 +37,14 @@ const illu = computed(() => (props.illustration ? scenes[props.illustration] : n
 </script>
 
 <template>
-  <div class="flex flex-col items-center justify-center gap-2 py-12 text-center">
-    <component :is="illu" v-if="illu" :tone="tone" :size="132" class="mb-1" />
-    <div v-else class="flex items-center justify-center size-12 rounded-full bg-canvas text-faint border border-line">
+  <div class="flex flex-col items-center justify-center py-14 px-4 text-center">
+    <component :is="illu" v-if="illu" :tone="tone" :size="120" class="mb-3" />
+    <div v-else class="mb-3 flex items-center justify-center size-11 rounded-xl bg-surface-2 border border-line text-faint">
       <Icon :name="icon" :size="20" />
     </div>
     <p class="text-sm font-semibold text-ink">{{ title }}</p>
-    <p v-if="description" class="text-xs text-faint max-w-xs">{{ description }}</p>
-    <div v-if="$slots.default" class="mt-2">
+    <p v-if="description" class="mt-1 text-[13px] text-muted max-w-xs">{{ description }}</p>
+    <div v-if="$slots.default" class="mt-4 flex flex-wrap items-center justify-center gap-2">
       <slot />
     </div>
   </div>

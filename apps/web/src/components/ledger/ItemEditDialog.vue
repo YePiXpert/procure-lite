@@ -5,6 +5,7 @@ import Button from '@/components/ui/Button.vue';
 import Input from '@/components/ui/Input.vue';
 import Select from '@/components/ui/Select.vue';
 import Textarea from '@/components/ui/Textarea.vue';
+import Checkbox from '@/components/ui/Checkbox.vue';
 import Icon from '@/components/ui/Icon.vue';
 import { itemsApi, suppliersApi, type ItemRow, type PriceRecordRow } from '@/api';
 import { useToastStore } from '@/stores/toast';
@@ -247,117 +248,130 @@ async function save(): Promise<void> {
     :dirty="dirty && !saving"
     @update:open="emit('update:open', $event)"
   >
-    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-      <Input
-        v-model="form.serialNumber"
-        label="流水号"
-        required
-        placeholder="OA-2026-…"
-        :error="errors.serialNumber"
-        @blur="validateField('serialNumber')"
-      />
-      <Input
-        v-model="form.requestDate"
-        label="申请日期"
-        type="date"
-        required
-        :error="errors.requestDate"
-        @blur="validateField('requestDate')"
-      />
-      <Input
-        v-model="form.department"
-        label="申领部门"
-        required
-        placeholder="如：综合管理部"
-        :suggestions="facets.departments"
-        :error="errors.department"
-        @blur="validateField('department')"
-      />
-      <Input
-        v-model="form.handler"
-        label="经办人"
-        required
-        :suggestions="facets.handlers"
-        :error="errors.handler"
-        @blur="validateField('handler')"
-      />
-
-      <div class="sm:col-span-2">
+    <!-- 三组字段：申领信息 / 采购信息 / 状态与付款（DESIGN §7.9） -->
+    <section>
+      <h3 class="mb-3 text-[13px] font-semibold text-ink">申领信息</h3>
+      <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <Input
-          v-model="form.itemName"
-          label="品名"
+          v-model="form.serialNumber"
+          label="流水号"
           required
-          :disabled="finalLocked"
-          placeholder="如：A4 复印纸"
-          :error="errors.itemName"
-          @update:model-value="fetchSuggestions($event)"
-          @blur="validateField('itemName')"
+          placeholder="OA-2026-…"
+          :error="errors.serialNumber"
+          @blur="validateField('serialNumber')"
         />
+        <Input
+          v-model="form.requestDate"
+          label="申请日期"
+          type="date"
+          required
+          :error="errors.requestDate"
+          @blur="validateField('requestDate')"
+        />
+        <Input
+          v-model="form.department"
+          label="申领部门"
+          required
+          placeholder="如：综合管理部"
+          :suggestions="facets.departments"
+          :error="errors.department"
+          @blur="validateField('department')"
+        />
+        <Input
+          v-model="form.handler"
+          label="经办人"
+          required
+          :suggestions="facets.handlers"
+          :error="errors.handler"
+          @blur="validateField('handler')"
+        />
+      </div>
+    </section>
 
-        <!-- 比价建议就放在填单价的地方，不用再跑去供应商页面查 -->
-        <div
-          v-if="suggestions.length > 0"
-          class="mt-2 p-2.5 bg-primary-soft/50 border border-primary/15 rounded-(--radius-control)"
-        >
-          <p class="flex items-center gap-1.5 text-meta font-semibold text-primary mb-1.5">
-            <Icon name="supplier" :size="12" /> 这个品名的历史报价（点击填入）
-          </p>
-          <div class="flex flex-wrap gap-1.5">
-            <button
-              v-for="(s, i) in suggestions.slice(0, 5)"
-              :key="s.id"
-              type="button"
-              class="inline-flex items-center gap-1.5 h-7 px-2.5 rounded-full bg-surface border border-line-strong text-xs cursor-pointer transition-all duration-150 hover:border-primary hover:text-primary active:scale-[0.98]"
-              @click="applySuggestion(s)"
-            >
-              <span>{{ s.supplier.name }}</span>
-              <span class="num font-semibold">{{ formatCurrency(s.unitPrice) }}</span>
-              <span v-if="i === 0" class="text-meta text-teal">最低</span>
-            </button>
+    <section class="mt-5 border-t border-line pt-4">
+      <h3 class="mb-3 text-[13px] font-semibold text-ink">采购信息</h3>
+      <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <div class="sm:col-span-2">
+          <Input
+            v-model="form.itemName"
+            label="品名"
+            required
+            :disabled="finalLocked"
+            placeholder="如：A4 复印纸"
+            :error="errors.itemName"
+            @update:model-value="fetchSuggestions($event)"
+            @blur="validateField('itemName')"
+          />
+
+          <!-- 比价建议就放在填单价的地方，不用再跑去供应商页面查 -->
+          <div v-if="suggestions.length > 0" class="mt-2 rounded-lg border border-line bg-surface-2 p-3">
+            <p class="mb-2 flex items-center gap-1.5 text-xs font-medium text-muted">
+              <Icon name="supplier" :size="14" class="text-faint" /> 这个品名的历史报价（点击填入）
+            </p>
+            <div class="flex flex-wrap gap-1.5">
+              <button
+                v-for="(s, i) in suggestions.slice(0, 5)"
+                :key="s.id"
+                type="button"
+                class="inline-flex h-7 items-center gap-1.5 rounded-full border border-line-strong bg-surface px-2.5 text-xs text-text cursor-pointer transition-[color,border-color,transform] duration-150 hover:border-accent hover:text-accent active:scale-[0.98]"
+                @click="applySuggestion(s)"
+              >
+                <span>{{ s.supplier.name }}</span>
+                <span class="num font-semibold">{{ formatCurrency(s.unitPrice) }}</span>
+                <span v-if="i === 0" class="text-[11px] font-medium text-accent">最低</span>
+              </button>
+            </div>
           </div>
         </div>
-      </div>
 
-      <Input
-        v-model="form.quantity"
-        label="数量"
-        type="number"
-        min="0"
-        step="any"
-        required
-        :disabled="finalLocked"
-        :hint="finalLocked ? '已与发放 / 库存记录绑定，不能修改' : undefined"
-        :error="errors.quantity"
-        @blur="validateField('quantity')"
-      />
-      <Input v-model="form.unit" label="单位" placeholder="个 / 盒 / 箱（可空）" />
-      <Input
-        v-model="form.unitPrice"
-        label="单价"
-        type="number"
-        min="0"
-        step="any"
-        placeholder="可空"
-        :error="errors.unitPrice"
-        @blur="validateField('unitPrice')"
-      />
-      <Select v-model="form.supplierId" label="供应商" :options="supplierOptions" clearable />
-      <div class="sm:col-span-2">
-        <Input v-model="form.purchaseLink" label="采购链接" placeholder="https://…（可空）" />
+        <Input
+          v-model="form.quantity"
+          label="数量"
+          type="number"
+          min="0"
+          step="any"
+          required
+          :disabled="finalLocked"
+          :hint="finalLocked ? '已与发放 / 库存记录绑定，不能修改' : undefined"
+          :error="errors.quantity"
+          @blur="validateField('quantity')"
+        />
+        <Input v-model="form.unit" label="单位" placeholder="个 / 盒 / 箱（可空）" />
+        <Input
+          v-model="form.unitPrice"
+          label="单价"
+          type="number"
+          min="0"
+          step="any"
+          placeholder="可空"
+          :error="errors.unitPrice"
+          @blur="validateField('unitPrice')"
+        />
+        <Select v-model="form.supplierId" label="供应商" :options="supplierOptions" clearable />
+        <div class="sm:col-span-2">
+          <Input v-model="form.purchaseLink" label="采购链接" placeholder="https://…（可空）" />
+        </div>
       </div>
-      <Select v-model="form.status" label="状态" :options="statusOptions" :disabled="finalLocked" />
-      <Select v-model="form.paymentStatus" label="付款状态" :options="paymentOptions" />
-      <Input v-model="form.arrivalDate" label="到货日期" type="date" hint="留空表示未到货" />
-      <label class="flex items-center gap-2 mt-6 text-sm text-muted cursor-pointer select-none">
-        <input v-model="form.invoiceIssued" type="checkbox" class="size-4 accent-primary" />
-        已开票
-      </label>
-      <div class="sm:col-span-2">
-        <Textarea v-model="form.note" label="备注" placeholder="可空" />
+    </section>
+
+    <section class="mt-5 border-t border-line pt-4">
+      <h3 class="mb-3 text-[13px] font-semibold text-ink">状态与付款</h3>
+      <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <Select v-model="form.status" label="状态" :options="statusOptions" :disabled="finalLocked" />
+        <Select v-model="form.paymentStatus" label="付款状态" :options="paymentOptions" />
+        <Input v-model="form.arrivalDate" label="到货日期" type="date" hint="留空表示未到货" />
+        <!-- 与左侧日期框同一水平线：让出 label 行（20px + 6px），再按 h-9 居中 -->
+        <div class="flex items-center sm:mt-[26px] sm:h-9">
+          <Checkbox v-model="form.invoiceIssued" label="已开票" />
+        </div>
+        <div class="sm:col-span-2">
+          <Textarea v-model="form.note" label="备注" placeholder="可空" />
+        </div>
       </div>
-    </div>
+    </section>
+
     <template #footer>
-      <p v-if="isEdit" class="mr-auto self-center text-meta text-faint">
+      <p v-if="isEdit" class="mr-auto self-center text-meta max-sm:w-full">
         清空某个字段并保存，即可把它置空
       </p>
       <Button variant="ghost" @click="emit('update:open', false)">取消</Button>

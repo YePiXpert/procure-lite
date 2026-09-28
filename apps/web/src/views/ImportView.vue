@@ -1,9 +1,17 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue';
 import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router';
+import Badge from '@/components/ui/Badge.vue';
 import Button from '@/components/ui/Button.vue';
+import Checkbox from '@/components/ui/Checkbox.vue';
+import FileDropzone from '@/components/ui/FileDropzone.vue';
+import Icon from '@/components/ui/Icon.vue';
 import Input from '@/components/ui/Input.vue';
+import NativeSelect from '@/components/ui/NativeSelect.vue';
+import PageHeader from '@/components/ui/PageHeader.vue';
 import Select from '@/components/ui/Select.vue';
+import Skeleton from '@/components/ui/Skeleton.vue';
+import Tabs from '@/components/ui/Tabs.vue';
 import { useCatalogStore } from '@/stores/catalog';
 import { importsApi, type ImportTaskView, type AiImportPage } from '@/api';
 import { apiError } from '@/api/client';
@@ -38,8 +46,7 @@ const task = ref<ImportTaskView | null>(null),
   busy = ref(false),
   error = ref(''),
   saveError = ref(''),
-  saved = ref(true),
-  loading = ref(false);
+  saved = ref(true);
 const form = reactive({ serialNumber: '', department: '', handler: '', requestDate: '' });
 const reviewedAi = ref<string[]>([]);
 const lines = ref<Line[]>([]),
@@ -142,6 +149,62 @@ const aiState = computed(
       CANCELLED: '已取消',
     })[task.value?.aiStatus ?? 'DISABLED'],
 );
+/*
+ * 以下两项只服务于展示，不参与任何业务判断。
+ * 步骤条：上传原件 → 本地识别 → GPT 复核 → 核对入账，从 task.status / aiStatus / confirmed / finished 推导。
+ * warn = 该步没有完整完成（本地解析失败、GPT 部分失败或被停止）；skipped = 未启用 GPT。
+ */
+type StepState = 'done' | 'current' | 'todo' | 'warn' | 'skipped';
+const stepStyles: Record<StepState, { dot: string; text: string }> = {
+  done: { dot: 'bg-accent text-primary-fg', text: 'text-text' },
+  current: { dot: 'bg-ink text-surface', text: 'font-medium text-ink' },
+  todo: { dot: 'border border-line-strong text-faint', text: 'text-faint' },
+  warn: { dot: 'bg-amber-soft text-amber', text: 'text-text' },
+  skipped: { dot: 'border border-dashed border-line-strong text-faint', text: 'text-faint' },
+};
+const steps = computed(() => {
+  const t = task.value;
+  const running = (s?: string) => s === 'PENDING' || s === 'RUNNING';
+  const sent: StepState = t || taskId.value ? 'done' : 'current';
+  const local: StepState = !t
+    ? 'todo'
+    : running(t.status)
+      ? 'current'
+      : t.status === 'FAILED'
+        ? 'warn'
+        : 'done';
+  const gpt: StepState = !t
+    ? 'todo'
+    : t.aiStatus === 'DISABLED'
+      ? 'skipped'
+      : running(t.status)
+        ? 'todo'
+        : running(t.aiStatus)
+          ? 'current'
+          : t.aiStatus === 'DONE'
+            ? 'done'
+            : 'warn';
+  const review: StepState =
+    finished.value || t?.confirmed ? 'done' : t && !active.value ? 'current' : 'todo';
+  const states = [sent, local, gpt, review];
+  // 手机上只显示「焦点步」的文字：当前步，否则第一个未开始的步，全部完成时是最后一步
+  const current = states.indexOf('current');
+  const next = states.indexOf('todo');
+  const focus = current >= 0 ? current : next >= 0 ? next : states.length - 1;
+  return ['上传原件', '本地识别', 'GPT 复核', '核对入账'].map((label, i) => ({
+    label,
+    state: states[i],
+    focus: i === focus,
+    ...stepStyles[states[i]],
+  }));
+});
+/** 状态行圆点：蓝 = 进行中，绿 = 已完成，琥珀 = 失败 / 部分失败，其余（未启用、已取消）灰 */
+const stateDot: Partial<Record<string, string>> = {
+  PENDING: 'bg-blue',
+  RUNNING: 'bg-blue',
+  DONE: 'bg-accent',
+  FAILED: 'bg-amber',
+};
 function line(item?: ImportDraft['items'][number]): Line {
   return {
     lineId: item?.lineId ?? crypto.randomUUID(),
@@ -227,20 +290,19 @@ async function refresh() {
     timer = setTimeout(() => void refresh(), 5000);
   }
 }
-async function upload(event: Event) {
+/** FileDropzone 交出文件列表（它自己会清空 input，同一文件可以再次选择） */
+async function upload(files: File[]) {
   await persist();
   if (!saved.value && loaded) {
     error.value = '请先保存当前草稿';
     return;
   }
-  const input = event.target as HTMLInputElement,
-    file = input.files?.[0];
+  const file = files[0];
   if (!file) return;
   if (file.size > 30 * 1024 * 1024) {
     error.value = '文件超过 30MB';
     return;
   }
-  input.value = '';
   await uploadFile(file);
 }
 async function uploadFile(file: File, continueDuplicate = false) {
@@ -397,340 +459,712 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="space-y-5">
-    <div>
-      <h1 class="text-xl font-semibold text-ink">导入 OA 单据</h1>
-      <p class="text-sm text-muted mt-1">保存原件 · 本地识别 · GPT 复核 · 人工确认</p>
-    </div>
-    <div class="rounded-xl border border-line bg-surface p-5 space-y-3">
-      <label class="text-sm font-medium"
-        >上传 PDF 或图片（最多 30MB、30 页）<input
-          type="file"
-          accept=".pdf,.png,.jpg,.jpeg,.webp,.bmp"
-          :disabled="busy || !!active"
-          class="block mt-3 text-sm"
-          @change="upload"
-      /></label>
-      <p class="text-xs text-muted">
-        启用自动智能导入后，每张单据的原件将发送给设置中的 GPT 服务。最终入账需人工确认。
-      </p>
-    </div>
-    <div v-if="duplicateFile" class="rounded border border-amber p-3 text-sm">
-      相同内容的原件已经上传过，本次尚未开始解析。<Button
-        size="sm"
-        :loading="busy"
-        @click="uploadFile(duplicateFile!, true)"
-        >这是新的业务，继续处理</Button
-      ><Button size="sm" variant="secondary" @click="duplicateFile = null">取消本次上传</Button>
-    </div>
-    <p v-if="error" role="alert" class="text-sm text-amber">{{ error }}</p>
-    <p v-if="saveError" role="alert" class="text-sm text-red-600">
-      草稿保存失败：{{ saveError }}。请保留当前页面，避免丢失编辑。<Button
-        size="sm"
-        @click="persist"
-        >重试保存</Button
-      ><Button size="sm" variant="secondary" @click="reloadDraft">重新载入已保存版本</Button>
-    </p>
-    <div v-if="finished" class="rounded-xl border border-line bg-surface p-5">
-      已创建 {{ finished.created }} 条，合并 {{ finished.merged }} 条，跳过
-      {{ finished.skipped }} 条；关联 {{ finished.attached }} 份原件。<Button
-        class="ml-3"
-        @click="router.push('/ledger')"
-        >查看台账</Button
+  <div class="space-y-6">
+    <PageHeader title="导入 OA 单据" description="保存原件 · 本地识别 · GPT 复核 · 人工确认" />
+
+    <!-- 步骤条：手机上只保留焦点步的文字，其余步只显示圆点（文字留给读屏） -->
+    <ol class="flex max-w-3xl items-center gap-2 sm:gap-3">
+      <li
+        v-for="(step, n) in steps"
+        :key="step.label"
+        class="flex min-w-0 items-center gap-2 sm:gap-3"
+        :class="n > 0 ? 'flex-1' : ''"
+        :aria-current="step.state === 'current' ? 'step' : undefined"
       >
-    </div>
+        <span
+          v-if="n > 0"
+          class="h-px min-w-3 flex-1 transition-colors duration-150"
+          :class="step.state === 'todo' ? 'bg-line-strong' : 'bg-accent/40'"
+          aria-hidden="true"
+        />
+        <span
+          class="flex size-6 shrink-0 items-center justify-center rounded-full text-xs font-semibold tabular-nums"
+          :class="step.dot"
+        >
+          <Icon v-if="step.state === 'done'" name="check" :size="14" />
+          <Icon v-else-if="step.state === 'warn'" name="alert" :size="13" />
+          <Icon v-else-if="step.state === 'skipped'" name="minus" :size="14" />
+          <template v-else>{{ n + 1 }}</template>
+        </span>
+        <span
+          class="whitespace-nowrap text-[13px]"
+          :class="[step.text, step.focus ? '' : 'max-sm:sr-only']"
+          >{{ step.label }}</span
+        >
+      </li>
+    </ol>
+
+    <!-- 提示与错误：核对阶段放进底部操作条（随时可见），其余阶段显示在这里 -->
+    <template v-if="finished || !task">
+      <div
+        v-if="error"
+        role="alert"
+        class="flex items-start gap-2 rounded-(--radius-card) bg-amber-soft px-4 py-3 text-[13px] leading-5 text-amber"
+      >
+        <Icon name="alert" :size="16" class="mt-0.5 shrink-0" />
+        <p class="min-w-0">{{ error }}</p>
+      </div>
+      <div
+        v-if="saveError"
+        role="alert"
+        class="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-(--radius-card) bg-red-soft px-4 py-3 text-[13px] leading-5 text-red"
+      >
+        <p class="flex min-w-0 flex-1 basis-64 items-start gap-2">
+          <Icon name="alert" :size="16" class="mt-0.5 shrink-0" />
+          <span>草稿保存失败：{{ saveError }}。请保留当前页面，避免丢失编辑。</span>
+        </p>
+        <div class="flex flex-wrap gap-2">
+          <Button size="sm" variant="secondary" @click="persist">重试保存</Button>
+          <Button size="sm" variant="ghost" @click="reloadDraft">重新载入已保存版本</Button>
+        </div>
+      </div>
+    </template>
+
+    <!-- 完成 -->
+    <section
+      v-if="finished"
+      class="flex flex-col items-start gap-4 rounded-(--radius-card) border border-accent/20 bg-accent-soft/60 p-6 sm:flex-row sm:items-center"
+    >
+      <Icon name="check-circle" :size="24" class="shrink-0 text-accent" />
+      <p class="min-w-0 flex-1 text-sm leading-6 text-ink">
+        已创建 {{ finished.created }} 条，合并 {{ finished.merged }} 条，跳过 {{ finished.skipped }} 条；关联 {{ finished.attached }} 份原件。
+      </p>
+      <Button variant="primary" @click="router.push('/ledger')">
+        查看台账<Icon name="arrow-right" :size="16" />
+      </Button>
+    </section>
+
+    <!-- 处理中 / 待核对 / 已确认（只读） -->
     <template v-else-if="task">
-      <div class="flex flex-wrap items-center gap-3 text-sm">
-        <span>{{ task.filename }}</span
-        ><span>本地：{{ localState }} · GPT：{{ aiState }}</span
-        ><span
-          >{{ task.result?.pages?.filter((p) => p.status === 'DONE').length ?? 0 }}/{{
-            pageCount
-          }}
-          页本地完成 · {{ task.aiResult.length }}/{{ pageCount }} 页 GPT 完成</span
-        ><span>{{ saved ? '草稿已保存' : '保存中…' }}</span>
-        <Button v-if="active" variant="secondary" size="sm" @click="cancel"
-          >停止处理，人工核对</Button
+      <div class="space-y-3">
+        <!-- 状态条：文件名 + 本地 / GPT 状态 + 草稿保存状态，右侧是处理动作 -->
+        <section class="card flex flex-wrap items-center gap-x-6 gap-y-3 px-5 py-4">
+          <div class="flex min-w-0 flex-1 basis-80 items-center gap-3.5">
+            <span
+              class="flex size-10 shrink-0 items-center justify-center rounded-lg border border-line bg-surface-2 text-muted"
+            >
+              <span
+                v-if="active"
+                class="size-4 animate-spin rounded-full border-2 border-blue/25 border-t-blue"
+                aria-hidden="true"
+              />
+              <Icon v-else name="file" :size="18" />
+            </span>
+            <div class="min-w-0">
+              <p class="truncate text-sm font-medium text-ink" :title="task.filename">
+                {{ task.filename }}
+              </p>
+              <!-- 每项以圆点 / 图标开头，换行时行首也整齐，不用「·」分隔 -->
+              <p class="mt-1 flex flex-wrap items-center gap-x-3.5 gap-y-1 text-xs text-muted">
+                <span class="inline-flex items-center gap-1.5"
+                  ><span
+                    class="size-1.5 shrink-0 rounded-full"
+                    :class="stateDot[task.status] ?? 'bg-faint'"
+                    aria-hidden="true"
+                  />本地：{{ localState }}</span
+                >
+                <span class="inline-flex items-center gap-1.5"
+                  ><span
+                    class="size-1.5 shrink-0 rounded-full"
+                    :class="stateDot[task.aiStatus] ?? 'bg-faint'"
+                    aria-hidden="true"
+                  />GPT：{{ aiState }}</span
+                >
+                <span class="num inline-flex items-center gap-1"
+                  ><Icon name="layers" :size="12" class="shrink-0 text-faint" />{{
+                    task.result?.pages?.filter((p) => p.status === 'DONE').length ?? 0
+                  }}/{{ pageCount }} 页本地完成 · {{ task.aiResult.length }}/{{ pageCount }} 页 GPT
+                  完成</span
+                >
+                <span class="inline-flex items-center gap-1" :class="saved ? 'text-accent' : ''"
+                  ><Icon :name="saved ? 'check' : 'clock'" :size="12" class="shrink-0" />{{
+                    saved ? '草稿已保存' : '保存中…'
+                  }}</span
+                >
+              </p>
+            </div>
+          </div>
+          <div v-if="active || !task.confirmed" class="flex flex-wrap items-center gap-2">
+            <Button v-if="active" variant="secondary" size="sm" @click="cancel"
+              >停止处理，人工核对</Button
+            >
+            <template v-else>
+              <Button
+                size="sm"
+                variant="secondary"
+                @click="
+                  retry(
+                    'local',
+                    task.result?.pages?.filter((p) => p.status !== 'DONE').map((p) => p.page),
+                  )
+                "
+                ><Icon name="refresh" :size="14" />重试本地失败页</Button
+              >
+              <Button size="sm" variant="secondary" @click="retry('ai')"
+                ><Icon name="refresh" :size="14" />重试 GPT 未完成页</Button
+              >
+            </template>
+          </div>
+        </section>
+
+        <!-- 识别警告 -->
+        <ul
+          v-if="task.result?.warnings.length || task.aiResult.some((p) => p.warnings.length)"
+          class="space-y-1 rounded-lg bg-amber-soft px-3 py-2 text-[13px] leading-5 text-amber"
         >
-        <template v-else-if="!task.confirmed"
-          ><Button
-            size="sm"
-            variant="secondary"
-            @click="
-              retry(
-                'local',
-                task.result?.pages?.filter((p) => p.status !== 'DONE').map((p) => p.page),
-              )
-            "
-            >重试本地失败页</Button
-          ><Button size="sm" variant="secondary" @click="retry('ai')"
-            >重试 GPT 未完成页</Button
-          ></template
+          <li v-for="w in task.result?.warnings ?? []" :key="w" class="flex items-start gap-2">
+            <Icon name="alert" :size="14" class="mt-[3px] shrink-0" /><span class="min-w-0">{{
+              w
+            }}</span>
+          </li>
+          <li
+            v-for="(warning, i) in task.aiResult.flatMap((p) =>
+              p.warnings.map((w) => `GPT 第 ${p.page} 页：${w}`),
+            )"
+            :key="`ai-${i}`"
+            class="flex items-start gap-2"
+          >
+            <Icon name="sparkles" :size="14" class="mt-[3px] shrink-0" /><span class="min-w-0">{{
+              warning
+            }}</span>
+          </li>
+        </ul>
+
+        <!-- 页级核对：全部勾选后从琥珀提醒退成普通面板 -->
+        <div
+          v-if="issuePages.length"
+          class="flex flex-col gap-2.5 rounded-lg border px-4 py-3 transition-colors duration-150"
+          :class="
+            issuePages.every((p) => reviewedPages.some((r) => r.page === p.page))
+              ? 'border-line bg-surface'
+              : 'border-transparent bg-amber-soft'
+          "
         >
-      </div>
-      <div v-if="task.result?.warnings.length" class="text-xs text-amber">
-        <p v-for="w in task.result.warnings" :key="w">{{ w }}</p>
-      </div>
-      <p
-        v-for="(warning, i) in task.aiResult.flatMap((p) =>
-          p.warnings.map((w) => `GPT 第 ${p.page} 页：${w}`),
-        )"
-        :key="i"
-        class="text-sm text-amber"
-      >
-        {{ warning }}
-      </p>
-      <div v-for="p in issuePages" :key="p.page" class="rounded border border-amber p-3 text-sm">
-        <label
-          ><input
-            type="checkbox"
+          <Checkbox
+            v-for="p in issuePages"
+            :key="p.page"
             :checked="reviewedPages.some((r) => r.page === p.page)"
+            :label="`第 ${p.page} 页${p.reasons.join('、')}：我已核对原件全部相关明细`"
             @change="reviewed(p.page, $event)"
           />
-          {{ `第 ${p.page} 页${p.reasons.join('、')}：我已核对原件全部相关明细` }}</label
-        >
+        </div>
       </div>
-      <div class="flex gap-2 lg:hidden">
-        <Button variant="secondary" @click="mobileTab = 'draft'">明细</Button
-        ><Button variant="secondary" @click="mobileTab = 'original'">原件</Button>
-      </div>
-      <div class="grid lg:grid-cols-2 gap-5 items-start">
-        <section
-          :class="[
-            mobileTab === 'original' ? 'block' : 'hidden',
-            'lg:block rounded-xl border border-line bg-surface p-3 lg:sticky lg:top-4',
+
+      <div class="space-y-4">
+        <Tabs
+          v-model="mobileTab"
+          variant="segmented"
+          block
+          class="lg:hidden"
+          :tabs="[
+            { value: 'draft', label: '明细' },
+            { value: 'original', label: '原件' },
           ]"
-        >
-          <div class="flex items-center gap-3 mb-3">
-            <Button size="sm" variant="secondary" :disabled="page <= 1" @click="page--"
-              >上一页</Button
-            ><span class="text-sm">{{ page }} / {{ pageCount }}</span
-            ><Button size="sm" variant="secondary" :disabled="page >= pageCount" @click="page++"
-              >下一页</Button
-            ><a
-              :href="`/api/imports/tasks/${taskId}/original`"
-              target="_blank"
-              class="text-primary text-sm"
-              >打开原件</a
-            >
-          </div>
-          <div v-if="task.originalAvailable && !previewFailed" class="relative">
-            <img
-              :src="`/api/imports/tasks/${taskId}/pages/${page}`"
-              alt="单据原件页面"
-              class="w-full"
-              @error="previewFailed = true"
-            /><svg
-              v-if="box?.length"
-              class="absolute inset-0 w-full h-full pointer-events-none"
-              viewBox="0 0 1 1"
-              preserveAspectRatio="none"
-            >
-              <polygon
-                :points="box.map((p) => p.join(',')).join(' ')"
-                fill="rgba(245,158,11,.2)"
-                stroke="#f59e0b"
-                stroke-width=".003"
-              />
-            </svg>
-          </div>
-          <p v-else class="text-sm text-muted">
-            页面预览暂不可用，可打开原件核对。<Button size="sm" @click="previewFailed = false"
-              >重试</Button
-            >
-          </p>
-        </section>
-        <fieldset
-          :disabled="task.confirmed"
-          :class="[mobileTab === 'draft' ? 'block' : 'hidden', 'lg:block space-y-4']"
-        >
-          <div class="grid grid-cols-2 gap-3 rounded-xl border border-line bg-surface p-4">
-            <div v-for="f in fields" :key="f" class="text-sm">
-              <Input
-                :label="labels[f]"
-                v-model="form[f]"
-                :type="f === 'requestDate' ? 'date' : 'text'"
-                :disabled="task.confirmed"
-                @blur="checkDuplicates"
-              /><template v-for="p in task.aiResult" :key="p.page"
-                ><button
-                  v-if="p[f] && p[f] !== form[f]"
-                  class="block text-xs text-primary mt-1"
-                  @click="form[f] = p[f]!"
-                >
-                  采用 GPT：{{ p[f] }}
-                </button></template
-              >
-            </div>
-            <Select
-              v-model="supplierId"
-              label="统一指定供应商（可空）"
-              :options="supplierOptions"
-              clearable
-              class="col-span-2"
-            />
-          </div>
-          <div
-            v-for="(l, i) in lines"
-            :key="l.lineId"
-            class="rounded-xl border border-line bg-surface p-4 space-y-3"
-            @focusin="focusLine(l)"
+        />
+        <div class="grid items-start gap-6 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)]">
+          <!-- 原件预览：桌面端钉在顶部，图片高度不超过视口，整页可见 -->
+          <section
+            :class="[
+              mobileTab === 'original' ? 'block' : 'hidden',
+              'card overflow-hidden lg:sticky lg:top-6 lg:block',
+            ]"
           >
-            <div class="flex items-center justify-between">
-              <button class="text-sm text-primary" @click="focusLine(l)">
-                明细 {{ i + 1 }} ·
-                {{ l.source ? `第 ${l.source.page} 页` : '人工录入／历史结果' }}</button
-              ><Button
-                variant="secondary"
-                size="sm"
-                :disabled="task.confirmed"
-                @click="lines.splice(i, 1)"
-                >删除</Button
+            <div class="flex items-center gap-1 border-b border-line px-2 py-2">
+              <Button size="sm" variant="ghost" :disabled="page <= 1" @click="page--"
+                ><Icon name="chevron-left" :size="14" />上一页</Button
+              ><span class="num min-w-12 text-center text-[13px] text-muted"
+                >{{ page }} / {{ pageCount }}</span
+              ><Button size="sm" variant="ghost" :disabled="page >= pageCount" @click="page++"
+                >下一页<Icon name="chevron-right" :size="14"
+              /></Button>
+              <a
+                :href="`/api/imports/tasks/${taskId}/original`"
+                target="_blank"
+                class="ml-auto inline-flex items-center gap-1 rounded px-2 text-[13px] font-medium text-accent hover:underline"
+                ><Icon name="external" :size="14" />打开原件</a
               >
             </div>
-            <Input
-              v-model="l.itemName"
-              placeholder="品名（同名不同规格请明确区分）"
-              @blur="checkDuplicates"
-            />
-            <div class="grid grid-cols-3 gap-2">
-              <Input
-                v-model="l.quantity"
-                label="数量"
-                type="number"
-                step="any"
-                placeholder="数量：待确认"
-              /><Input v-model="l.unit" label="单位" placeholder="单位" /><Input
-                v-model="l.unitPrice"
-                label="单价"
-                type="number"
-                step="any"
-                placeholder="单价：可空"
-              />
+            <div v-if="task.originalAvailable && !previewFailed" class="bg-surface-2 p-3">
+              <div class="relative mx-auto w-fit max-w-full">
+                <img
+                  :src="`/api/imports/tasks/${taskId}/pages/${page}`"
+                  alt="单据原件页面"
+                  class="block h-auto max-w-full rounded-lg border border-line bg-white lg:max-h-[calc(100dvh-12rem)]"
+                  @error="previewFailed = true"
+                /><svg
+                  v-if="box?.length"
+                  class="pointer-events-none absolute inset-0 size-full"
+                  viewBox="0 0 1 1"
+                  preserveAspectRatio="none"
+                  aria-hidden="true"
+                >
+                  <polygon
+                    :points="box.map((p) => p.join(',')).join(' ')"
+                    class="fill-amber/20 stroke-amber"
+                    stroke-width="2"
+                    stroke-linejoin="round"
+                    vector-effect="non-scaling-stroke"
+                  />
+                </svg>
+              </div>
             </div>
-            <Input v-model="l.purchaseLink" placeholder="采购链接（可空）" />
-            <p v-if="!l.quantity || Number(l.quantity) <= 0" class="text-xs text-amber">
-              数量未确认，暂不能入账。
-            </p>
-            <div
-              v-if="lines.some((o, j) => j !== i && o.itemName === l.itemName)"
-              class="text-xs text-amber"
-            >
-              存在同名明细，请补充规格区分。<Button size="sm" variant="secondary" @click="merge(i)"
-                >确认同物品并合并</Button
+            <div v-else class="flex flex-col items-center gap-3 px-6 py-14 text-center">
+              <span
+                class="flex size-11 items-center justify-center rounded-xl border border-line bg-surface-2 text-faint"
               >
+                <Icon name="image" :size="20" />
+              </span>
+              <p class="max-w-xs text-[13px] text-muted">页面预览暂不可用，可打开原件核对。</p>
+              <Button size="sm" variant="secondary" @click="previewFailed = false">重试</Button>
             </div>
-            <label v-if="duplicateNames.includes(l.itemName)" class="text-sm text-amber"
-              >已有台账记录
-              <select v-model="l.duplicateAction" class="bg-surface">
-                <option value="skip">跳过</option>
-                <option value="merge">追加数量（须同单位且非终态）</option>
-              </select></label
-            >
-            <p v-if="needsReview(l)" class="text-xs text-amber">
-              GPT 数量或价格与本地结果存在差异，请展开建议核对。
-            </p>
-            <details class="text-xs text-muted">
-              <summary>识别依据与 GPT 建议</summary>
-              <p class="mt-2">原始文本：{{ l.source?.rawText || '无可信文本来源' }}</p>
-              <div v-if="localValue(l)">
-                <p>
-                  本地识别：{{ localValue(l)!.itemName }} · 数量
-                  {{ localValue(l)!.quantity ?? '未知' }}{{ localValue(l)!.unit ?? '' }} · 单价
-                  {{ localValue(l)!.unitPrice ?? '未填' }}
+          </section>
+
+          <!-- 草稿：单据头 + 明细表（fieldset 在已确认时整体只读） -->
+          <fieldset
+            :disabled="task.confirmed"
+            :class="[mobileTab === 'draft' ? 'block' : 'hidden', 'min-w-0 space-y-4 lg:block']"
+          >
+            <section class="card p-5">
+              <div class="grid gap-4 sm:grid-cols-2">
+                <div v-for="f in fields" :key="f" class="min-w-0">
+                  <Input
+                    :label="labels[f]"
+                    v-model="form[f]"
+                    :type="f === 'requestDate' ? 'date' : 'text'"
+                    :disabled="task.confirmed"
+                    @blur="checkDuplicates"
+                  /><template v-for="p in task.aiResult" :key="p.page"
+                    ><button
+                      v-if="p[f] && p[f] !== form[f]"
+                      type="button"
+                      class="mt-1.5 mr-3 inline-flex items-start gap-1 text-left text-xs text-accent hover:underline disabled:cursor-not-allowed disabled:text-faint disabled:no-underline"
+                      @click="form[f] = p[f]!"
+                    >
+                      <Icon name="sparkles" :size="12" class="mt-[3px] shrink-0" />采用 GPT：{{
+                        p[f]
+                      }}
+                    </button></template
+                  >
+                </div>
+                <Select
+                  v-model="supplierId"
+                  label="统一指定供应商（可空）"
+                  :options="supplierOptions"
+                  clearable
+                  class="sm:col-span-2"
+                />
+              </div>
+            </section>
+
+            <!--
+              明细表：面板够宽（≥ 36rem）时是表格，窄时（手机、1280 以下的双栏）每条明细堆叠成
+              「品名 / 数量·单位·单价 / 链接」三行。数量、单位、单价的 label 在表格形态下只留给读屏。
+            -->
+            <section class="card @container divide-y divide-line overflow-hidden">
+              <div v-if="!loaded" class="space-y-2.5 p-4">
+                <Skeleton class="h-8 w-full" />
+                <Skeleton class="h-8 w-4/5" />
+                <Skeleton class="h-8 w-3/5" />
+              </div>
+              <table v-else-if="lines.length" class="table-base table-fixed @max-xl:block">
+                <thead class="@max-xl:hidden">
+                  <tr>
+                    <th class="pl-4 pr-1.5">品名</th>
+                    <th class="w-28 px-1.5">数量</th>
+                    <th class="w-16 px-1.5">单位</th>
+                    <th class="w-25 px-1.5">单价</th>
+                    <th class="w-36 pl-1.5 pr-4">采购链接</th>
+                  </tr>
+                </thead>
+                <tbody
+                  v-for="(l, i) in lines"
+                  :key="l.lineId"
+                  class="transition-colors duration-150 @max-xl:block"
+                  :class="[
+                    i > 0 ? 'border-t border-line' : '',
+                    selected === l.lineId ? 'bg-accent-soft/40' : '',
+                  ]"
+                  @focusin="focusLine(l)"
+                >
+                  <tr
+                    class="[&:hover]:bg-transparent @max-xl:grid @max-xl:grid-cols-[minmax(0,1.3fr)_minmax(0,0.8fr)_minmax(0,1.2fr)] @max-xl:gap-2 @max-xl:px-4 @max-xl:pt-3"
+                  >
+                    <td class="border-b-0 pb-2 pl-4 pr-1.5 pt-3 @max-xl:col-span-3 @max-xl:p-0">
+                      <Input
+                        v-model="l.itemName"
+                        size="sm"
+                        placeholder="品名（同名不同规格请明确区分）"
+                        @blur="checkDuplicates"
+                      />
+                    </td>
+                    <td class="border-b-0 px-1.5 pb-2 pt-3 @max-xl:p-0">
+                      <Input
+                        v-model="l.quantity"
+                        size="sm"
+                        label="数量"
+                        type="number"
+                        step="any"
+                        placeholder="数量：待确认"
+                        class="@xl:[&>span:first-child]:sr-only"
+                      />
+                    </td>
+                    <td class="border-b-0 px-1.5 pb-2 pt-3 @max-xl:p-0">
+                      <Input
+                        v-model="l.unit"
+                        size="sm"
+                        label="单位"
+                        placeholder="单位"
+                        class="@xl:[&>span:first-child]:sr-only"
+                      />
+                    </td>
+                    <td class="border-b-0 px-1.5 pb-2 pt-3 @max-xl:p-0">
+                      <Input
+                        v-model="l.unitPrice"
+                        size="sm"
+                        label="单价"
+                        type="number"
+                        step="any"
+                        placeholder="单价：可空"
+                        class="@xl:[&>span:first-child]:sr-only"
+                      />
+                    </td>
+                    <td class="border-b-0 pb-2 pl-1.5 pr-4 pt-3 @max-xl:col-span-3 @max-xl:p-0">
+                      <Input v-model="l.purchaseLink" size="sm" placeholder="采购链接（可空）" />
+                    </td>
+                  </tr>
+                  <tr class="[&:hover]:bg-transparent @max-xl:block">
+                    <td colspan="5" class="px-4 pb-3 pt-0 @max-xl:block @max-xl:pt-2.5">
+                      <!-- 左：定位按钮与提示（可换行）；右：删除固定在行首右侧 -->
+                      <div class="flex items-start gap-2">
+                        <div class="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-1.5 py-1">
+                          <button
+                            type="button"
+                            class="mr-1 inline-flex h-6 items-center gap-1 text-xs font-medium text-accent hover:underline disabled:cursor-default disabled:text-muted disabled:no-underline"
+                            @click="focusLine(l)"
+                          >
+                            <Icon name="scan" :size="13" class="shrink-0" />明细 {{ i + 1 }} ·
+                            {{ l.source ? `第 ${l.source.page} 页` : '人工录入／历史结果' }}
+                          </button>
+                          <Badge v-if="!l.quantity || Number(l.quantity) <= 0" tone="amber" dot
+                            >数量未确认，暂不能入账。</Badge
+                          >
+                          <template
+                            v-if="lines.some((o, j) => j !== i && o.itemName === l.itemName)"
+                          >
+                            <Badge tone="amber">存在同名明细，请补充规格区分。</Badge>
+                            <Button size="sm" variant="secondary" @click="merge(i)"
+                              >确认同物品并合并</Button
+                            >
+                          </template>
+                          <label
+                            v-if="duplicateNames.includes(l.itemName)"
+                            class="inline-flex max-w-full items-center gap-2"
+                          >
+                            <Badge tone="amber">已有台账记录</Badge>
+                            <NativeSelect
+                              :model-value="l.duplicateAction"
+                              size="sm"
+                              class="min-w-0"
+                              :options="[
+                                { value: 'skip', label: '跳过' },
+                                { value: 'merge', label: '追加数量（须同单位且非终态）' },
+                              ]"
+                              @update:model-value="
+                                (v) => (l.duplicateAction = v === 'merge' ? 'merge' : 'skip')
+                              "
+                            />
+                          </label>
+                        </div>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          :disabled="task.confirmed"
+                          @click="lines.splice(i, 1)"
+                          ><Icon name="trash" :size="14" />删除</Button
+                        >
+                      </div>
+                      <p
+                        v-if="needsReview(l)"
+                        class="mt-2 flex items-start gap-1.5 text-xs leading-5 text-amber"
+                      >
+                        <Icon name="alert" :size="13" class="mt-[3px] shrink-0" />GPT
+                        数量或价格与本地结果存在差异，请展开建议核对。
+                      </p>
+                      <details class="group/why mt-2 rounded-lg bg-surface-2">
+                        <summary
+                          class="flex cursor-pointer list-none items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-medium text-muted transition-colors duration-150 hover:text-ink [&::-webkit-details-marker]:hidden"
+                        >
+                          <Icon
+                            name="chevron-right"
+                            :size="14"
+                            class="shrink-0 transition-transform duration-150 group-open/why:rotate-90"
+                          />识别依据与 GPT 建议
+                        </summary>
+                        <div class="space-y-3 px-3 pb-3 text-xs leading-5 text-muted">
+                          <p class="break-all">原始文本：{{ l.source?.rawText || '无可信文本来源' }}</p>
+                          <div v-if="localValue(l)" class="space-y-2 border-t border-line pt-3">
+                            <p>
+                              本地识别：<span class="text-text">{{ localValue(l)!.itemName }}</span> · 数量
+                              {{ localValue(l)!.quantity ?? '未知' }}{{ localValue(l)!.unit ?? '' }} · 单价
+                              {{ localValue(l)!.unitPrice ?? '未填' }}
+                            </p>
+                            <Button size="sm" variant="secondary" @click="applyLocal(l)"
+                              >核对后采用本地值</Button
+                            >
+                          </div>
+                          <div v-if="suggestion(l)" class="space-y-2 border-t border-line pt-3">
+                            <p>
+                              GPT：<span class="text-text">{{ suggestion(l)!.itemName }}</span>，数量
+                              {{ suggestion(l)!.quantity ?? '未知' }}，单价
+                              {{ suggestion(l)!.unitPrice ?? '未知' }}
+                            </p>
+                            <p>{{ suggestion(l)!.reason }}</p>
+                            <p
+                              v-if="!reviewedAi.includes(aiSuggestionKey(suggestion(l)!))"
+                              class="text-amber"
+                            >
+                              建议待确认：可采用建议，或核对后保留当前编辑值。
+                            </p>
+                            <p v-else class="text-accent">本次建议已核对</p>
+                            <div class="flex flex-wrap gap-2">
+                              <Button size="sm" variant="secondary" @click="apply(l)"
+                                >已核对，采用建议</Button
+                              ><Button size="sm" variant="ghost" @click="acknowledge(suggestion(l)!)"
+                                >已核对，保留当前值</Button
+                              >
+                            </div>
+                          </div>
+                        </div>
+                      </details>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+              <div
+                v-for="candidate in task.result?.items.filter(
+                  (item) => !lines.some((l) => l.lineId === item.lineId),
+                ) ?? []"
+                :key="candidate.lineId"
+                class="flex flex-wrap items-center gap-x-3 gap-y-2 bg-surface-2 px-4 py-3 text-[13px] text-muted"
+              >
+                <p class="flex min-w-0 flex-1 basis-60 items-start gap-2">
+                  <Icon name="scan" :size="15" class="mt-0.5 shrink-0 text-faint" />
+                  <span
+                    >未采用的本地明细：<span class="text-ink">{{ candidate.itemName }}</span> ×
+                    <span class="num">{{ candidate.quantity ?? '待确认' }}</span></span
+                  >
                 </p>
-                <Button size="sm" variant="secondary" @click="applyLocal(l)"
-                  >核对后采用本地值</Button
+                <Button size="sm" variant="secondary" @click="lines.push(line(candidate))"
+                  >核对后添加本地明细</Button
                 >
               </div>
-              <div v-if="suggestion(l)" class="mt-2 space-y-2">
-                <p>
-                  GPT：{{ suggestion(l)!.itemName }}，数量
-                  {{ suggestion(l)!.quantity ?? '未知' }}，单价
-                  {{ suggestion(l)!.unitPrice ?? '未知' }}
+              <div
+                v-for="s in suggestions.filter(
+                  (s) =>
+                    !lines.some((l) => l.lineId === s.lineId) &&
+                    !reviewedAi.includes(aiSuggestionKey(s)),
+                )"
+                :key="s.lineId ?? s.itemName"
+                class="flex flex-wrap items-center gap-x-3 gap-y-2 bg-surface-2 px-4 py-3 text-[13px] text-muted"
+              >
+                <p class="flex min-w-0 flex-1 basis-60 items-start gap-2">
+                  <Icon name="sparkles" :size="15" class="mt-0.5 shrink-0 text-faint" />
+                  <span
+                    >GPT 新增候选：<span class="text-ink">{{ s.itemName }}</span> ×
+                    <span class="num">{{ s.quantity ?? '待确认' }}</span>（第 {{ s.page }} 页）</span
+                  >
                 </p>
-                <p>{{ suggestion(l)!.reason }}</p>
-                <p v-if="!reviewedAi.includes(aiSuggestionKey(suggestion(l)!))" class="text-amber">
-                  建议待确认：可采用建议，或核对后保留当前编辑值。
-                </p>
-                <p v-else>本次建议已核对</p>
-                <Button size="sm" variant="secondary" @click="apply(l)">已核对，采用建议</Button
-                ><Button size="sm" variant="secondary" @click="acknowledge(suggestion(l)!)"
-                  >已核对，保留当前值</Button
+                <div class="flex flex-wrap gap-2">
+                  <Button size="sm" variant="secondary" @click="addSuggestion(s)">核对后添加</Button
+                  ><Button size="sm" variant="ghost" @click="acknowledge(s)"
+                    >核对后不采用此行</Button
+                  >
+                </div>
+              </div>
+              <div class="px-4 py-3">
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  :disabled="!loaded || task.confirmed"
+                  @click="lines.push(line())"
+                  ><Icon name="plus" :size="14" />添加明细</Button
                 >
               </div>
-            </details>
+            </section>
+          </fieldset>
+        </div>
+      </div>
+
+      <!--
+        底部操作条：钉在视口底部，本阶段的提示与错误也放在这里（点确认后不用回到页顶找报错）。
+        sticky 的底边从 <main> 的内容框算起（会扣掉 AppShell 给 main 的底部留白），所以用负值抵回：
+        手机 main 底部留白 6rem、底部标签栏 3.75rem（安全区两边相消）→ -2.25rem 正好贴在标签栏上方；
+        桌面留白 2.5rem → -2.5rem 贴住视口底边。左右负边距同理抵掉 main 的水平内边距，做成通栏。
+      -->
+      <div
+        class="sticky -bottom-9 z-20 -mx-4 border-t border-line bg-surface/95 px-4 py-3 backdrop-blur lg:-bottom-10 lg:-mx-8 lg:px-8"
+      >
+        <div class="flex flex-wrap items-center justify-end gap-x-4 gap-y-2.5">
+          <div
+            v-if="saveError"
+            role="alert"
+            class="flex basis-full flex-wrap items-center gap-x-3 gap-y-2 text-[13px] leading-5 text-red"
+          >
+            <p class="flex min-w-0 flex-1 basis-64 items-start gap-1.5">
+              <Icon name="alert" :size="15" class="mt-0.5 shrink-0" />
+              <span>草稿保存失败：{{ saveError }}。请保留当前页面，避免丢失编辑。</span>
+            </p>
+            <div class="flex flex-wrap gap-2">
+              <Button size="sm" variant="secondary" @click="persist">重试保存</Button>
+              <Button size="sm" variant="ghost" @click="reloadDraft">重新载入已保存版本</Button>
+            </div>
           </div>
           <div
-            v-for="candidate in task.result?.items.filter(
-              (item) => !lines.some((l) => l.lineId === item.lineId),
-            ) ?? []"
-            :key="candidate.lineId"
-            class="rounded-xl border border-line p-3 text-sm"
+            v-if="error"
+            role="alert"
+            class="mr-auto flex min-w-0 basis-full items-start gap-1.5 text-[13px] leading-5 text-amber sm:basis-0 sm:flex-1"
           >
-            未采用的本地明细：{{ candidate.itemName }} × {{ candidate.quantity ?? '待确认' }}
-            <Button size="sm" variant="secondary" @click="lines.push(line(candidate))"
-              >核对后添加本地明细</Button
-            >
+            <Icon name="alert" :size="15" class="mt-0.5 shrink-0" />
+            <p class="min-w-0">{{ error }}</p>
           </div>
-          <div
-            v-for="s in suggestions.filter(
-              (s) =>
-                !lines.some((l) => l.lineId === s.lineId) &&
-                !reviewedAi.includes(aiSuggestionKey(s)),
-            )"
-            :key="s.lineId ?? s.itemName"
-            class="rounded-xl border border-line p-3 text-sm"
-          >
-            GPT 新增候选：{{ s.itemName }} × {{ s.quantity ?? '待确认' }}（第
-            {{ s.page }} 页）<Button size="sm" variant="secondary" @click="addSuggestion(s)"
-              >核对后添加</Button
-            ><Button size="sm" variant="secondary" @click="acknowledge(s)">核对后不采用此行</Button>
-          </div>
-          <Button
-            variant="secondary"
-            :disabled="!loaded || task.confirmed"
-            @click="lines.push(line())"
-            >添加明细</Button
-          >
-          <div class="flex gap-3">
+          <div class="flex items-center gap-2 max-sm:w-full">
             <Button
-              variant="primary"
+              variant="secondary"
+              class="max-sm:flex-1"
+              :disabled="task.confirmed"
+              @click="persist"
+              >保存草稿</Button
+            >
+            <Button
+              variant="accent"
+              class="max-sm:flex-1"
               :disabled="!!active || task.confirmed || !loaded"
               :loading="busy"
               @click="confirm"
               >确认全部内容并导入</Button
-            ><Button variant="secondary" @click="persist">保存草稿</Button>
+            >
           </div>
-        </fieldset>
+        </div>
       </div>
-      <details @toggle="loadHistory">
-        <summary class="text-sm cursor-pointer">草稿修改与本地识别历史</summary>
-        <details v-for="r in revisions" :key="r.id" class="text-xs mt-2">
-          <summary>
-            {{ r.kind === 'DRAFT' ? '人工草稿' : '本地识别' }} · 版本 {{ r.version }} ·
-            {{ new Date(r.createdAt).toLocaleString() }}
+
+      <!-- 历史与用量：两个折叠区放在同一个面板里 -->
+      <div class="card divide-y divide-line">
+        <details class="group/history" @toggle="loadHistory">
+          <summary
+            class="flex cursor-pointer list-none items-center gap-2.5 px-5 py-3.5 text-sm font-medium text-text transition-colors duration-150 hover:text-ink [&::-webkit-details-marker]:hidden"
+          >
+            <Icon name="history" :size="16" class="shrink-0 text-faint" />草稿修改与本地识别历史<Icon
+              name="chevron-down"
+              :size="16"
+              class="ml-auto shrink-0 text-faint transition-transform duration-150 group-open/history:rotate-180"
+            />
           </summary>
-          <p v-for="(line, i) in revisionRows(r.snapshot)" :key="i" class="mt-1">
-            {{ line.itemName }} · 数量 {{ line.quantity ?? '未知' }}{{ line.unit ?? '' }} · 单价
-            {{ line.unitPrice ?? '未填' }}
-          </p>
+          <div v-if="revisions.length" class="divide-y divide-line border-t border-line">
+            <details v-for="r in revisions" :key="r.id" class="group/rev">
+              <summary
+                class="flex cursor-pointer list-none items-center gap-2 px-5 py-2.5 text-xs text-muted transition-colors duration-150 hover:text-ink [&::-webkit-details-marker]:hidden"
+              >
+                <Icon
+                  name="chevron-right"
+                  :size="14"
+                  class="shrink-0 text-faint transition-transform duration-150 group-open/rev:rotate-90"
+                />
+                <span class="num"
+                  >{{ r.kind === 'DRAFT' ? '人工草稿' : '本地识别' }} · 版本 {{ r.version }} ·
+                  {{ new Date(r.createdAt).toLocaleString() }}</span
+                >
+              </summary>
+              <ul class="space-y-1 pb-3 pl-11 pr-5 text-xs leading-5 text-text">
+                <li v-for="(row, i) in revisionRows(r.snapshot)" :key="i" class="num">
+                  {{ row.itemName }} · 数量 {{ row.quantity ?? '未知' }}{{ row.unit ?? '' }} · 单价
+                  {{ row.unitPrice ?? '未填' }}
+                </li>
+              </ul>
+            </details>
+          </div>
         </details>
-      </details>
-      <details v-if="task.calls.length" class="text-xs text-muted">
-        <summary>GPT 调用与用量</summary>
-        <p v-for="call in task.calls" :key="call.id">
-          第 {{ call.page }} 页 · {{ call.model }} · {{ call.status }} {{ call.error ?? '' }} · 输入
-          {{ call.inputTokens ?? '未知' }} / 输出 {{ call.outputTokens ?? '未知' }} tokens · 费用
-          {{
-            call.status === 'NOT_SENT'
-              ? '未发送，不计费'
-              : call.cost == null
-                ? '未知'
-                : call.cost.toFixed(6)
-          }}
-        </p>
-      </details>
+        <details v-if="task.calls.length" class="group/calls">
+          <summary
+            class="flex cursor-pointer list-none items-center gap-2.5 px-5 py-3.5 text-sm font-medium text-text transition-colors duration-150 hover:text-ink [&::-webkit-details-marker]:hidden"
+          >
+            <Icon name="sparkles" :size="16" class="shrink-0 text-faint" />GPT 调用与用量<Icon
+              name="chevron-down"
+              :size="16"
+              class="ml-auto shrink-0 text-faint transition-transform duration-150 group-open/calls:rotate-180"
+            />
+          </summary>
+          <ul class="space-y-1.5 border-t border-line px-5 py-3 text-xs leading-5 text-muted">
+            <li v-for="call in task.calls" :key="call.id" class="num">
+              第 {{ call.page }} 页 · {{ call.model }} · {{ call.status }} {{ call.error ?? '' }} · 输入
+              {{ call.inputTokens ?? '未知' }} / 输出 {{ call.outputTokens ?? '未知' }} tokens · 费用
+              {{
+                call.status === 'NOT_SENT'
+                  ? '未发送，不计费'
+                  : call.cost == null
+                    ? '未知'
+                    : call.cost.toFixed(6)
+              }}
+            </li>
+          </ul>
+        </details>
+      </div>
     </template>
+
+    <!-- 已有任务编号、任务还没取回：骨架占位 -->
+    <div v-else-if="taskId" class="space-y-4" aria-hidden="true">
+      <Skeleton class="h-18 w-full" />
+      <div class="grid gap-6 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)]">
+        <Skeleton class="h-96" />
+        <Skeleton class="h-96 max-lg:hidden" />
+      </div>
+    </div>
+
+    <!--
+      上传区：未上传时紧跟在步骤条下面；有任务后留在页尾，核对完可以直接导入下一份。
+      只有一个实例，里面始终只有一个 input[type=file]。
+    -->
+    <section class="space-y-3">
+      <FileDropzone
+        accept=".pdf,.png,.jpg,.jpeg,.webp,.bmp"
+        :disabled="busy || !!active"
+        capture
+        @files="upload"
+      >
+        <!--
+          副文案走插槽而不是 hint：只在「·」后折行、两行等宽，手机上不会把「页」单独甩到第二行。
+          三段必须写在同一行，段间空格才会保留（跨行的纯空白会被模板编译去掉）。
+        -->
+        <span class="text-balance text-xs text-faint"
+          ><span class="whitespace-nowrap">PDF / PNG / JPG / WEBP ·</span> <span class="whitespace-nowrap">最大 30MB ·</span> <span class="whitespace-nowrap">最多 30 页</span></span
+        >
+        <span
+          v-if="busy"
+          class="mt-3 size-5 animate-spin rounded-full border-2 border-accent/25 border-t-accent"
+          aria-hidden="true"
+        />
+      </FileDropzone>
+      <div
+        v-if="duplicateFile"
+        class="flex flex-wrap items-center gap-x-4 gap-y-3 rounded-(--radius-card) bg-amber-soft px-4 py-3"
+      >
+        <p class="flex min-w-0 flex-1 basis-64 items-start gap-2 text-[13px] leading-5 text-amber">
+          <Icon name="alert" :size="16" class="mt-0.5 shrink-0" />
+          <span>相同内容的原件已经上传过，本次尚未开始解析。</span>
+        </p>
+        <div class="flex flex-wrap gap-2">
+          <Button
+            size="sm"
+            variant="secondary"
+            :loading="busy"
+            @click="uploadFile(duplicateFile!, true)"
+            >这是新的业务，继续处理</Button
+          ><Button size="sm" variant="ghost" @click="duplicateFile = null">取消本次上传</Button>
+        </div>
+      </div>
+      <p class="flex items-start gap-1.5 text-meta">
+        <Icon name="info" :size="13" class="mt-[3px] shrink-0" />
+        <span>启用自动智能导入后，每张单据的原件将发送给设置中的 GPT 服务。最终入账需人工确认。</span>
+      </p>
+    </section>
   </div>
 </template>

@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#101d36" />
+    <meta name="theme-color" content="#f5f4f0" />
     <script>
       // 防 FOUC：首帧前按本地偏好预置 .dark（与 src/stores/theme.ts 的 STORAGE_KEY 保持一致）
       try {
@@ -17,7 +17,7 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <title>Procure Lite 采购台账</title>
     <style>
-      /* 首屏占位：路由守卫要等 /auth/status 回来才渲染，没有这段就是一片白 */
+      /* 首屏占位：路由守卫要等 /auth/status 回来才渲染，没有这段就是一片白。颜色与 main.css 令牌一致 */
       #boot {
         position: fixed;
         inset: 0;
@@ -26,40 +26,50 @@
         align-items: center;
         justify-content: center;
         gap: 14px;
-        background: #f4f6f9;
-        font-family: "Segoe UI Variable", "Segoe UI", "PingFang SC", "Microsoft YaHei UI", system-ui, sans-serif;
-      }
-      html.dark #boot {
-        background: #0d1219;
-      }
-      html.dark #boot p {
-        color: #7f8b9f;
+        background: #f5f4f0;
+        font-family: "Segoe UI Variable Text", "Segoe UI", -apple-system, "PingFang SC", "Hiragino Sans GB",
+          "Microsoft YaHei UI", "Microsoft YaHei", "Noto Sans CJK SC", system-ui, sans-serif;
+        -webkit-font-smoothing: antialiased;
       }
       #boot .mark {
         display: flex;
         align-items: center;
         justify-content: center;
-        width: 44px;
-        height: 44px;
-        border-radius: 12px;
-        background: #101d36;
+        width: 40px;
+        height: 40px;
+        border-radius: 10px;
+        background: #1b1a17;
         color: #fff;
-        font-weight: 700;
-        font-size: 18px;
-        letter-spacing: -0.5px;
+        font-weight: 600;
+        font-size: 16px;
+        letter-spacing: -0.3px;
       }
       #boot .spin {
         width: 18px;
         height: 18px;
-        border: 2px solid rgba(37, 99, 235, 0.2);
-        border-top-color: #2563eb;
+        border: 2px solid rgba(27, 26, 23, 0.12);
+        border-top-color: #1f7a53;
         border-radius: 50%;
         animation: boot-spin 0.7s linear infinite;
       }
       #boot p {
         margin: 0;
-        color: #5b6880;
+        color: #7b7973;
         font-size: 13px;
+      }
+      html.dark #boot {
+        background: #131311;
+      }
+      html.dark #boot .mark {
+        background: #f3f2ed;
+        color: #1b1a17;
+      }
+      html.dark #boot .spin {
+        border-color: rgba(243, 242, 237, 0.14);
+        border-top-color: #4cc38a;
+      }
+      html.dark #boot p {
+        color: #85837b;
       }
       @keyframes boot-spin {
         to { transform: rotate(360deg); }
@@ -79,7 +89,7 @@
       <p>正在启动 Procure Lite…</p>
     </div>
     <noscript>
-      <p style="padding: 24px; font-family: system-ui, sans-serif; color: #172033">
+      <p style="padding: 24px; font-family: system-ui, sans-serif; color: #1b1a17">
         本系统需要启用 JavaScript 才能使用。
       </p>
     </noscript>

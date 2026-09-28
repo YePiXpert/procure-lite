@@ -1,0 +1,164 @@
+<script setup lang="ts">
+import { computed, ref } from 'vue';
+import Icon from './Icon.vue';
+import { buttonClass } from './button';
+
+/**
+ * 文件上传区：点击选择或拖入。内部始终只有一个真实的 <input type="file">（sr-only，
+ * 整块 <label> 可点），e2e 用 input[type=file] 直接 setInputFiles 也走同一条路径。
+ * capture 为 true 时，手机上额外给一个「拍照上传」按钮：临时给同一个 input 加
+ * capture="environment" 再打开，不会多出第二个 file input。
+ */
+const props = withDefaults(
+  defineProps<{
+    /** 同原生 accept；拖入的文件也按它过滤，不符合的走 rejected 事件 */
+    accept?: string;
+    disabled?: boolean;
+    multiple?: boolean;
+    /** 主文案 */
+    label?: string;
+    /** 副文案（格式、大小限制等），12px faint */
+    hint?: string;
+    /** 手机上显示「拍照上传」按钮 */
+    capture?: boolean;
+  }>(),
+  { label: '点击选择或把文件拖到这里', multiple: false, capture: false },
+);
+const emit = defineEmits<{
+  files: [files: File[]];
+  /** 拖入了不符合 accept 的文件 */
+  rejected: [files: File[]];
+}>();
+
+const inputEl = ref<HTMLInputElement | null>(null);
+const dragging = ref(false);
+let dragDepth = 0;
+
+const acceptList = computed(() =>
+  (props.accept ?? '')
+    .split(',')
+    .map((s) => s.trim().toLowerCase())
+    .filter(Boolean),
+);
+
+function accepted(file: File): boolean {
+  if (acceptList.value.length === 0) return true;
+  const name = file.name.toLowerCase();
+  const type = file.type.toLowerCase();
+  return acceptList.value.some((rule) => {
+    if (rule.startsWith('.')) return name.endsWith(rule);
+    if (rule.endsWith('/*')) return type.startsWith(rule.slice(0, -1));
+    return type === rule;
+  });
+}
+
+function deliver(list: FileList | null | undefined): void {
+  const all = Array.from(list ?? []);
+  const ok = all.filter(accepted);
+  const bad = all.filter((f) => !accepted(f));
+  const picked = props.multiple ? ok : ok.slice(0, 1);
+  if (picked.length) emit('files', picked);
+  if (bad.length) emit('rejected', bad);
+}
+
+/** 恢复成普通文件选择（拍照模式只对下一次生效） */
+function resetInput(): void {
+  const el = inputEl.value;
+  if (!el) return;
+  el.removeAttribute('capture');
+  if (props.accept) el.setAttribute('accept', props.accept);
+  else el.removeAttribute('accept');
+}
+
+/** 点上传区本身时退出拍照模式；input 自己冒泡上来的 click（含 openCamera 触发的）不处理 */
+function onAreaClick(e: MouseEvent): void {
+  if (e.target !== inputEl.value) resetInput();
+}
+
+function onChange(e: Event): void {
+  const el = e.target as HTMLInputElement;
+  deliver(el.files);
+  // 清空后同一个文件还能再选一次
+  el.value = '';
+  resetInput();
+}
+
+function openCamera(): void {
+  const el = inputEl.value;
+  if (!el || props.disabled) return;
+  el.setAttribute('capture', 'environment');
+  el.setAttribute('accept', 'image/*');
+  el.click();
+}
+
+function onDragEnter(e: DragEvent): void {
+  if (props.disabled || !e.dataTransfer?.types.includes('Files')) return;
+  dragDepth += 1;
+  dragging.value = true;
+}
+function onDragOver(e: DragEvent): void {
+  if (props.disabled) return;
+  if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
+}
+function onDragLeave(): void {
+  dragDepth = Math.max(0, dragDepth - 1);
+  if (dragDepth === 0) dragging.value = false;
+}
+function onDrop(e: DragEvent): void {
+  dragDepth = 0;
+  dragging.value = false;
+  if (props.disabled) return;
+  deliver(e.dataTransfer?.files);
+}
+</script>
+
+<template>
+  <div>
+    <label
+      class="group relative flex flex-col items-center justify-center gap-1 p-10 text-center bg-surface border-2 border-dashed rounded-(--radius-card) transition-colors duration-150 has-[:focus-visible]:border-accent has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-accent/20"
+      :class="
+        disabled
+          ? 'cursor-not-allowed opacity-60 border-line-strong'
+          : dragging
+            ? 'cursor-copy border-accent bg-accent-soft/40'
+            : 'cursor-pointer border-line-strong hover:border-accent hover:bg-accent-soft/30'
+      "
+      @click="onAreaClick"
+      @dragenter.prevent="onDragEnter"
+      @dragover.prevent="onDragOver"
+      @dragleave="onDragLeave"
+      @drop.prevent="onDrop"
+    >
+      <input
+        ref="inputEl"
+        type="file"
+        class="sr-only"
+        :accept="accept"
+        :multiple="multiple"
+        :disabled="disabled"
+        @change="onChange"
+        @cancel="resetInput"
+      />
+      <Icon
+        name="upload-cloud"
+        :size="28"
+        class="mb-2 transition-colors duration-150"
+        :class="dragging ? 'text-accent' : disabled ? 'text-faint' : 'text-faint group-hover:text-accent'"
+      />
+      <span class="text-sm font-medium text-ink">{{ label }}</span>
+      <span v-if="hint" class="text-xs text-faint">{{ hint }}</span>
+      <slot />
+    </label>
+    <button
+      v-if="capture"
+      type="button"
+      class="mt-3 w-full lg:hidden"
+      :class="buttonClass({ variant: 'secondary', size: 'lg' })"
+      :disabled="disabled"
+      @click="openCamera"
+    >
+      <Icon name="camera" :size="16" />
+      拍照上传
+    </button>
+  </div>
+</template>

@@ -9,6 +9,7 @@ import {
   DialogTitle,
 } from 'reka-ui';
 import Icon from '@/components/ui/Icon.vue';
+import { buttonClass } from '@/components/ui/button';
 import AiPanel from '@/components/ai/AiPanel.vue';
 import { useAuthStore } from '@/stores/auth';
 import { useThemeStore } from '@/stores/theme';
@@ -25,7 +26,7 @@ interface NavItem {
 }
 
 /**
- * 主导航只放日常要去的地方。导入走顶栏主按钮；供应商、审计日志收进「系统设置」。
+ * 主导航只放日常要去的地方。导入走侧栏顶部主按钮；供应商、审计日志收进「系统设置」。
  */
 const groups: { label: string; items: NavItem[] }[] = [
   {
@@ -72,67 +73,91 @@ const pageTitle = computed(
   () => (route.meta.title as string | undefined) ?? allItems.value.find((i) => i.path === route.path)?.title ?? '',
 );
 
-/** 已经在导入页时，顶栏主按钮换成别的入口，不做无意义的自我跳转 */
+/** 已经在导入页时，主按钮换成别的入口（二级样式），不做无意义的自我跳转 */
 const primaryAction = computed(() =>
   route.path === '/import'
-    ? { to: '/ledger', icon: 'ledger', long: '查看台账', short: '台账' }
-    : { to: '/import', icon: 'plus', long: '导入 OA 单', short: '导入' },
+    ? { to: '/ledger', icon: 'ledger', long: '查看台账', short: '台账', variant: 'secondary' as const }
+    : { to: '/import', icon: 'plus', long: '导入 OA 单', short: '导入', variant: 'primary' as const },
 );
+
+const themeLabel = computed(() => (theme.resolved === 'dark' ? '切换到浅色模式' : '切换到深色模式'));
 
 async function logout(): Promise<void> {
   await auth.logout();
   void router.push('/login');
 }
+
+/* 侧栏导航项：未选中 muted，悬停纸色加深；当前项白底浮起 + 绿色图标 */
+const NAV_BASE =
+  'flex w-full items-center gap-2.5 h-9 px-3 rounded-(--radius-control) border text-[13.5px] cursor-pointer transition-colors duration-150';
+function navItemClass(active = false): string {
+  return active
+    ? `${NAV_BASE} bg-surface border-line text-ink font-medium shadow-(--shadow-xs)`
+    : `${NAV_BASE} border-transparent text-muted hover:bg-primary-soft/70 hover:text-ink`;
+}
 </script>
 
 <template>
-  <div class="h-dvh overflow-hidden lg:flex">
-    <!-- 桌面侧边栏 -->
-    <aside class="hidden lg:flex w-60 shrink-0 flex-col bg-panel text-white h-dvh">
-      <div class="flex items-center gap-2.5 px-5 h-14 border-b border-white/8">
-        <div class="flex items-center justify-center size-7 rounded-lg bg-primary shadow-(--shadow-xs)">
-          <Icon name="inventory" :size="15" class="text-white" />
-        </div>
-        <div class="leading-tight">
-          <p class="text-sm font-semibold tracking-tight">Procure Lite</p>
-          <p class="text-meta text-white/45">采购台账 v2</p>
+  <div class="h-dvh overflow-hidden lg:flex bg-canvas">
+    <!-- 桌面侧边栏：纸色，右侧发丝线 -->
+    <aside class="hidden lg:flex w-60 shrink-0 flex-col h-dvh bg-canvas border-r border-line">
+      <div class="flex items-center gap-2.5 h-14 px-5 shrink-0">
+        <span class="flex items-center justify-center size-6 shrink-0 rounded-md bg-ink text-surface">
+          <Icon name="inventory" :size="14" />
+        </span>
+        <div class="min-w-0 leading-tight">
+          <p class="text-sm font-semibold tracking-tight text-ink">Procure Lite</p>
+          <p class="text-meta">采购台账</p>
         </div>
       </div>
-      <nav class="flex-1 overflow-y-auto px-3 py-4 space-y-5">
-        <div v-for="group in groups" :key="group.label">
-          <p class="px-2.5 mb-1.5 text-[11px] font-medium tracking-wider text-white/40">{{ group.label }}</p>
+
+      <div class="px-3 pt-1 pb-2 shrink-0">
+        <router-link
+          :to="primaryAction.to"
+          class="w-full"
+          :class="buttonClass({ variant: primaryAction.variant, size: 'md' })"
+        >
+          <Icon :name="primaryAction.icon" :size="16" />
+          {{ primaryAction.long }}
+        </router-link>
+      </div>
+
+      <nav class="flex-1 overflow-y-auto px-3 pb-4">
+        <div v-for="group in groups" :key="group.label" class="mt-5">
+          <p class="px-3 mb-1.5 text-[11px] font-medium tracking-wider text-faint">{{ group.label }}</p>
           <div class="space-y-0.5">
             <router-link
               v-for="item in group.items"
               :key="item.path"
+              v-slot="{ href, navigate, isActive, isExactActive }"
               :to="item.path"
-              class="group relative flex items-center gap-2.5 h-9 px-2.5 rounded-(--radius-control) text-[13px] text-white/65 hover:text-white hover:bg-white/5 transition-colors duration-150"
-              active-class="bg-white/10 text-white font-medium is-active"
+              custom
             >
-              <span
-                class="absolute left-0 top-1/2 -translate-y-1/2 h-4 w-[3px] rounded-full bg-primary opacity-0 group-[.is-active]:opacity-100 transition-opacity"
-                aria-hidden="true"
-              />
-              <Icon :name="item.icon" :size="15" />
-              {{ item.title }}
+              <a
+                :href="href"
+                :class="navItemClass(isActive)"
+                :aria-current="isExactActive ? 'page' : undefined"
+                @click="navigate"
+              >
+                <Icon :name="item.icon" :size="16" class="shrink-0" :class="isActive ? 'text-accent' : ''" />
+                {{ item.title }}
+              </a>
             </router-link>
           </div>
         </div>
       </nav>
-      <div class="px-3 pt-2 pb-4 border-t border-white/8 space-y-0.5">
-        <button
-          class="flex w-full items-center gap-2.5 h-9 px-2.5 rounded-(--radius-control) text-[13px] text-white/60 hover:text-white hover:bg-white/5 transition-colors cursor-pointer"
-          :aria-label="theme.resolved === 'dark' ? '切换到浅色模式' : '切换到深色模式'"
-          @click="theme.toggle()"
-        >
-          <Icon :name="theme.resolved === 'dark' ? 'sun' : 'moon'" :size="15" />
+
+      <div class="px-3 pt-2 pb-4 border-t border-line space-y-0.5 shrink-0">
+        <button type="button" :class="navItemClass()" :aria-expanded="aiOpen" @click="aiOpen = true">
+          <Icon name="sparkles" :size="16" class="shrink-0" />
+          AI 助手
+        </button>
+        <button type="button" :class="navItemClass()" :aria-label="themeLabel" @click="theme.toggle()">
+          <Icon :name="theme.resolved === 'dark' ? 'sun' : 'moon'" :size="16" class="shrink-0" />
           {{ theme.resolved === 'dark' ? '浅色模式' : '深色模式' }}
         </button>
-        <button
-          class="flex w-full items-center gap-2.5 h-9 px-2.5 rounded-(--radius-control) text-[13px] text-white/60 hover:text-white hover:bg-white/5 transition-colors cursor-pointer"
-          @click="logout"
-        >
-          <Icon name="logout" :size="15" />
+        <button type="button" :class="navItemClass()" @click="logout">
+          <Icon name="logout" :size="16" class="shrink-0" />
           退出登录
         </button>
       </div>
@@ -140,46 +165,42 @@ async function logout(): Promise<void> {
 
     <!-- 主区域 -->
     <div class="flex-1 flex flex-col min-w-0 min-h-0 h-dvh">
-      <!-- 顶栏 -->
-      <header class="flex items-center gap-3 h-14 px-4 lg:px-6 bg-surface/85 backdrop-blur-md border-b border-line">
-        <div class="flex items-center justify-center size-7 rounded-lg bg-panel lg:hidden shrink-0">
-          <Icon name="inventory" :size="14" class="text-white" />
-        </div>
-        <h1 class="text-[15px] font-semibold text-ink tracking-tight truncate">{{ pageTitle }}</h1>
-        <div class="ml-auto flex items-center gap-2">
-          <!-- 移动端主题切换（桌面端在侧边栏底部） -->
+      <!-- 移动端顶栏（桌面端没有顶栏，页标题由各页的 PageHeader 给出） -->
+      <header class="lg:hidden flex items-center gap-2.5 h-13 px-4 shrink-0 bg-surface/90 backdrop-blur-md border-b border-line">
+        <span class="flex items-center justify-center size-7 shrink-0 rounded-md bg-ink text-surface">
+          <Icon name="inventory" :size="15" />
+        </span>
+        <p class="min-w-0 truncate text-base font-semibold tracking-tight text-ink">{{ pageTitle }}</p>
+        <div class="ml-auto flex items-center gap-1.5">
           <button
             type="button"
-            class="lg:hidden inline-flex items-center justify-center size-8 rounded-(--radius-control) text-muted hover:text-primary hover:bg-canvas transition-colors cursor-pointer"
-            :aria-label="theme.resolved === 'dark' ? '切换到浅色模式' : '切换到深色模式'"
-            @click="theme.toggle()"
-          >
-            <Icon :name="theme.resolved === 'dark' ? 'sun' : 'moon'" :size="15" />
-          </button>
-          <button
-            type="button"
-            class="inline-flex items-center gap-1.5 h-8 px-3 rounded-(--radius-control) bg-surface text-text border border-line-strong hover:border-primary hover:text-primary text-xs font-medium transition-all active:scale-[0.98] cursor-pointer shadow-(--shadow-xs)"
+            :class="buttonClass({ variant: 'ghost', size: 'sm', iconOnly: true })"
+            aria-label="AI 助手"
             :aria-expanded="aiOpen"
             @click="aiOpen = true"
           >
-            <Icon name="sparkles" :size="13" />
-            <span class="hidden sm:inline">AI 助手</span>
+            <Icon name="sparkles" :size="18" />
           </button>
-          <router-link
-            :to="primaryAction.to"
-            class="inline-flex items-center gap-1.5 h-8 px-3 rounded-(--radius-control) bg-primary text-white text-xs font-medium hover:bg-primary-hover transition-all active:scale-[0.98] shadow-(--shadow-xs)"
-          >
-            <Icon :name="primaryAction.icon" :size="13" />
-            <span class="hidden sm:inline">{{ primaryAction.long }}</span><span class="sm:hidden">{{ primaryAction.short }}</span>
+          <router-link :to="primaryAction.to" :class="buttonClass({ variant: primaryAction.variant, size: 'sm' })">
+            <Icon :name="primaryAction.icon" :size="14" />
+            {{ primaryAction.short }}
           </router-link>
         </div>
       </header>
 
-      <main ref="mainEl" class="flex-1 min-h-0 overflow-y-auto px-4 lg:px-6 py-5 pb-24 lg:pb-6 max-w-[1600px] w-full mx-auto">
+      <!--
+        <main> 是唯一的滚动容器。桌面端内容最宽 1440px 居中：用 padding 算出两侧留白，
+        不再套一层 max-w 容器——各页根元素仍是 main 的直接子元素（h-full 照常生效），
+        底部 padding 也能正常计入滚动高度。
+      -->
+      <main
+        ref="mainEl"
+        class="flex-1 min-h-0 overflow-y-auto px-4 pt-5 pb-[calc(6rem+env(safe-area-inset-bottom))] lg:px-[max(2rem,calc((100%-1440px)/2))] lg:pt-8 lg:pb-10"
+      >
         <router-view />
       </main>
 
-      <!-- 移动端底部导航 -->
+      <!-- 移动端底部标签栏 -->
       <nav
         class="lg:hidden fixed bottom-0 inset-x-0 z-30 grid grid-cols-5 bg-surface/90 backdrop-blur-md border-t border-line pb-[env(safe-area-inset-bottom)]"
         aria-label="主导航"
@@ -187,61 +208,93 @@ async function logout(): Promise<void> {
         <router-link
           v-for="item in mobileItems"
           :key="item.path"
+          v-slot="{ href, navigate, isActive, isExactActive }"
           :to="item.path"
-          class="group flex flex-col items-center justify-center gap-0.5 h-14 text-meta text-faint transition-colors"
-          active-class="text-primary font-semibold is-active"
+          custom
         >
-          <span class="flex items-center justify-center h-6 w-11 rounded-full transition-colors group-[.is-active]:bg-primary-soft">
-            <Icon :name="item.icon" :size="17" />
-          </span>
-          {{ item.title }}
+          <a
+            :href="href"
+            class="flex flex-col items-center justify-center gap-0.5 h-15 text-[11px] leading-4 transition-colors duration-150"
+            :class="isActive ? 'text-ink font-medium' : 'text-faint'"
+            :aria-current="isExactActive ? 'page' : undefined"
+            @click="navigate"
+          >
+            <span
+              class="flex items-center justify-center h-7 w-11 rounded-(--radius-control) transition-colors duration-150"
+              :class="isActive ? 'bg-primary-soft text-accent' : ''"
+            >
+              <Icon :name="item.icon" :size="20" />
+            </span>
+            {{ item.title }}
+          </a>
         </router-link>
         <button
           type="button"
-          class="group flex flex-col items-center justify-center gap-0.5 h-14 text-meta cursor-pointer transition-colors"
-          :class="moreOpen ? 'text-primary font-semibold is-active' : 'text-faint'"
+          class="flex flex-col items-center justify-center gap-0.5 h-15 text-[11px] leading-4 cursor-pointer transition-colors duration-150"
+          :class="moreOpen ? 'text-ink font-medium' : 'text-faint'"
           :aria-expanded="moreOpen"
           @click="moreOpen = true"
         >
-          <span class="flex items-center justify-center h-6 w-11 rounded-full transition-colors group-[.is-active]:bg-primary-soft">
-            <Icon name="settings" :size="17" />
+          <span
+            class="flex items-center justify-center h-7 w-11 rounded-(--radius-control) transition-colors duration-150"
+            :class="moreOpen ? 'bg-primary-soft' : ''"
+          >
+            <Icon name="more-horizontal" :size="20" />
           </span>
           更多
         </button>
       </nav>
 
-      <!-- 移动端「更多」面板 -->
+      <!-- 移动端「更多」面板：底部抽屉 -->
       <DialogRoot :open="moreOpen" @update:open="(v) => (moreOpen = v)">
         <DialogPortal>
-          <DialogOverlay class="lg:hidden fixed inset-0 z-50 bg-black/50 backdrop-blur-sm data-[state=open]:animate-in data-[state=open]:fade-in-0" />
+          <DialogOverlay class="lg:hidden fixed inset-0 z-50 bg-ink/40 dark:bg-black/60 backdrop-blur-[2px] data-[state=open]:animate-fade-in" />
           <DialogContent
             aria-label="更多功能"
-            class="lg:hidden fixed inset-x-0 bottom-0 z-50 bg-surface rounded-t-2xl p-4 pb-8 max-h-[70vh] overflow-y-auto focus:outline-none"
+            class="lg:hidden fixed inset-x-0 bottom-0 z-50 max-h-[70vh] overflow-y-auto bg-canvas border-t border-line rounded-t-2xl px-4 pt-2 pb-[calc(1.5rem+env(safe-area-inset-bottom))] shadow-(--shadow-pop) focus:outline-hidden data-[state=open]:animate-sheet-in"
           >
-            <div class="flex items-center justify-between mb-3">
-              <DialogTitle class="text-sm font-semibold text-ink">更多功能</DialogTitle>
-              <button class="p-1.5 rounded-(--radius-control) text-faint hover:text-text hover:bg-canvas transition-colors cursor-pointer" aria-label="关闭" @click="moreOpen = false">
+            <div class="mx-auto mb-2 h-1 w-9 rounded-full bg-line-strong" aria-hidden="true" />
+            <div class="flex items-center justify-between mb-4">
+              <DialogTitle class="text-[15px] font-semibold text-ink">更多功能</DialogTitle>
+              <button
+                type="button"
+                :class="buttonClass({ variant: 'ghost', size: 'sm', iconOnly: true })"
+                aria-label="关闭"
+                @click="moreOpen = false"
+              >
                 <Icon name="close" :size="16" />
               </button>
             </div>
-            <div class="grid grid-cols-4 gap-3">
+            <div class="grid grid-cols-4 gap-2">
               <router-link
                 v-for="item in moreItems"
                 :key="item.path"
                 :to="item.path"
-                class="flex flex-col items-center gap-1.5 p-2 rounded-(--radius-card) text-xs text-muted active:bg-canvas transition-colors"
+                class="flex flex-col items-center gap-1.5 py-2 rounded-(--radius-card) text-xs text-muted active:bg-primary-soft transition-colors duration-150"
               >
-                <span class="flex items-center justify-center size-10 rounded-xl bg-canvas border border-line text-ink">
-                  <Icon :name="item.icon" :size="17" />
+                <span class="flex items-center justify-center size-11 rounded-xl bg-surface border border-line text-ink">
+                  <Icon :name="item.icon" :size="20" />
                 </span>
                 {{ item.title }}
               </router-link>
               <button
-                class="flex flex-col items-center gap-1.5 p-2 rounded-(--radius-card) text-xs text-red cursor-pointer"
+                type="button"
+                class="flex flex-col items-center gap-1.5 py-2 rounded-(--radius-card) text-xs text-muted active:bg-primary-soft transition-colors duration-150 cursor-pointer"
+                :aria-label="themeLabel"
+                @click="theme.toggle()"
+              >
+                <span class="flex items-center justify-center size-11 rounded-xl bg-surface border border-line text-ink">
+                  <Icon :name="theme.resolved === 'dark' ? 'sun' : 'moon'" :size="20" />
+                </span>
+                {{ theme.resolved === 'dark' ? '浅色模式' : '深色模式' }}
+              </button>
+              <button
+                type="button"
+                class="flex flex-col items-center gap-1.5 py-2 rounded-(--radius-card) text-xs text-muted active:bg-primary-soft transition-colors duration-150 cursor-pointer"
                 @click="logout()"
               >
-                <span class="flex items-center justify-center size-10 rounded-xl bg-red-soft border border-red/20">
-                  <Icon name="logout" :size="17" />
+                <span class="flex items-center justify-center size-11 rounded-xl bg-surface border border-line text-ink">
+                  <Icon name="logout" :size="20" />
                 </span>
                 退出
               </button>

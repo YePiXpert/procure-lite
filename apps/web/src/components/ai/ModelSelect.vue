@@ -43,7 +43,7 @@ const options = computed(() => [
     <button
       v-if="models.length"
       type="button"
-      class="text-xs text-primary mt-1"
+      class="mt-1.5 text-xs text-accent hover:underline underline-offset-2 cursor-pointer"
       @click="manual = !manual"
     >
       {{ manual ? '从列表选择' : '手动填写' }}

@@ -2,6 +2,10 @@
 import Icon from './Icon.vue';
 import { RouterLink } from 'vue-router';
 
+/**
+ * KPI 瓦片：标签 + 大号数字 + 提示。没有彩色图标方块，
+ * tone 只体现在标签前的 6px 圆点（gray 不画）；可点击时悬停描边加深、右上角图标换成箭头。
+ */
 defineProps<{
   label: string;
   value: string | number;
@@ -12,12 +16,12 @@ defineProps<{
   to?: string;
 }>();
 
-const tones = {
-  blue: 'bg-primary-soft text-primary',
-  teal: 'bg-teal-soft text-teal',
-  amber: 'bg-amber-soft text-amber',
-  red: 'bg-red-soft text-red',
-  gray: 'bg-canvas text-muted',
+const dots = {
+  blue: 'bg-blue',
+  teal: 'bg-accent',
+  amber: 'bg-amber',
+  red: 'bg-red',
+  gray: '',
 } as const;
 </script>
 
@@ -25,25 +29,32 @@ const tones = {
   <component
     :is="to ? RouterLink : 'div'"
     :to="to"
-    class="card group flex items-center gap-3.5 px-4 py-3.5 transition-all"
-    :class="to ? 'hover:-translate-y-0.5 hover:shadow-(--shadow-pop) hover:border-primary/40' : ''"
+    class="group block min-w-0 bg-surface border border-line rounded-(--radius-card) p-4 transition-colors duration-150"
+    :class="to ? 'hover:border-line-strong focus-visible:border-line-strong' : ''"
   >
-    <span class="flex items-center justify-center size-10 rounded-(--radius-card) shrink-0" :class="tones[tone ?? 'gray']">
-      <Icon :name="icon" :size="18" />
-    </span>
-    <div class="min-w-0">
-      <p class="text-xs text-muted truncate">{{ label }}</p>
-      <p class="text-xl font-semibold text-ink num leading-tight">
-        {{ value }}<span v-if="unit" class="ml-1 text-xs font-medium text-faint">{{ unit }}</span>
+    <div class="flex items-center justify-between gap-2">
+      <p class="flex items-center gap-1.5 min-w-0 text-xs text-muted">
+        <span v-if="tone && tone !== 'gray'" class="size-1.5 shrink-0 rounded-full" :class="dots[tone]" aria-hidden="true" />
+        <span class="truncate">{{ label }}</span>
       </p>
-      <p v-if="hint" class="text-meta text-faint truncate mt-0.5">{{ hint }}</p>
+      <span class="relative size-4 shrink-0 text-faint">
+        <Icon
+          :name="icon"
+          :size="16"
+          class="absolute inset-0 transition-opacity duration-150"
+          :class="to ? 'group-hover:opacity-0 group-focus-visible:opacity-0' : ''"
+        />
+        <Icon
+          v-if="to"
+          name="chevron-right"
+          :size="16"
+          class="absolute inset-0 text-ink opacity-0 transition-opacity duration-150 group-hover:opacity-100 group-focus-visible:opacity-100"
+        />
+      </span>
     </div>
-    <!-- 可点击卡片：hover 时箭头滑入，给出「能点进去」的明示 -->
-    <Icon
-      v-if="to"
-      name="chevron-right"
-      :size="15"
-      class="ml-auto shrink-0 -translate-x-1 text-faint opacity-0 transition-all group-hover:translate-x-0 group-hover:text-primary group-hover:opacity-100"
-    />
+    <p class="mt-2 flex items-baseline gap-1 text-[26px] leading-8 font-semibold tracking-tight text-ink tabular-nums">
+      <span class="truncate">{{ value }}</span><span v-if="unit" class="text-xs font-normal tracking-normal text-muted">{{ unit }}</span>
+    </p>
+    <p v-if="hint" class="mt-1 text-meta truncate">{{ hint }}</p>
   </component>
 </template>

@@ -47,7 +47,7 @@ const selectedLabel = computed(() => items.value.find((o) => o.value === props.m
 
 <template>
   <div class="block">
-    <span v-if="label" class="block mb-1.5 text-xs font-semibold text-muted">
+    <span v-if="label" class="block mb-1.5 text-[13px] leading-5 font-medium text-text">
       {{ label }}<span v-if="required" class="text-red ml-0.5">*</span>
     </span>
     <SelectRoot
@@ -57,12 +57,12 @@ const selectedLabel = computed(() => items.value.find((o) => o.value === props.m
       <!-- 清除按钮独立于 trigger 之外，避免 button 嵌套 button 的非法 DOM -->
       <div class="relative">
         <SelectTrigger
-          class="inline-flex w-full h-9.5 items-center justify-between gap-2 px-3 text-sm bg-surface border rounded-(--radius-control) data-[placeholder]:text-faint focus:outline-none focus:ring-2 disabled:opacity-50 disabled:cursor-not-allowed transition-colors cursor-pointer"
+          class="group inline-flex w-full h-9 items-center justify-between gap-2 pl-3 pr-2.5 text-sm text-text bg-surface border rounded-(--radius-control) data-[placeholder]:text-faint transition-[color,background-color,border-color,box-shadow] duration-150 ease-out focus-visible:outline-hidden focus-visible:ring-2 data-[state=open]:ring-2 disabled:bg-surface-2 disabled:text-muted disabled:cursor-not-allowed cursor-pointer"
           :class="[
-            clearable && modelValue ? 'pr-7' : '',
+            clearable && modelValue ? 'pr-8' : '',
             error
-              ? 'border-red focus:border-red focus:ring-red/20'
-              : 'border-line-strong hover:border-primary focus:border-primary focus:ring-primary/20',
+              ? 'border-red focus-visible:border-red focus-visible:ring-red/20 data-[state=open]:ring-red/20'
+              : 'border-line-strong hover:border-faint focus-visible:border-accent focus-visible:ring-accent/20 data-[state=open]:border-accent data-[state=open]:ring-accent/20 disabled:hover:border-line-strong',
           ]"
           :disabled="disabled"
           :aria-label="label"
@@ -71,43 +71,51 @@ const selectedLabel = computed(() => items.value.find((o) => o.value === props.m
           <span class="truncate">
             <SelectValue :placeholder="placeholderText">{{ selectedLabel ?? placeholderText }}</SelectValue>
           </span>
-          <Icon name="chevron-down" :size="14" class="shrink-0 text-muted" />
+          <Icon
+            name="chevron-down"
+            :size="16"
+            class="shrink-0 text-faint transition-transform duration-150 group-data-[state=open]:rotate-180"
+            :class="clearable && modelValue ? 'invisible' : ''"
+          />
         </SelectTrigger>
         <button
           v-if="clearable && modelValue"
           type="button"
-          class="absolute right-2 top-1/2 -translate-y-1/2 z-10 flex items-center justify-center size-5 rounded-full text-faint hover:text-red hover:bg-red-soft cursor-pointer"
+          class="absolute right-1.5 top-1/2 -translate-y-1/2 z-10 flex items-center justify-center size-6 rounded-full text-faint hover:text-ink hover:bg-primary-soft transition-colors duration-150 cursor-pointer disabled:pointer-events-none"
           aria-label="清除选择"
           :disabled="disabled"
           @click.prevent.stop="emit('update:modelValue', '')"
-        >×</button>
+        >
+          <Icon name="close" :size="13" />
+        </button>
       </div>
-      <span v-if="error" class="mt-1 flex items-start gap-1 text-xs text-red">
+      <span v-if="error" class="field-error">
         <Icon name="alert" :size="12" class="mt-0.5 shrink-0" />{{ error }}
       </span>
       <SelectPortal>
         <SelectContent
           position="popper"
           :side-offset="4"
-          class="z-50 max-h-72 min-w-(--reka-select-trigger-width) overflow-hidden bg-surface border border-line rounded-(--radius-control) shadow-(--shadow-pop) data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95"
+          class="z-50 max-h-72 data-[state=open]:animate-pop-in min-w-(--reka-select-trigger-width) overflow-hidden bg-surface border border-line rounded-[10px] shadow-(--shadow-pop)"
         >
-          <SelectScrollUpButton class="flex h-6 items-center justify-center text-muted"><Icon name="chevron-down" :size="12" class="rotate-180" /></SelectScrollUpButton>
+          <SelectScrollUpButton class="flex h-6 items-center justify-center text-faint"><Icon name="chevron-down" :size="14" class="rotate-180" /></SelectScrollUpButton>
           <SelectViewport class="p-1">
             <SelectItem
               v-for="opt in items"
               :key="opt.value"
               :value="opt.value"
-              class="relative flex items-center h-8 px-7 pr-3 text-sm rounded-md cursor-pointer data-[highlighted]:bg-primary-soft data-[highlighted]:text-primary data-[state=checked]:font-semibold"
+              class="relative flex items-center h-8 pl-7 pr-2 text-[13.5px] text-text rounded-md cursor-pointer select-none outline-hidden data-[highlighted]:bg-primary-soft data-[highlighted]:text-ink data-[state=checked]:font-medium data-[state=checked]:text-ink data-[disabled]:opacity-50 data-[disabled]:pointer-events-none"
             >
               <SelectItemIndicator class="absolute left-2 inline-flex items-center">
-                <Icon name="check" :size="13" class="text-primary" />
+                <Icon name="check" :size="14" class="text-accent" />
               </SelectItemIndicator>
               <span class="truncate">{{ opt.label }}</span>
             </SelectItem>
           </SelectViewport>
-          <SelectScrollDownButton class="flex h-6 items-center justify-center text-muted"><Icon name="chevron-down" :size="12" /></SelectScrollDownButton>
+          <SelectScrollDownButton class="flex h-6 items-center justify-center text-faint"><Icon name="chevron-down" :size="14" /></SelectScrollDownButton>
         </SelectContent>
       </SelectPortal>
     </SelectRoot>
   </div>
 </template>
+

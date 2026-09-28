@@ -33,12 +33,12 @@ const emit = defineEmits<{ 'update:modelValue': [v: string] }>();
         :disabled="disabled"
         :aria-label="ariaLabel"
         :aria-invalid="error ? 'true' : undefined"
-        class="appearance-none w-full bg-surface border rounded-(--radius-control) text-text cursor-pointer focus:outline-none focus:ring-2 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+        class="appearance-none w-full bg-surface text-text border rounded-(--radius-control) cursor-pointer transition-[color,background-color,border-color,box-shadow] duration-150 ease-out focus:outline-hidden focus:ring-2 disabled:bg-surface-2 disabled:text-muted disabled:cursor-not-allowed"
         :class="[
-          size === 'sm' ? 'h-7 pl-2 pr-6 text-xs' : 'h-9.5 pl-3 pr-8 text-sm',
+          size === 'sm' ? 'h-7 pl-2 pr-6 text-xs' : 'h-9 pl-3 pr-9 text-base sm:text-sm',
           error
             ? 'border-red focus:border-red focus:ring-red/20'
-            : 'border-line-strong hover:border-primary focus:border-primary focus:ring-primary/20',
+            : 'border-line-strong hover:border-faint focus:border-accent focus:ring-accent/20 disabled:hover:border-line-strong',
         ]"
         @change="emit('update:modelValue', ($event.target as HTMLSelectElement).value)"
       >
@@ -47,12 +47,12 @@ const emit = defineEmits<{ 'update:modelValue': [v: string] }>();
       </select>
       <Icon
         name="chevron-down"
-        :size="size === 'sm' ? 11 : 14"
-        class="absolute top-1/2 -translate-y-1/2 text-muted pointer-events-none"
+        :size="size === 'sm' ? 12 : 16"
+        class="absolute top-1/2 -translate-y-1/2 text-faint pointer-events-none"
         :class="size === 'sm' ? 'right-1.5' : 'right-2.5'"
       />
     </div>
-    <span v-if="error" class="mt-1 flex items-start gap-1 text-xs text-red">
+    <span v-if="error" class="field-error">
       <Icon name="alert" :size="12" class="mt-0.5 shrink-0" />{{ error }}
     </span>
   </div>

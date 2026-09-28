@@ -2,6 +2,8 @@
 import { computed, onMounted, reactive, ref } from 'vue';
 import Icon from '@/components/ui/Icon.vue';
 import Button from '@/components/ui/Button.vue';
+import PageHeader from '@/components/ui/PageHeader.vue';
+import { buttonClass } from '@/components/ui/button';
 import StatCard from '@/components/ui/StatCard.vue';
 import SearchInput from '@/components/ui/SearchInput.vue';
 import EmptyState from '@/components/ui/EmptyState.vue';
@@ -91,6 +93,15 @@ const formCounts = computed(() =>
   Object.fromEntries(ACTIVE_ITEM_STATUSES.map((s) => [s, groupByForm(columns.value[s]).length])) as Record<ActiveItemStatus, number>,
 );
 const truncated = (s: ActiveItemStatus) => (totals.value[s] ?? 0) > columns.value[s].length;
+
+/** 页头说明：本地化日期 + 待处理单数 / 明细数（用已加载的列数据，不另发请求） */
+const headerDescription = computed(() => {
+  const date = new Date().toLocaleDateString('zh-CN', { year: 'numeric', month: 'long', day: 'numeric' });
+  if (loading.value || totals.value.PENDING_PURCHASE == null) return date;
+  const forms = ACTIVE_ITEM_STATUSES.reduce((n, s) => n + formCounts.value[s], 0);
+  const lines = ACTIVE_ITEM_STATUSES.reduce((n, s) => n + (totals.value[s] ?? 0), 0);
+  return `${date} · 待处理 ${forms} 单 · ${lines} 条明细`;
+});
 
 /* ------------------------------- 勾选与展开 ------------------------------- */
 
@@ -261,10 +272,11 @@ async function stockIn(): Promise<void> {
 
 /* --------------------------------- 展示 --------------------------------- */
 
-const COLUMN_META: Record<ActiveItemStatus, { tone: string; count: string; hint: string; icon: string }> = {
-  PENDING_PURCHASE: { tone: 'text-primary bg-primary-soft border-primary/20', count: 'bg-primary-soft text-primary', hint: '登记供应商与成交价后标记已下单', icon: 'kanban' },
-  PENDING_ARRIVAL: { tone: 'text-amber bg-amber-soft border-amber/25', count: 'bg-amber-soft text-amber', hint: '到货后确认；只到了一部分就只勾到货的行', icon: 'box' },
-  PENDING_DISTRIBUTION: { tone: 'text-teal bg-teal-soft border-teal/25', count: 'bg-teal-soft text-teal', hint: '发放给申领人（默认整单给经办人），或整单入库', icon: 'distribution' },
+/** 列头圆点与 KPI 圆点沿用 StatusBadge 的状态色：待采购 中性、待到货 琥珀、待分发 蓝 */
+const COLUMN_META: Record<ActiveItemStatus, { dot: string; tone: 'gray' | 'amber' | 'blue'; hint: string; icon: string }> = {
+  PENDING_PURCHASE: { dot: 'bg-faint', tone: 'gray', hint: '登记供应商与成交价后标记已下单', icon: 'clipboard' },
+  PENDING_ARRIVAL: { dot: 'bg-amber', tone: 'amber', hint: '到货后确认；只到了一部分就只勾到货的行', icon: 'truck' },
+  PENDING_DISTRIBUTION: { dot: 'bg-blue', tone: 'blue', hint: '发放给申领人（默认整单给经办人），或整单入库', icon: 'distribution' },
 };
 
 function peopleLine(g: FormGroup): string {
@@ -273,29 +285,43 @@ function peopleLine(g: FormGroup): string {
 </script>
 
 <template>
-  <div class="space-y-4 lg:h-full lg:flex lg:flex-col">
-    <!-- 概要 -->
-    <div class="grid grid-cols-2 lg:grid-cols-5 gap-3">
+  <div class="flex flex-col lg:h-full">
+    <PageHeader title="工作台" :description="headerDescription">
+      <span
+        v-if="refreshing"
+        class="inline-block size-3.5 border-2 border-line-strong border-t-ink rounded-full animate-spin"
+        aria-label="刷新中"
+      />
+      <Button variant="ghost" icon-only aria-label="刷新" @click="refresh">
+        <Icon name="refresh" :size="16" />
+      </Button>
+    </PageHeader>
+
+    <!-- 概要：手机上贴边横向滑动，桌面端五列；加载中 hint 先占一行（不间断空格），数据到了不跳动 -->
+    <div class="-mx-4 flex gap-3 overflow-x-auto snap-x scroll-px-4 px-4 pb-1 lg:mx-0 lg:grid lg:grid-cols-5 lg:overflow-visible lg:px-0 lg:pb-0">
       <StatCard
         v-for="s in ACTIVE_ITEM_STATUSES"
         :key="s"
+        class="shrink-0 basis-[46%] snap-start sm:basis-[30%]"
         :label="ITEM_STATUS_LABELS[s]"
         :value="loading ? '—' : formCounts[s]"
         unit="单"
-        :hint="loading ? '' : `${totals[s] ?? 0} 条明细`"
+        :hint="loading ? '\u00a0' : `${totals[s] ?? 0} 条明细`"
         :icon="COLUMN_META[s].icon"
-        :tone="s === 'PENDING_PURCHASE' ? 'blue' : s === 'PENDING_ARRIVAL' ? 'amber' : 'teal'"
+        :tone="COLUMN_META[s].tone"
       />
       <StatCard
+        class="shrink-0 basis-[46%] snap-start sm:basis-[30%]"
         label="待付款"
         :value="summary?.payment.unpaidCount ?? '—'"
         unit="条"
         :hint="summary ? `${formatCurrency(summary.payment.unpaidAmount)} · 未开票 ${summary.payment.noInvoiceCount}` : ''"
-        icon="ledger"
+        icon="wallet"
         :tone="summary && summary.payment.unpaidCount > 0 ? 'amber' : 'gray'"
         to="/ledger?paymentStatus=UNPAID"
       />
       <StatCard
+        class="shrink-0 basis-[46%] snap-start sm:basis-[30%]"
         label="库存预警"
         :value="summary?.inventory.lowStockCount ?? '—'"
         unit="项"
@@ -303,153 +329,175 @@ function peopleLine(g: FormGroup): string {
         icon="alert"
         :tone="summary && summary.inventory.lowStockCount > 0 ? 'red' : 'gray'"
         to="/inventory?low=1"
-        class="col-span-2 lg:col-span-1"
       />
     </div>
 
-    <div class="flex items-center gap-3">
-      <SearchInput
-        v-model="filters.q"
-        placeholder="筛选单据：流水号 / 品名 / 经办人 / 部门"
-        aria-label="筛选单据"
-        :delay="150"
-        class="w-full sm:w-80"
-      />
-      <span v-if="refreshing" class="inline-block size-3.5 border-2 border-primary/30 border-t-primary rounded-full animate-spin" aria-label="刷新中" />
-    </div>
+    <SearchInput
+      v-model="filters.q"
+      placeholder="筛选单据：流水号 / 品名 / 经办人 / 部门"
+      aria-label="筛选单据"
+      :delay="150"
+      class="mt-6 w-full sm:w-80"
+    />
 
-    <div v-if="loading" class="grid grid-cols-1 md:grid-cols-3 gap-4">
-      <div v-for="i in 3" :key="i" class="card flex flex-col space-y-2.5 p-3 min-h-80">
-        <Skeleton class="h-9 w-24" />
-        <Skeleton class="h-36" />
-        <Skeleton class="h-28" />
+    <div v-if="loading" class="mt-4 grid gap-8 lg:grid-cols-3 lg:gap-4">
+      <div v-for="i in 3" :key="i">
+        <Skeleton class="h-5 w-36" />
+        <Skeleton class="mt-2 h-3.5 w-56" />
+        <div v-for="j in 2" :key="j" class="card mt-3 space-y-3 p-4">
+          <Skeleton class="h-4 w-40" />
+          <Skeleton class="h-3 w-52" />
+          <Skeleton class="h-14" />
+          <Skeleton class="h-8 w-44" />
+        </div>
       </div>
     </div>
-    <ErrorState v-else-if="loadError && totals.PENDING_PURCHASE == null" :message="loadError" @retry="load()" />
-    <div v-else class="grid grid-cols-1 md:grid-cols-3 gap-4 lg:flex-1 lg:min-h-0">
+    <div v-else-if="loadError && totals.PENDING_PURCHASE == null" class="card mt-4">
+      <ErrorState :message="loadError" @retry="load()" />
+    </div>
+    <!--
+      看板：列与画布同色、无描边。桌面端三列撑满剩余视口、列内滚动：
+      lg:-mb-10 吃掉 <main> 的 lg:pb-10，列一直延伸到窗口底边（卡片从底边滑出，而不是在
+      窗口上方 40px 处被硬切）；那 40px 留白挪进列内（lg:pb-10），滚到底时最后一张卡片照样离底边 40px。
+      手机上三列上下排、随内容自然增高，<main> 是唯一的滚动容器（列没有边框，列内滚动会在看不见的边上把卡片切断）。
+      列头用 subgrid 共享一行：某列提示折成两行时，三列的第一张卡片仍然对齐。
+    -->
+    <div
+      v-else
+      class="mt-4 grid gap-8 lg:grid-cols-3 lg:grid-rows-[auto_minmax(0,1fr)] lg:gap-x-4 lg:gap-y-3 lg:flex-1 lg:min-h-80 lg:-mb-10"
+    >
       <section
         v-for="status in ACTIVE_ITEM_STATUSES"
         :key="status"
-        class="card flex flex-col min-h-80 overflow-hidden lg:h-full lg:min-h-0"
+        class="flex flex-col min-w-0 lg:row-span-2 lg:grid lg:grid-rows-subgrid lg:h-full lg:min-h-0"
         :aria-label="ITEM_STATUS_LABELS[status]"
       >
-        <header class="flex items-center justify-between px-4 pt-3.5 pb-2.5 border-b border-line">
-          <div class="flex items-center gap-2">
-            <span class="inline-flex items-center h-6 px-2 rounded-full border text-xs font-semibold" :class="COLUMN_META[status].tone">
-              {{ ITEM_STATUS_LABELS[status] }}
-            </span>
-            <span class="inline-flex items-center h-5 px-1.5 rounded-full text-meta font-semibold num" :class="COLUMN_META[status].count">
-              {{ formCounts[status] }} 单 · {{ totals[status] ?? 0 }} 条
-            </span>
-          </div>
+        <header class="px-0.5">
+          <p class="flex items-center gap-2">
+            <span class="size-2 shrink-0 rounded-full" :class="COLUMN_META[status].dot" aria-hidden="true" />
+            <span class="text-sm font-semibold text-ink">{{ ITEM_STATUS_LABELS[status] }}</span>
+            <span class="text-meta num">{{ formCounts[status] }} 单 · {{ totals[status] ?? 0 }} 条</span>
+          </p>
+          <p class="mt-1 text-meta">
+            {{ COLUMN_META[status].hint }}
+            <router-link v-if="truncated(status)" :to="{ path: '/ledger', query: { status } }" class="text-amber hover:underline">
+              仅显示最近 {{ columns[status].length }} 条 · 在台账中查看全部
+            </router-link>
+          </p>
         </header>
-        <p class="px-4 pt-2 text-meta text-faint">
-          {{ COLUMN_META[status].hint }}
-          <router-link v-if="truncated(status)" :to="{ path: '/ledger', query: { status } }" class="text-amber hover:underline">
-            仅显示最近 {{ columns[status].length }} 条 · 在台账中查看全部
-          </router-link>
-        </p>
 
-        <div class="p-3 space-y-2.5 max-h-[70dvh] bg-canvas/50 overflow-y-auto lg:flex-1 lg:min-h-0 lg:max-h-none">
-          <EmptyState
-            v-if="groups[status].length === 0"
-            :icon="COLUMN_META[status].icon"
-            :title="filters.q ? '没有匹配的单据' : '暂无单据'"
-            :description="filters.q ? '换个关键字试试' : status === 'PENDING_PURCHASE' ? '导入 OA 单据后在这里下单' : ''"
-          >
-            <router-link v-if="!filters.q && status === 'PENDING_PURCHASE'" to="/import" class="text-xs text-primary hover:underline">去导入</router-link>
-          </EmptyState>
+        <div class="mt-3 space-y-3 lg:mt-0 lg:min-h-0 lg:overflow-y-auto lg:pb-10">
+          <div v-if="groups[status].length === 0" class="rounded-(--radius-card) border border-dashed border-line-strong">
+            <EmptyState
+              :icon="COLUMN_META[status].icon"
+              :title="filters.q ? '没有匹配的单据' : '暂无单据'"
+              :description="filters.q ? '换个关键字试试' : status === 'PENDING_PURCHASE' ? '导入 OA 单据后在这里下单' : ''"
+            >
+              <router-link
+                v-if="!filters.q && status === 'PENDING_PURCHASE'"
+                to="/import"
+                :class="buttonClass({ variant: 'secondary', size: 'sm' })"
+              >去导入</router-link>
+            </EmptyState>
+          </div>
 
           <article
             v-for="g in groups[status]"
             :key="groupKey(status, g)"
-            class="bg-surface border border-line rounded-(--radius-control) shadow-(--shadow-xs) transition-all hover:border-line-strong"
+            class="bg-surface border border-line rounded-(--radius-card) p-4 transition-[border-color,opacity] duration-150 hover:border-line-strong"
             :class="busy.has(groupKey(status, g)) ? 'opacity-50 pointer-events-none' : ''"
           >
-            <header class="flex items-start gap-2.5 px-3 pt-3">
+            <header class="flex items-start gap-3">
               <input
                 v-if="g.items.length > 1"
                 type="checkbox"
-                class="mt-1 size-3.5 accent-primary cursor-pointer"
+                class="checkbox mt-0.5"
                 :checked="selectedOf(g).length === g.items.length"
                 :indeterminate="selectedOf(g).length > 0 && selectedOf(g).length < g.items.length"
                 :aria-label="`全选 ${g.serialNumber} 的明细`"
                 @change="toggleGroup(g)"
               />
               <div class="flex-1 min-w-0">
-                <p class="flex items-center gap-2 text-sm font-semibold text-ink">
-                  <span class="num truncate">{{ g.serialNumber }}</span>
-                  <span class="shrink-0 text-meta font-medium text-faint">{{ g.items.length }} 条</span>
-                </p>
-                <p class="mt-0.5 text-meta text-faint truncate">{{ peopleLine(g) }}</p>
+                <!-- 列窄时金额折到下一行，流水号不被挤成省略号 -->
+                <div class="flex flex-wrap items-baseline gap-x-3">
+                  <p class="flex min-w-0 items-baseline gap-2">
+                    <span class="truncate font-mono text-[13px] font-semibold text-ink">{{ g.serialNumber }}</span>
+                    <span class="shrink-0 text-meta">{{ g.items.length }} 条</span>
+                  </p>
+                  <span
+                    v-if="g.priced > 0"
+                    class="ml-auto shrink-0 text-[13px] leading-5 font-semibold text-ink num"
+                    :title="g.priced < g.items.length ? '部分明细未填单价' : ''"
+                  >
+                    {{ formatCurrency(g.amount) }}<span v-if="g.priced < g.items.length" class="text-faint">+</span>
+                  </span>
+                </div>
+                <p class="mt-0.5 text-meta truncate">{{ peopleLine(g) }}</p>
               </div>
-              <span v-if="g.priced > 0" class="shrink-0 text-xs num font-semibold text-muted" :title="g.priced < g.items.length ? '部分明细未填单价' : ''">
-                {{ formatCurrency(g.amount) }}<span v-if="g.priced < g.items.length" class="text-faint">+</span>
-              </span>
             </header>
 
-            <ul class="mt-2 mx-3 border-t border-line/70">
+            <ul class="mt-3 pt-1.5 border-t border-line">
               <li
                 v-for="item in visibleLines(status, g)"
                 :key="item.id"
-                class="flex items-center gap-2 py-1.5 text-xs"
+                class="flex items-center gap-3 py-1.5 text-[13px] leading-5"
                 :class="excluded.has(item.id) ? 'text-faint' : 'text-text'"
               >
                 <input
                   v-if="g.items.length > 1"
                   type="checkbox"
-                  class="size-3.5 accent-primary cursor-pointer shrink-0"
+                  class="checkbox"
                   :checked="!excluded.has(item.id)"
                   :aria-label="`选择 ${item.itemName}`"
                   @change="toggleLine(item.id)"
                 />
                 <span class="flex-1 min-w-0 truncate" :title="item.itemName">{{ item.itemName }}</span>
-                <span v-if="item.supplierName && status !== 'PENDING_PURCHASE'" class="hidden xl:inline max-w-24 truncate text-meta text-faint">{{ item.supplierName }}</span>
+                <span v-if="item.supplierName && status !== 'PENDING_PURCHASE'" class="hidden xl:inline max-w-24 truncate text-meta">{{ item.supplierName }}</span>
                 <a
                   v-if="item.purchaseLink && status === 'PENDING_PURCHASE'"
                   :href="item.purchaseLink"
                   target="_blank"
                   rel="noopener"
-                  class="shrink-0 text-meta text-primary hover:underline"
+                  class="shrink-0 text-meta text-accent hover:underline"
                 >去下单</a>
-                <span class="shrink-0 num text-muted">×{{ item.quantity }}{{ item.unit ?? '' }}</span>
+                <span class="shrink-0 num" :class="excluded.has(item.id) ? '' : 'text-muted'">×{{ item.quantity }}{{ item.unit ?? '' }}</span>
               </li>
             </ul>
             <button
               v-if="g.items.length > PREVIEW_LINES"
               type="button"
-              class="mx-3 mb-1 text-meta text-primary hover:underline cursor-pointer"
+              class="ml-7 mt-0.5 text-meta text-accent hover:underline cursor-pointer"
               @click="toggleExpand(groupKey(status, g))"
             >
               {{ expanded.has(groupKey(status, g)) ? '收起' : `展开其余 ${g.items.length - PREVIEW_LINES} 条` }}
             </button>
 
-            <footer class="flex flex-wrap gap-1.5 px-3 pb-3 pt-2">
+            <footer class="mt-3 flex flex-wrap gap-2">
               <template v-if="status === 'PENDING_PURCHASE'">
                 <Button size="sm" variant="primary" :disabled="selectedOf(g).length === 0" @click="openPurchase(g)">
-                  <Icon name="edit" :size="12" /> {{ withCount('下单登记', g) }}
+                  <Icon name="edit" :size="14" /> {{ withCount('下单登记', g) }}
                 </Button>
-                <Button size="sm" :disabled="selectedOf(g).length === 0" @click="advance(g, status, 'PENDING_ARRIVAL')">
+                <Button size="sm" variant="secondary" :disabled="selectedOf(g).length === 0" @click="advance(g, status, 'PENDING_ARRIVAL')">
                   {{ withCount('仅标记已下单', g) }}
                 </Button>
               </template>
               <template v-else-if="status === 'PENDING_ARRIVAL'">
                 <Button size="sm" variant="primary" :disabled="selectedOf(g).length === 0" @click="advance(g, status, 'PENDING_DISTRIBUTION', { arrivalDate: todayString() })">
-                  <Icon name="check" :size="12" /> {{ withCount('确认到货', g) }}
+                  <Icon name="check" :size="14" /> {{ withCount('确认到货', g) }}
                 </Button>
-                <Button size="sm" :disabled="selectedOf(g).length === 0" @click="advance(g, status, 'PENDING_PURCHASE')">
-                  <Icon name="undo" :size="12" /> {{ withCount('退回待采购', g) }}
+                <Button size="sm" variant="ghost" class="ml-auto" :disabled="selectedOf(g).length === 0" @click="advance(g, status, 'PENDING_PURCHASE')">
+                  <Icon name="undo" :size="14" /> {{ withCount('退回待采购', g) }}
                 </Button>
               </template>
               <template v-else>
                 <Button size="sm" variant="primary" :disabled="selectedOf(g).length === 0" @click="openDistribute(g)">
-                  <Icon name="distribution" :size="12" /> {{ withCount('发放', g) }}
+                  <Icon name="distribution" :size="14" /> {{ withCount('发放', g) }}
                 </Button>
-                <Button size="sm" :disabled="selectedOf(g).length === 0" @click="stockInTarget = selectedOf(g)">
-                  <Icon name="inventory" :size="12" /> {{ withCount('入库', g) }}
+                <Button size="sm" variant="secondary" :disabled="selectedOf(g).length === 0" @click="stockInTarget = selectedOf(g)">
+                  <Icon name="inventory" :size="14" /> {{ withCount('入库', g) }}
                 </Button>
-                <Button size="sm" variant="ghost" :disabled="selectedOf(g).length === 0" @click="advance(g, status, 'PENDING_ARRIVAL', { arrivalDate: null })">
-                  {{ withCount('退回待到货', g) }}
+                <Button size="sm" variant="ghost" class="ml-auto" :disabled="selectedOf(g).length === 0" @click="advance(g, status, 'PENDING_ARRIVAL', { arrivalDate: null })">
+                  <Icon name="undo" :size="14" /> {{ withCount('退回待到货', g) }}
                 </Button>
               </template>
             </footer>

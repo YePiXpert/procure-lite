@@ -31,6 +31,11 @@ const loading = ref(true);
 const loadError = ref('');
 const expanded = ref<Set<number>>(new Set());
 
+/**
+ * 操作类型按动作分色（DESIGN.md §7.8），颜色只说明「这是哪类动作」：
+ * 登录 / 初始化 / 备份 gray · 新增与修改 blue · 删除 / 作废 / 失败 red ·
+ * 导入 / 发放 / 入库 teal（品牌绿）· 恢复 / 回滚 / 改密这类覆盖性操作 amber 提醒。
+ */
 const ACTION_LABELS: Record<string, { label: string; tone: 'blue' | 'teal' | 'amber' | 'red' | 'gray'; group: string }> = {
   AUTH_SETUP: { label: '初始化', tone: 'gray', group: '账号' },
   AUTH_LOGIN: { label: '登录', tone: 'gray', group: '账号' },
@@ -44,25 +49,29 @@ const ACTION_LABELS: Record<string, { label: string; tone: 'blue' | 'teal' | 'am
   ITEM_BATCH_UPDATE: { label: '批量修改', tone: 'blue', group: '台账' },
   ITEM_PURCHASE: { label: '下单登记', tone: 'blue', group: '台账' },
   ITEM_DELETE: { label: '删除台账', tone: 'red', group: '台账' },
-  ITEM_RESTORE: { label: '恢复台账', tone: 'teal', group: '台账' },
+  ITEM_RESTORE: { label: '恢复台账', tone: 'blue', group: '台账' },
   ITEM_PURGE: { label: '彻底删除', tone: 'red', group: '台账' },
   ITEM_ROLLBACK: { label: '回滚', tone: 'amber', group: '台账' },
   ITEM_STOCK_IN: { label: '采购入库', tone: 'teal', group: '库存' },
+  ITEM_STOCK_IN_BATCH: { label: '整单入库', tone: 'teal', group: '库存' },
+  AI_CONFIG_UPDATE: { label: '修改 AI 设置', tone: 'blue', group: 'AI' },
+  AI_QUERY: { label: 'AI 问答', tone: 'gray', group: 'AI' },
+  AI_OCR_REVIEW: { label: 'AI 复核单据', tone: 'gray', group: 'AI' },
   DISTRIBUTION_CREATE: { label: '发放登记', tone: 'teal', group: '发放' },
   DISTRIBUTION_REVOKE: { label: '作废发放', tone: 'red', group: '发放' },
-  IMPORT_UPLOAD: { label: '上传单据', tone: 'gray', group: '导入' },
-  IMPORT_CONFIRM: { label: '确认导入', tone: 'blue', group: '导入' },
-  PRODUCT_CREATE: { label: '新增物品', tone: 'gray', group: '库存' },
-  PRODUCT_UPDATE: { label: '修改物品', tone: 'gray', group: '库存' },
+  IMPORT_UPLOAD: { label: '上传单据', tone: 'teal', group: '导入' },
+  IMPORT_CONFIRM: { label: '确认导入', tone: 'teal', group: '导入' },
+  PRODUCT_CREATE: { label: '新增物品', tone: 'blue', group: '库存' },
+  PRODUCT_UPDATE: { label: '修改物品', tone: 'blue', group: '库存' },
   PRODUCT_DELETE: { label: '删除物品', tone: 'red', group: '库存' },
   INVENTORY_MOVEMENT: { label: '库存流水', tone: 'teal', group: '库存' },
   INVENTORY_MOVEMENT_DELETE: { label: '删流水', tone: 'red', group: '库存' },
-  SUPPLIER_CREATE: { label: '新增供应商', tone: 'gray', group: '供应商' },
-  SUPPLIER_UPDATE: { label: '修改供应商', tone: 'gray', group: '供应商' },
+  SUPPLIER_CREATE: { label: '新增供应商', tone: 'blue', group: '供应商' },
+  SUPPLIER_UPDATE: { label: '修改供应商', tone: 'blue', group: '供应商' },
   SUPPLIER_DELETE: { label: '删除供应商', tone: 'red', group: '供应商' },
-  PRICE_RECORD_CREATE: { label: '记价', tone: 'gray', group: '供应商' },
+  PRICE_RECORD_CREATE: { label: '记价', tone: 'blue', group: '供应商' },
   PRICE_RECORD_DELETE: { label: '删价', tone: 'red', group: '供应商' },
-  ATTACHMENT_UPLOAD: { label: '传附件', tone: 'gray', group: '附件' },
+  ATTACHMENT_UPLOAD: { label: '传附件', tone: 'blue', group: '附件' },
   ATTACHMENT_DELETE: { label: '删附件', tone: 'red', group: '附件' },
   BACKUP_CREATE: { label: '创建备份', tone: 'gray', group: '系统' },
   BACKUP_RESTORE: { label: '恢复备份', tone: 'amber', group: '系统' },
@@ -179,75 +188,96 @@ const hasFilters = computed(() => !!(filters.search || filters.action));
 </script>
 
 <template>
-  <div class="card overflow-hidden h-full flex flex-col">
+  <!-- 工具栏 + 表格 + 分页在同一个面板里，面板随内容增高（<main> 才是滚动容器） -->
+  <section class="card overflow-hidden">
     <div class="flex flex-wrap items-center gap-2 px-4 py-3 border-b border-line">
-      <SearchInput v-model="filters.search" class="flex-1 max-w-sm" placeholder="搜索详情内容" @search="applyFilters" />
+      <SearchInput v-model="filters.search" class="w-full sm:w-72" placeholder="搜索详情内容" @search="applyFilters" />
       <NativeSelect
         v-model="filters.action"
         :options="actionOptions"
         placeholder="全部操作类型"
-        class="w-52"
+        class="min-w-0 flex-1 sm:flex-none sm:w-52"
         aria-label="按操作类型筛选"
         @update:model-value="applyFilters"
       />
       <Button v-if="hasFilters" variant="ghost" size="sm" @click="Object.assign(filters, DEFAULTS); load()">
-        <Icon name="close" :size="12" /> 清除
+        <Icon name="close" :size="14" /> 清除
       </Button>
-      <p class="ml-auto text-xs text-faint">共 {{ total }} 条</p>
+      <p class="ml-auto text-meta tabular-nums">共 {{ total }} 条</p>
     </div>
 
-    <div class="flex-1 min-h-0 flex flex-col overflow-hidden">
-      <div v-if="loading" class="p-3 space-y-2">
-        <Skeleton v-for="i in 8" :key="i" class="h-10" />
-      </div>
-      <ErrorState v-else-if="loadError" class="flex-1 justify-center" :message="loadError" @retry="load" />
-      <EmptyState
-        v-else-if="logs.length === 0"
-        class="flex-1 justify-center"
-        :illustration="hasFilters ? 'search' : 'empty'"
-        :title="hasFilters ? '没有符合条件的记录' : '暂无审计记录'"
-        :description="hasFilters ? '试试换个操作类型或关键词' : ''"
-      />
+    <div v-if="loading" class="p-4 space-y-2">
+      <Skeleton v-for="i in 8" :key="i" class="h-10" />
+    </div>
+    <ErrorState v-else-if="loadError" :message="loadError" @retry="load" />
+    <EmptyState
+      v-else-if="logs.length === 0"
+      :illustration="hasFilters ? 'search' : 'empty'"
+      :title="hasFilters ? '没有符合条件的记录' : '暂无审计记录'"
+      :description="hasFilters ? '试试换个操作类型或关键词' : ''"
+    />
 
-      <div v-else class="flex-1 min-h-0 overflow-auto">
-        <table class="table-base table-sticky min-w-[760px]">
-          <thead><tr><th class="w-40">时间</th><th class="w-28">操作</th><th class="w-28">对象</th><th>详情</th><th class="w-32">来源 IP</th></tr></thead>
+    <div v-else class="overflow-x-auto">
+      <table class="table-base min-w-[760px]">
+        <thead>
+          <tr>
+            <th class="w-40">时间</th>
+            <th class="w-28">操作</th>
+            <th class="w-28">对象</th>
+            <th>详情</th>
+            <th class="w-32">来源 IP</th>
+          </tr>
+        </thead>
         <tbody>
+          <!-- 顶对齐（展开后多行）；Badge 那格少 2px 上下内边距，让药丸与各列首行文字同一条中线，行高仍是 44px -->
           <tr
             v-for="log in logs"
             :key="log.id"
             class="cursor-pointer"
+            :class="expanded.has(log.id) ? 'bg-surface-2' : ''"
             @click="toggle(log.id)"
           >
-            <td class="text-xs text-muted num whitespace-nowrap align-top">{{ formatDateTime(log.createdAt, true) }}</td>
-            <td class="align-top">
+            <td class="align-top num whitespace-nowrap">{{ formatDateTime(log.createdAt, true) }}</td>
+            <td class="align-top py-2.5">
               <Badge :tone="ACTION_LABELS[log.action]?.tone ?? 'gray'">
                 {{ ACTION_LABELS[log.action]?.label ?? log.action }}
               </Badge>
             </td>
-            <td class="text-xs text-muted whitespace-nowrap align-top">
+            <td class="align-top text-[13px] text-muted whitespace-nowrap num">
               {{ log.entity ?? '—' }}<template v-if="log.entityId"> #{{ log.entityId }}</template>
             </td>
-            <td class="text-xs text-muted align-top">
-              <template v-if="expanded.has(log.id) && detailEntries(log).length > 0">
-                <dl class="space-y-0.5">
-                  <div v-for="(e, i) in detailEntries(log)" :key="i" class="flex gap-1.5">
-                    <dt class="shrink-0 text-faint">{{ e.key }}</dt>
-                    <dd class="break-all">{{ e.value }}</dd>
-                  </div>
-                </dl>
-              </template>
-              <p v-else class="truncate max-w-96">{{ detailSummary(log) }}</p>
+            <td class="align-top text-[13px] text-muted">
+              <div class="flex items-start gap-2">
+                <div class="min-w-0 flex-1">
+                  <dl
+                    v-if="expanded.has(log.id) && detailEntries(log).length > 0"
+                    class="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1"
+                  >
+                    <template v-for="(e, i) in detailEntries(log)" :key="i">
+                      <dt class="text-faint whitespace-nowrap">{{ e.key }}</dt>
+                      <dd class="text-text break-all">{{ e.value }}</dd>
+                    </template>
+                  </dl>
+                  <p v-else class="truncate max-w-96">{{ detailSummary(log) }}</p>
+                </div>
+                <!-- 可展开的行给一个小箭头提示（整行可点，箭头只是视觉提示） -->
+                <Icon
+                  v-if="detailEntries(log).length > 0"
+                  name="chevron-down"
+                  :size="14"
+                  class="mt-0.5 shrink-0 text-faint transition-transform duration-150"
+                  :class="expanded.has(log.id) ? 'rotate-180' : ''"
+                />
+              </div>
             </td>
-            <td class="text-xs num text-muted align-top">{{ log.operatorIp ?? '—' }}</td>
+            <td class="align-top font-mono text-meta whitespace-nowrap">{{ log.operatorIp ?? '—' }}</td>
           </tr>
         </tbody>
       </table>
-    </div>
     </div>
 
     <div v-if="!loading && !loadError && logs.length > 0" class="px-4 py-3 border-t border-line">
       <Pagination :page="filters.page" :page-size="pageSize" :total="total" @change="(p) => { filters.page = p; load(true); }" />
     </div>
-  </div>
+  </section>
 </template>

@@ -2,6 +2,9 @@
 import { formatDateTime } from '@/utils/datetime';
 import { computed, onMounted, reactive, ref } from 'vue';
 import Button from '@/components/ui/Button.vue';
+import { buttonClass } from '@/components/ui/button';
+import PageHeader from '@/components/ui/PageHeader.vue';
+import Tabs from '@/components/ui/Tabs.vue';
 import Icon from '@/components/ui/Icon.vue';
 import Input from '@/components/ui/Input.vue';
 import SearchInput from '@/components/ui/SearchInput.vue';
@@ -222,53 +225,81 @@ function exportStats(): void {
 </script>
 
 <template>
-  <div class="space-y-4">
-    <div class="card overflow-hidden">
-      <div class="flex border-b border-line px-3 pt-2 gap-1">
-        <button
-          v-for="t in [{ key: 'records', label: '发放单' }, { key: 'recipients', label: '领用统计' }]"
-          :key="t.key"
-          class="px-3 h-9 text-sm font-medium rounded-t-lg cursor-pointer transition-colors"
-          :class="tab === t.key ? 'text-primary border-b-2 border-primary bg-primary-soft/40' : 'text-muted hover:text-text hover:bg-canvas/60'"
-          @click="switchTab(t.key as 'records' | 'recipients')"
-        >
-          {{ t.label }}
-        </button>
-        <div class="ml-auto flex items-center gap-2 pb-1.5">
-          <Button variant="primary" size="sm" @click="createOpen = true">
-            <Icon name="plus" :size="13" /> 发放登记
-          </Button>
-        </div>
-      </div>
+  <div>
+    <PageHeader title="领用发放" description="发放记录与签收凭证，按领用人汇总领用数量">
+      <Button variant="primary" @click="createOpen = true">
+        <Icon name="plus" :size="16" /> 发放登记
+      </Button>
+    </PageHeader>
 
-      <!-- 发放单列表 -->
-      <template v-if="tab === 'records'">
-        <div class="flex flex-wrap items-center gap-2 px-4 py-3 border-b border-line">
+    <section class="card overflow-hidden">
+      <!-- 工具栏：视图切换 + 本视图的筛选，同在面板顶部一行（手机上逐行换行） -->
+      <div class="flex flex-wrap items-center gap-2 px-4 py-3 border-b border-line">
+        <Tabs
+          :model-value="tab"
+          variant="segmented"
+          block
+          class="w-full sm:w-44 sm:mr-2"
+          :tabs="[{ value: 'records', label: '发放单' }, { value: 'recipients', label: '领用统计' }]"
+          @change="(v) => switchTab(v as 'records' | 'recipients')"
+        />
+
+        <template v-if="tab === 'records'">
           <SearchInput
             v-model="filters.recipient"
-            class="flex-1 min-w-44"
+            class="w-full sm:w-auto sm:flex-1 sm:min-w-40 sm:max-w-60"
             icon="users"
             placeholder="按领用人搜索"
             @search="applyFilters"
           />
           <SearchInput
             v-model="filters.department"
-            class="flex-1 min-w-40"
+            class="w-full sm:w-auto sm:flex-1 sm:min-w-40 sm:max-w-60"
             icon="supplier"
             placeholder="按领用部门搜索"
             @search="applyFilters"
           />
-          <Input v-model="filters.dateFrom" type="date" class="w-38" aria-label="发放日期起" @change="applyFilters" />
-          <span class="text-faint text-xs">至</span>
-          <Input v-model="filters.dateTo" type="date" class="w-38" aria-label="发放日期止" @change="applyFilters" />
+          <div class="flex w-full sm:w-auto items-center gap-2">
+            <Input v-model="filters.dateFrom" type="date" class="min-w-0 flex-1 sm:flex-none sm:w-40" aria-label="发放日期起" @change="applyFilters" />
+            <span class="text-faint text-xs">至</span>
+            <Input v-model="filters.dateTo" type="date" class="min-w-0 flex-1 sm:flex-none sm:w-40" aria-label="发放日期止" @change="applyFilters" />
+          </div>
           <Button v-if="hasFilters" variant="ghost" size="sm" @click="resetFilters">
-            <Icon name="close" :size="12" /> 清除
+            <Icon name="close" :size="14" /> 清除
           </Button>
-          <span v-if="refreshing" class="inline-block size-3 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
-        </div>
+          <span
+            v-if="refreshing"
+            class="inline-block size-3.5 shrink-0 rounded-full border-2 border-current/30 border-t-current text-faint animate-spin"
+          />
+        </template>
 
-        <div v-if="loading" class="p-3 space-y-2">
-          <Skeleton v-for="i in 8" :key="i" class="h-10" />
+        <template v-else>
+          <div class="flex w-full sm:w-auto flex-wrap items-center gap-2">
+            <div class="flex w-full sm:w-auto items-center gap-2">
+              <span class="w-4 shrink-0 text-xs text-faint">起</span>
+              <Input v-model="filters.statFrom" type="date" aria-label="起" class="min-w-0 flex-1 sm:flex-none sm:w-40" @change="loadStats" />
+            </div>
+            <div class="flex w-full sm:w-auto items-center gap-2">
+              <span class="w-4 shrink-0 text-xs text-faint">止</span>
+              <Input v-model="filters.statTo" type="date" aria-label="止" class="min-w-0 flex-1 sm:flex-none sm:w-40" @change="loadStats" />
+            </div>
+          </div>
+          <p class="text-meta">按领用人汇总发放数量</p>
+          <div v-if="!statsLoading && recipientStats.length > 0" class="flex w-full sm:w-auto sm:ml-auto items-center justify-between gap-3">
+            <p class="text-xs text-muted">
+              {{ recipientStats.length }} 人 · 合计领用 <b class="num font-semibold text-ink">{{ statsTotal }}</b> 件
+            </p>
+            <Button variant="secondary" size="sm" @click="exportStats">
+              <Icon name="download" :size="14" /> 导出 CSV
+            </Button>
+          </div>
+        </template>
+      </div>
+
+      <!-- 发放单列表 -->
+      <template v-if="tab === 'records'">
+        <div v-if="loading" class="p-4 space-y-2">
+          <Skeleton v-for="i in 6" :key="i" class="h-12" />
         </div>
         <ErrorState v-else-if="loadError" :message="loadError" @retry="load" />
         <EmptyState
@@ -279,9 +310,10 @@ function exportStats(): void {
         />
 
         <ul v-else class="divide-y divide-line">
-          <li v-for="d in rows" :key="d.id" class="px-4">
+          <li v-for="d in rows" :key="d.id">
             <div
-              class="flex items-center gap-3 -mx-4 px-4 py-3 cursor-pointer select-none transition-colors duration-150 hover:bg-canvas/60"
+              class="group flex items-center gap-3 px-4 py-3 cursor-pointer select-none transition-colors duration-150 hover:bg-surface-2 focus-visible:-outline-offset-2"
+              :class="expanded.has(d.id) ? 'bg-surface-2' : ''"
               role="button"
               tabindex="0"
               :aria-expanded="expanded.has(d.id)"
@@ -290,84 +322,102 @@ function exportStats(): void {
               @keydown.enter.prevent="toggleExpand(d.id)"
               @keydown.space.prevent="toggleExpand(d.id)"
             >
-              <Icon name="chevron-right" :size="14" class="text-faint transition-transform" :class="expanded.has(d.id) ? 'rotate-90' : ''" />
+              <Icon
+                name="chevron-right"
+                :size="16"
+                class="shrink-0 transition-transform duration-150"
+                :class="expanded.has(d.id) ? 'rotate-90 text-ink' : 'text-faint'"
+              />
               <div class="min-w-0 flex-1">
-                <div class="flex flex-wrap items-center gap-2">
-                  <span class="text-sm font-semibold num">{{ d.date }}</span>
+                <div class="flex flex-wrap items-center gap-x-2 gap-y-1">
+                  <span class="text-sm font-semibold text-ink num">{{ d.date }}</span>
                   <Badge :tone="d.source === 'DIRECT' ? 'blue' : 'teal'">{{ DISTRIBUTION_SOURCE_LABELS[d.source as DistributionSource] }}</Badge>
-                  <span v-if="d.department" class="text-xs text-muted">{{ d.department }}</span>
+                  <span v-if="d.department" class="text-[13px] text-muted">{{ d.department }}</span>
                   <Badge v-if="attachments[d.id]?.length" tone="gray">
-                    <Icon name="paperclip" :size="10" /> {{ attachments[d.id].length }}
+                    <Icon name="paperclip" :size="12" class="-ml-0.5" />{{ attachments[d.id].length }}
                   </Badge>
                 </div>
-                <p class="mt-0.5 text-xs text-faint truncate">
+                <p class="mt-1 text-[13px] text-muted truncate">
                   {{ d.lines.map((l) => `${l.recipient}·${l.itemName}×${l.quantity}`).join('，') }}
                 </p>
               </div>
-              <div class="text-right shrink-0">
-                <p class="text-sm font-semibold num text-ink">{{ d.lines.length }} 笔</p>
-                <p class="text-meta text-faint">{{ formatDateTime(d.createdAt) }}</p>
+              <div class="shrink-0 text-right">
+                <p class="text-sm font-semibold text-ink num">{{ d.lines.length }} 笔</p>
+                <p class="text-meta num">{{ formatDateTime(d.createdAt) }}</p>
               </div>
               <button
-                class="p-1.5 rounded-md text-faint transition-colors duration-150 hover:bg-canvas/80 hover:text-red cursor-pointer shrink-0 disabled:opacity-50"
+                type="button"
+                class="row-action row-action-danger group-hover:opacity-100"
+                :class="revokingId === d.id ? 'w-auto px-2 text-xs' : ''"
                 title="作废此发放单"
                 :disabled="revokingId === d.id"
                 @click.stop="revokeTarget = d"
               >
                 <template v-if="revokingId === d.id">撤销中…</template>
-                <Icon v-else name="trash" :size="14" />
+                <Icon v-else name="trash" :size="16" />
               </button>
             </div>
 
-            <!-- 展开明细 -->
-            <div v-if="expanded.has(d.id)" class="pb-3 -mt-1 space-y-3">
-              <table class="table-base">
-                <thead>
-                  <tr><th>领用人</th><th>物品</th><th class="text-right">数量</th><th>签收备注</th></tr>
-                </thead>
-                <tbody>
-                  <tr v-for="l in d.lines" :key="l.id">
-                    <td class="font-medium">{{ l.recipient }}</td>
-                    <td>{{ l.itemName }}<span v-if="l.itemId" class="ml-1.5 text-meta text-faint num">#{{ l.itemId }}</span></td>
-                    <td class="text-right num">{{ l.quantity }}</td>
-                    <td class="text-xs text-muted">{{ l.signoffNote ?? '—' }}</td>
-                  </tr>
-                </tbody>
-              </table>
-              <p v-if="d.note" class="text-xs text-faint">备注：{{ d.note }}</p>
+            <!-- 展开：明细 + 签收单，缩进与上面的文字列对齐 -->
+            <div v-if="expanded.has(d.id)" class="bg-surface-2 px-4 pt-1 pb-5 sm:pl-11 space-y-4">
+              <div class="overflow-x-auto bg-surface border border-line rounded-lg">
+                <table class="table-base">
+                  <thead>
+                    <tr><th>领用人</th><th>物品</th><th class="text-right">数量</th><th>签收备注</th></tr>
+                  </thead>
+                  <tbody>
+                    <tr v-for="l in d.lines" :key="l.id">
+                      <td class="text-ink font-medium">{{ l.recipient }}</td>
+                      <td>{{ l.itemName }}<span v-if="l.itemId" class="ml-1.5 text-meta num">#{{ l.itemId }}</span></td>
+                      <td class="text-right num">{{ l.quantity }}</td>
+                      <td class="text-[13px] text-muted">{{ l.signoffNote ?? '—' }}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+              <p v-if="d.note" class="text-[13px] text-muted">备注：{{ d.note }}</p>
 
               <!-- 签收单附件 -->
-              <div class="pt-2 border-t border-line">
-                <div class="flex items-center justify-between mb-1.5">
-                  <h4 class="text-xs font-semibold text-ink">签收单</h4>
+              <div>
+                <div class="flex items-center justify-between gap-3 mb-2">
+                  <h4 class="text-[13px] font-semibold text-ink">签收单</h4>
                   <label
-                    class="inline-flex items-center gap-1 text-xs cursor-pointer hover:underline"
-                    :class="uploadingFor === d.id ? 'text-faint pointer-events-none' : 'text-primary'"
+                    class="has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-accent has-[:focus-visible]:outline-offset-2"
+                    :class="[buttonClass({ variant: 'secondary', size: 'sm' }), uploadingFor === d.id ? 'pointer-events-none opacity-50' : '']"
                   >
-                    <Icon name="upload" :size="12" /> {{ uploadingFor === d.id ? '上传中…' : '上传签收单' }}
-                    <input type="file" accept=".pdf,.png,.jpg,.jpeg" class="hidden" @change="uploadSignoff($event, d)" />
+                    <Icon name="upload" :size="14" /> {{ uploadingFor === d.id ? '上传中…' : '上传签收单' }}
+                    <input
+                      type="file"
+                      accept=".pdf,.png,.jpg,.jpeg"
+                      class="sr-only"
+                      :disabled="uploadingFor === d.id"
+                      @change="uploadSignoff($event, d)"
+                    />
                   </label>
                 </div>
-                <p v-if="!attachments[d.id]?.length" class="text-xs text-faint">
+                <p v-if="!attachments[d.id]?.length" class="text-[13px] text-muted">
                   还没有签收凭证。手机拍一张纸质签收单传上来，审计时就有据可查。
                 </p>
-                <ul v-else class="space-y-1">
-                  <li v-for="a in attachments[d.id]" :key="a.id" class="flex items-center gap-2 text-sm">
+                <ul v-else class="divide-y divide-line bg-surface border border-line rounded-lg">
+                  <li v-for="a in attachments[d.id]" :key="a.id" class="group flex items-center gap-3 min-h-11 pl-3 pr-1.5 py-1.5">
                     <button
-                      class="min-w-0 truncate text-primary hover:underline cursor-pointer"
+                      type="button"
+                      class="min-w-0 truncate text-left text-[13px] text-accent hover:underline cursor-pointer"
                       @click="downloadFile(`/attachments/${a.id}/download`, a.filename).catch((err) => toast.error(apiError(err)))"
                     >
-                      <Icon :name="a.mimeType.startsWith('image/') ? 'image' : 'file'" :size="12" class="inline mr-1" />{{ a.filename }}
+                      <Icon :name="a.mimeType.startsWith('image/') ? 'image' : 'file'" :size="14" class="inline -mt-0.5 mr-1.5 text-faint" />{{ a.filename }}
                     </button>
-                    <span class="ml-auto text-meta text-faint shrink-0 num">{{ formatBytes(a.sizeBytes) }}</span>
+                    <span class="ml-auto shrink-0 text-meta num">{{ formatBytes(a.sizeBytes) }}</span>
                     <button
-                      class="shrink-0 p-1 rounded-md text-faint transition-colors duration-150 hover:bg-canvas/80 hover:text-red cursor-pointer disabled:opacity-50"
+                      type="button"
+                      class="row-action row-action-danger group-hover:opacity-100"
+                      :class="removingAttachmentId === a.id ? 'w-auto px-2 text-xs' : ''"
                       title="删除附件"
                       :disabled="removingAttachmentId === a.id"
                       @click="deleteAttachment = a"
                     >
                       <template v-if="removingAttachmentId === a.id">删除中…</template>
-                      <Icon v-else name="trash" :size="13" />
+                      <Icon v-else name="trash" :size="16" />
                     </button>
                   </li>
                 </ul>
@@ -383,43 +433,40 @@ function exportStats(): void {
 
       <!-- 领用统计 -->
       <template v-else>
-        <div class="flex flex-wrap items-end gap-2 px-4 py-3 border-b border-line">
-          <Input v-model="filters.statFrom" type="date" label="起" class="w-38" @change="loadStats" />
-          <Input v-model="filters.statTo" type="date" label="止" class="w-38" @change="loadStats" />
-          <p class="text-xs text-faint mb-2.5">按领用人汇总发放数量</p>
-          <Button
-            v-if="recipientStats.length > 0"
-            variant="secondary"
-            size="sm"
-            class="ml-auto mb-0.5"
-            @click="exportStats"
-          >
-            <Icon name="download" :size="13" /> 导出 CSV
-          </Button>
-        </div>
         <div v-if="statsLoading" class="py-14 text-center text-sm text-faint">统计中…</div>
         <EmptyState v-else-if="recipientStats.length === 0" icon="users" title="暂无领用数据" description="所选时间范围内没有发放记录" />
-        <template v-else>
-          <p class="px-4 pt-3 text-xs text-muted">
-            {{ recipientStats.length }} 人 · 合计领用 <b class="num text-ink">{{ statsTotal }}</b> 件
-          </p>
-          <ul class="divide-y divide-line">
-            <li v-for="s in recipientStats" :key="`${s.recipient}|${s.department}`" class="flex items-center gap-3 px-4 py-2.5">
-              <div class="min-w-0 flex-1">
-                <p class="text-sm font-medium">{{ s.recipient }} <span v-if="s.department" class="text-xs text-faint">· {{ s.department }}</span></p>
-                <div class="mt-1 h-1.5 bg-canvas rounded-full overflow-hidden">
-                  <div class="h-full bg-primary rounded-full" :style="{ width: `${(s.quantity / maxQty) * 100}%` }" />
-                </div>
-              </div>
-              <div class="text-right shrink-0">
-                <p class="text-sm font-semibold num text-ink">{{ s.quantity }}</p>
-                <p class="text-meta text-faint">{{ s.times }} 次</p>
-              </div>
-            </li>
-          </ul>
-        </template>
+        <div v-else class="overflow-x-auto">
+          <table class="table-base">
+            <thead>
+              <tr>
+                <th>领用人</th>
+                <th class="hidden sm:table-cell">部门</th>
+                <th class="hidden sm:table-cell text-right">领用次数</th>
+                <th class="w-1/2 text-right">累计数量</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="s in recipientStats" :key="`${s.recipient}|${s.department}`">
+                <td class="whitespace-nowrap">
+                  <p class="text-ink font-medium">{{ s.recipient }}</p>
+                  <p class="sm:hidden text-meta"><template v-if="s.department">{{ s.department }} · </template>{{ s.times }} 次</p>
+                </td>
+                <td class="hidden sm:table-cell text-muted">{{ s.department || '—' }}</td>
+                <td class="hidden sm:table-cell text-right num text-muted">{{ s.times }} 次</td>
+                <td>
+                  <div class="flex items-center gap-3">
+                    <div class="h-1 min-w-16 flex-1 overflow-hidden rounded-full bg-primary-soft" aria-hidden="true">
+                      <div class="h-full rounded-full bg-accent/70" :style="{ width: `${(s.quantity / maxQty) * 100}%` }" />
+                    </div>
+                    <span class="w-12 shrink-0 text-right num font-semibold text-ink">{{ s.quantity }}</span>
+                  </div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
       </template>
-    </div>
+    </section>
 
     <DistributionCreateDialog
       :open="createOpen"

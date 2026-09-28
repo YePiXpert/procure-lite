@@ -4,101 +4,184 @@
 @custom-variant dark (&:where(.dark, .dark *));
 
 /*
- * 设计令牌：现代 SaaS 精致风（柔阴影 / 冷灰中性 / 单蓝色强调）
- * - ink  = 强文字色（深色模式下翻为近白）
- * - panel = 常驻深色面板（侧边栏 / 品牌区 / 深色浮层），两个主题下都保持深色
- * - 深色模式只需在 .dark 里改令牌值，全站工具类自动翻转
+ * 设计令牌 ——「墨与纸」（施工图见 apps/web/DESIGN.md §2）
+ * - 暖纸色画布 + 白色面板 + 墨色文字与主按钮；品牌绿（accent）只做点睛
+ * - 语义色：blue = 进行中、amber = 等待、red = 危险，只用于状态
+ * - 深色模式只在下方 .dark 里改令牌值，全站工具类自动翻转
+ * - static：chartTheme.ts 与插画在运行时按名字读令牌，没被工具类引用的也必须输出
  */
-@theme {
-  /* 常驻深色面板：侧边栏 / 登录品牌区 / 概览横幅 */
-  --color-panel: #101d36;
-  --color-panel-soft: #1b2c50;
-
-  --color-primary: #2563eb;
-  --color-primary-hover: #1e56d9;
-  --color-primary-soft: #edf3ff;
-  --color-teal: #0c7c6d;
-  --color-teal-soft: #e8faf4;
-  --color-amber: #b45309;
-  --color-amber-soft: #fdf5e7;
-  --color-red: #c63e3e;
-  --color-red-soft: #fdeeec;
-
-  --color-canvas: #f4f6f9;
+@theme static {
+  /* 纸与墨 */
+  --color-canvas: #f5f4f0;
   --color-surface: #ffffff;
-  /* 强文字色（标题、强调数字），深色下翻白 */
-  --color-ink: #131c2e;
-  --color-text: #1e2735;
-  /* 次要文字大量用在 11-12px 上，白底对比度 ≥ 4.5:1 */
-  --color-muted: #4d5a70;
-  --color-faint: #5d6a81;
-  --color-line: #e2e7ef;
-  --color-line-strong: #c9d2df;
+  --color-surface-2: #faf9f6;
+  --color-ink: #1b1a17;
+  --color-text: #2b2a26;
+  --color-muted: #5f5d57;
+  --color-faint: #7b7973;
+  --color-line: #e7e5df;
+  --color-line-strong: #d6d3cb;
 
-  --radius-card: 14px;
-  --radius-control: 10px;
+  /* 主按钮 = 墨色；primary-soft 是中性的选中 / 悬停底 */
+  --color-primary: #1b1a17;
+  --color-primary-hover: #2f2e2a;
+  --color-primary-fg: #ffffff;
+  --color-primary-soft: #efede8;
 
-  --font-sans: "Segoe UI Variable", "Segoe UI", "PingFang SC", "Microsoft YaHei UI",
-    system-ui, sans-serif;
-  --font-mono: "Cascadia Mono", ui-monospace, "SF Mono", Consolas, monospace;
+  /* 品牌绿：链接、当前导航、焦点环、成功 */
+  --color-accent: #1f7a53;
+  --color-accent-hover: #196343;
+  --color-accent-soft: #e4f2ea;
+  /* 兼容别名：Badge / StatCard / 插画的 tone="teal" 就是品牌绿 */
+  --color-teal: var(--color-accent);
+  --color-teal-soft: var(--color-accent-soft);
 
-  /* 柔和分层阴影：近处羽化 + 远处扩散 */
-  --shadow-xs: 0 1px 2px rgb(19 28 46 / 0.05);
-  --shadow-card: 0 1px 2px rgb(19 28 46 / 0.04), 0 2px 8px -2px rgb(19 28 46 / 0.05);
-  --shadow-pop: 0 4px 12px -2px rgb(19 28 46 / 0.08), 0 16px 40px -12px rgb(19 28 46 / 0.18);
+  /* 语义色 */
+  --color-blue: #2f6bd6;
+  --color-blue-soft: #e6eefb;
+  --color-amber: #96550c; /* 在 amber-soft 上 ≥ 5:1，12px 警示文字也过 AA */
+  --color-amber-soft: #fbf0dc;
+  --color-red: #c2412d;
+  --color-red-soft: #fbe8e4;
+
+  /* 深色浮层（Toast、批量操作条），两个主题下都保持深色 */
+  --color-panel: #1b1a17;
+  --color-panel-soft: #2a2925;
+
+  --radius-card: 12px;
+  --radius-control: 8px;
+
+  --font-sans: "Segoe UI Variable Text", "Segoe UI", -apple-system, "PingFang SC",
+    "Hiragino Sans GB", "Microsoft YaHei UI", "Microsoft YaHei", "Noto Sans CJK SC",
+    "Source Han Sans SC", system-ui, sans-serif;
+  --font-mono: "Cascadia Mono", "SF Mono", ui-monospace, Consolas, monospace;
+
+  /*
+   * 阴影经 --elevation-* 间接取值：Tailwind 会在构建期把 shadow-pop 这类命名阴影的值
+   * 内联进工具类，直接在 .dark 里覆盖 --shadow-pop 对 shadow-pop 无效。间接一层后，
+   * shadow-pop 与 shadow-(--shadow-pop) 两种写法都会跟随主题。
+   */
+  --shadow-xs: var(--elevation-xs);
+  --shadow-card: var(--elevation-card);
+  --shadow-pop: var(--elevation-pop);
+
+  /* 进场动效（150ms 上下、ease-out）：animate-fade-in / animate-pop-in / animate-sheet-in */
+  --animate-fade-in: fade-in 0.15s ease-out;
+  --animate-pop-in: pop-in 0.16s ease-out;
+  --animate-sheet-in: sheet-in 0.2s ease-out;
+
+  @keyframes fade-in {
+    from {
+      opacity: 0;
+    }
+  }
+  @keyframes pop-in {
+    from {
+      opacity: 0;
+      transform: translateY(-4px) scale(0.98);
+    }
+  }
+  @keyframes sheet-in {
+    from {
+      transform: translateY(16px);
+      opacity: 0;
+    }
+  }
 }
 
 /*
- * 深色令牌：真深色中性底（非纯黑），soft 色改为半透明着色面
- * @layer base 晚于 @theme 输出，同特异性下覆盖 :root 令牌值
+ * 浅色的阴影与控件图标。控件图标是内联 SVG，读不到 CSS 变量，深浅各备一份。
+ * @layer base 晚于 @theme 输出，同特异性下 .dark 覆盖 :root。
  */
 @layer base {
+  :root {
+    --elevation-xs: 0 1px 2px rgb(27 26 23 / 0.06);
+    --elevation-card: 0 1px 2px rgb(27 26 23 / 0.04), 0 1px 3px rgb(27 26 23 / 0.06);
+    --elevation-pop: 0 8px 24px -8px rgb(27 26 23 / 0.18), 0 24px 48px -16px rgb(27 26 23 / 0.16);
+
+    --icon-check: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 14 14' fill='none' stroke='%23fff' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3.5 7.2 5.9 9.6 10.5 4.6'/%3E%3C/svg%3E");
+    --icon-dash: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 14 14' fill='none' stroke='%23fff' stroke-width='2' stroke-linecap='round'%3E%3Cpath d='M4 7h6'/%3E%3C/svg%3E");
+    --icon-calendar: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%237b7973' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M8 2v4M16 2v4M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2zM3 10h18'/%3E%3C/svg%3E");
+    --icon-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%237b7973' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+  }
+
+  /* 深色令牌：暖黑中性底；soft 色改为半透明着色面；面板靠 1px 描边而不是阴影分层 */
   .dark {
-    --color-panel: #0a101f;
-    --color-panel-soft: #111c33;
+    --color-canvas: #131311;
+    --color-surface: #1b1b19;
+    --color-surface-2: #222220;
+    --color-ink: #f3f2ed;
+    --color-text: #dfded8;
+    --color-muted: #a3a199;
+    --color-faint: #85837b;
+    --color-line: #2b2b28;
+    --color-line-strong: #3b3a36;
 
-    --color-primary: #4d84f6;
-    --color-primary-hover: #3d74e8;
-    --color-primary-soft: rgb(77 132 246 / 0.16);
-    --color-teal: #2fb3a0;
-    --color-teal-soft: rgb(47 179 160 / 0.15);
-    --color-amber: #e0a04a;
-    --color-amber-soft: rgb(224 160 74 / 0.14);
-    --color-red: #e56363;
-    --color-red-soft: rgb(229 99 99 / 0.15);
+    --color-primary: #f3f2ed;
+    --color-primary-hover: #e2e1db;
+    --color-primary-fg: #1b1a17;
+    --color-primary-soft: #262622;
 
-    --color-canvas: #0d1219;
-    --color-surface: #141b26;
-    --color-ink: #eef2f9;
-    --color-text: #dde4ee;
-    --color-muted: #9aa7bb;
-    --color-faint: #7f8b9f;
-    --color-line: #232e40;
-    --color-line-strong: #36445a;
+    --color-accent: #4cc38a;
+    --color-accent-hover: #5fd39b;
+    --color-accent-soft: rgb(76 195 138 / 0.14);
+    /* 别名在这里重新求值：.dark 若挂在子树上（深色浮层里的局部翻转），别名也要跟着变 */
+    --color-teal: var(--color-accent);
+    --color-teal-soft: var(--color-accent-soft);
 
-    --shadow-xs: 0 1px 2px rgb(0 0 0 / 0.35);
-    --shadow-card: 0 1px 2px rgb(0 0 0 / 0.3), 0 2px 10px -2px rgb(0 0 0 / 0.35);
-    --shadow-pop: 0 4px 14px -2px rgb(0 0 0 / 0.45), 0 18px 48px -12px rgb(0 0 0 / 0.6);
+    --color-blue: #6d9ef2;
+    --color-blue-soft: rgb(109 158 242 / 0.16);
+    --color-amber: #e0a24a;
+    --color-amber-soft: rgb(224 162 74 / 0.14);
+    --color-red: #ef6d5c;
+    --color-red-soft: rgb(239 109 92 / 0.15);
+
+    --color-panel: #262622;
+    --color-panel-soft: #33332e;
+
+    --elevation-xs: 0 1px 2px rgb(0 0 0 / 0.3);
+    --elevation-card: 0 1px 2px rgb(0 0 0 / 0.25), 0 1px 3px rgb(0 0 0 / 0.3);
+    --elevation-pop: 0 8px 24px -8px rgb(0 0 0 / 0.55), 0 24px 48px -16px rgb(0 0 0 / 0.5);
+
+    --icon-check: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 14 14' fill='none' stroke='%231b1a17' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3.5 7.2 5.9 9.6 10.5 4.6'/%3E%3C/svg%3E");
+    --icon-dash: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 14 14' fill='none' stroke='%231b1a17' stroke-width='2' stroke-linecap='round'%3E%3Cpath d='M4 7h6'/%3E%3C/svg%3E");
+    --icon-calendar: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2385837b' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M8 2v4M16 2v4M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2zM3 10h18'/%3E%3C/svg%3E");
+    --icon-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2385837b' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
   }
 }
 
 @layer base {
   html {
+    color-scheme: light;
     font-family: var(--font-sans);
     color: var(--color-text);
     background: var(--color-canvas);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+  }
+
+  /* 让原生日期面板、滚动条、<select> 弹层也跟着变深 */
+  html.dark {
+    color-scheme: dark;
   }
 
   body {
     margin: 0;
     min-height: 100dvh;
-    -webkit-font-smoothing: antialiased;
-    text-rendering: optimizeLegibility;
+    font-size: 0.875rem;
+    line-height: 1.5;
   }
 
   ::selection {
-    background: var(--color-primary-soft);
+    background: color-mix(in oklab, var(--color-accent) 22%, transparent);
     color: var(--color-ink);
+  }
+
+  input::placeholder,
+  textarea::placeholder {
+    color: var(--color-faint);
+    opacity: 1;
   }
 
   /* 细滚动条，跟随令牌（深浅主题自适应） */
@@ -118,62 +201,233 @@
     background: transparent;
   }
 
+  /* 焦点环统一用品牌绿；输入类控件在组件里改用 ring */
   *:focus-visible {
-    outline: 2px solid var(--color-primary);
+    outline: 2px solid var(--color-accent);
     outline-offset: 2px;
-  }
-
-  @media (prefers-reduced-motion: reduce) {
-    *, *::before, *::after {
-      animation-duration: 0.01ms !important;
-      transition-duration: 0.01ms !important;
-    }
   }
 }
 
 @layer components {
+  /* 面板：白底 + 发丝描边，默认不加阴影（深色下同样靠描边区分层级） */
   .card {
-    @apply bg-surface border border-line rounded-(--radius-card) shadow-(--shadow-card);
-  }
-
-  .table-base {
-    @apply w-full border-collapse text-sm;
-  }
-  /* 不透明：sticky 表头下滚动的行不能透上来 */
-  .table-base th {
-    @apply text-left font-semibold text-muted bg-canvas border-b border-line px-3 py-2.5 whitespace-nowrap;
-  }
-  .table-base td {
-    @apply border-b border-line/70 px-3 py-2.5 align-middle;
-  }
-  .table-base tbody tr {
-    @apply transition-colors;
-  }
-  .table-base tbody tr:hover {
-    @apply bg-canvas/60;
-  }
-
-  /* 长表格滚动时表头钉住，配合外层容器的 max-height + overflow-auto 使用 */
-  .table-sticky thead th {
-    @apply sticky top-0 z-10;
-  }
-
-  .num {
-    @apply font-mono tabular-nums;
+    @apply bg-surface border border-line rounded-(--radius-card);
   }
 
   /*
-   * 元信息文字（表格副行、时间戳、辅助说明）。
-   * 收成一个类统一 12px，以后要调只改这一处。
+   * 表格：表头小而淡，行高约 44px，最后一行无底边。
+   * 数字列在 th / td 上加 text-right + .num；主字段 text-ink font-medium，副行用 .text-meta。
    */
+  .table-base {
+    @apply w-full border-collapse text-[13.5px] leading-[1.4];
+  }
+  /* 表头不透明：sticky 时下面滚动的行不能透上来 */
+  .table-base th {
+    @apply h-10 px-4 text-left align-middle text-xs font-medium text-muted bg-surface border-b border-line whitespace-nowrap;
+  }
+  .table-base td {
+    @apply px-4 py-3 align-middle border-b border-line/80;
+  }
+  .table-base tbody tr:last-child td {
+    @apply border-b-0;
+  }
+  .table-base tbody tr {
+    @apply transition-colors duration-150;
+  }
+  .table-base tbody tr:hover {
+    @apply bg-surface-2;
+  }
+
+  /*
+   * 长表格滚动时表头钉住，配合外层容器的 max-height + overflow-auto 使用。
+   * border-collapse 下表头的 border 不跟着 sticky，底线改用内阴影画。
+   */
+  .table-sticky thead th {
+    @apply sticky top-0 z-10 shadow-[inset_0_-1px_0_var(--color-line)];
+  }
+
+  /*
+   * 表格行内的图标操作按钮：默认淡一些，行悬停 / 聚焦时显眼；触屏没有悬停，常亮。
+   * <button class="row-action" aria-label="编辑"><Icon name="edit" /></button>
+   * 危险动作再加 .row-action-danger（悬停转红）。
+   */
+  .row-action {
+    @apply inline-flex h-8 min-w-8 shrink-0 items-center justify-center rounded-md text-faint opacity-60 cursor-pointer transition-[color,background-color,opacity] duration-150 ease-out hover:text-ink hover:bg-primary-soft disabled:cursor-not-allowed disabled:opacity-30;
+  }
+  /* 列表行（非 table）用 .group 包住整行，悬停同样显出 */
+  tr:hover .row-action:not(:disabled),
+  .group:hover .row-action:not(:disabled),
+  .row-action:focus-visible {
+    @apply opacity-100;
+  }
+  /* 放了 32px 操作按钮的单元格收紧上下留白，行高与普通行一样保持约 44px */
+  .table-base td:has(.row-action) {
+    @apply py-1.5;
+  }
+  .row-action-danger:hover:not(:disabled) {
+    @apply text-red bg-red-soft;
+  }
+  @media (hover: none) {
+    .row-action:not(:disabled) {
+      @apply opacity-100;
+    }
+  }
+
+  /* 金额与数量：等宽数字但不换等宽字体；流水号另用 font-mono text-[12.5px] */
+  .num {
+    @apply tabular-nums;
+  }
+  /* 表格里的数字不折行（列宽让给品名这类文字列） */
+  .table-base .num {
+    @apply whitespace-nowrap;
+  }
+
+  /* 元信息文字（表格副行、时间戳、辅助说明）：12px / 18px，默认 faint，可被颜色工具类覆盖 */
   .text-meta {
     font-size: 0.75rem;
     line-height: 1.125rem;
+    color: var(--color-faint);
   }
 
   /* 表单字段级错误：校验不再只靠 toast */
   .field-error {
-    @apply mt-1 flex items-start gap-1 text-xs text-red;
+    @apply mt-1.5 flex items-start gap-1 text-xs text-red;
+  }
+
+  /*
+   * 自绘复选框 / 单选框：直接给原生 input 加类，保留原生键盘操作与 role。
+   * <input type="checkbox" class="checkbox"> / <input type="radio" class="radio">
+   * 尺寸固定 16px，不要再叠 size-* / accent-*。
+   */
+  .checkbox,
+  .radio {
+    appearance: none;
+    flex-shrink: 0;
+    display: inline-block;
+    width: 1rem;
+    height: 1rem;
+    margin: 0;
+    vertical-align: middle;
+    border: 1px solid var(--color-line-strong);
+    background-color: var(--color-surface);
+    background-position: center;
+    background-repeat: no-repeat;
+    background-size: 100% 100%;
+    cursor: pointer;
+    transition:
+      background-color 150ms ease-out,
+      border-color 150ms ease-out,
+      box-shadow 150ms ease-out;
+  }
+  .checkbox {
+    border-radius: 4px;
+  }
+  .radio {
+    border-radius: 9999px;
+  }
+  .checkbox:hover:not(:disabled),
+  .radio:hover:not(:disabled) {
+    border-color: var(--color-faint);
+  }
+  .checkbox:checked,
+  .checkbox:indeterminate,
+  .radio:checked {
+    border-color: var(--color-ink);
+    background-color: var(--color-ink);
+  }
+  .checkbox:checked {
+    background-image: var(--icon-check);
+  }
+  .checkbox:indeterminate {
+    background-image: var(--icon-dash);
+  }
+  /* 墨色圆 + 中心点；点用 primary-fg，深色下自动反转 */
+  .radio:checked {
+    background-image: radial-gradient(circle, var(--color-primary-fg) 0 2.5px, transparent 3px);
+    background-size: auto;
+  }
+  .checkbox:checked:hover:not(:disabled),
+  .checkbox:indeterminate:hover:not(:disabled),
+  .radio:checked:hover:not(:disabled) {
+    border-color: var(--color-primary-hover);
+    background-color: var(--color-primary-hover);
+  }
+  .checkbox:focus-visible,
+  .radio:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 2px color-mix(in oklab, var(--color-accent) 30%, transparent);
+  }
+  .checkbox:focus-visible:not(:checked):not(:indeterminate),
+  .radio:focus-visible:not(:checked) {
+    border-color: var(--color-accent);
+  }
+  .checkbox:disabled,
+  .radio:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+  /* 高对比度模式下自绘外观会丢，退回系统控件 */
+  @media (forced-colors: active) {
+    .checkbox,
+    .radio {
+      appearance: auto;
+    }
+  }
+
+  /* 数字框去掉原生上下箭头：表格里的窄输入框（数量 / 单价）不用给它留 15px */
+  input[type='number'] {
+    -moz-appearance: textfield;
+    appearance: textfield;
+  }
+  input[type='number']::-webkit-inner-spin-button,
+  input[type='number']::-webkit-outer-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+
+  /*
+   * 日期框：右侧自绘 calendar 图标，原生指示器透明铺满整个框（点哪里都能打开日期面板）。
+   * 右侧要留 36px：别和 px-* 一起用（工具类会覆盖这里的 padding），用 pl-3；Input 组件已处理。
+   * 加 data-empty 属性时，未聚焦的「年/月/日」占位显示为 faint。
+   */
+  .input-date {
+    position: relative;
+    min-width: 9rem;
+    padding-right: 2.25rem;
+    background-image: var(--icon-calendar);
+    background-repeat: no-repeat;
+    background-position: right 0.625rem center;
+    background-size: 1rem 1rem;
+  }
+  .input-date::-webkit-calendar-picker-indicator {
+    position: absolute;
+    inset: 0;
+    width: auto;
+    height: auto;
+    margin: 0;
+    padding: 0;
+    opacity: 0;
+    cursor: pointer;
+  }
+  .input-date[data-empty]:not(:focus)::-webkit-datetime-edit {
+    color: var(--color-faint);
+  }
+  /* 带 datalist 的输入框（历史领用人、部门建议）：Chrome 悬停时的原生 ▼ 换成与 Select 一致的 chevron */
+  input[list]:not(.input-date)::-webkit-calendar-picker-indicator {
+    appearance: none;
+    width: 1rem;
+    height: 1rem;
+    margin: 0;
+    color: transparent;
+    background: var(--icon-chevron) center / 1rem 1rem no-repeat;
+    cursor: pointer;
+  }
+  /* 没有 ::-webkit-calendar-picker-indicator 的浏览器（Firefox）保留自带图标，避免出现两个 */
+  @supports not selector(::-webkit-calendar-picker-indicator) {
+    .input-date {
+      padding-right: 0.75rem;
+      background-image: none;
+    }
   }
 
   /* AI 回复的 Markdown 渲染容器（utils/markdown.ts 的输出） */
@@ -183,7 +437,10 @@
   .md strong {
     @apply font-semibold text-ink;
   }
-  .md h1, .md h2, .md h3, .md h4 {
+  .md h1,
+  .md h2,
+  .md h3,
+  .md h4 {
     @apply font-semibold text-ink;
   }
   .md ul {
@@ -193,24 +450,39 @@
     @apply list-decimal pl-5 space-y-1;
   }
   .md code {
-    @apply font-mono text-[0.85em] bg-canvas border border-line rounded px-1 py-0.5;
+    @apply font-mono text-[0.85em] bg-primary-soft rounded px-1 py-0.5;
   }
   .md pre {
-    @apply bg-canvas border border-line rounded-(--radius-control) p-3 overflow-x-auto;
+    @apply bg-surface border border-line rounded-(--radius-control) p-3 overflow-x-auto;
   }
   .md pre code {
-    @apply bg-transparent border-0 p-0 rounded-none;
+    @apply bg-transparent p-0 rounded-none;
   }
   .md table {
     @apply w-full border-collapse text-xs my-1;
   }
   .md th {
-    @apply text-left font-semibold text-muted border-b border-line px-2 py-1.5 whitespace-nowrap;
+    @apply text-left font-medium text-muted border-b border-line px-2 py-1.5 whitespace-nowrap;
   }
   .md td {
-    @apply border-b border-line/70 px-2 py-1.5 align-top;
+    @apply border-b border-line/80 px-2 py-1.5 align-top;
   }
   .md a {
-    @apply text-primary underline underline-offset-2;
+    @apply text-accent underline underline-offset-2 hover:text-accent-hover;
+  }
+}
+
+/*
+ * 减少动态效果。放在所有 @layer 之外：未分层样式优先于任何层里的样式，
+ * 不用 !important 也能压过工具类里的 transition / animate-*；循环动画停在终态。
+ */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms;
+    animation-iteration-count: 1;
+    transition-duration: 0.01ms;
+    scroll-behavior: auto;
   }
 }

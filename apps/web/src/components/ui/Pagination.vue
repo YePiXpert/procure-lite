@@ -32,24 +32,26 @@ const pages = computed<(number | '…')[]>(() => {
 
 <template>
   <div class="flex flex-wrap items-center justify-between gap-3 text-xs text-muted">
-    <span>共 {{ total }} 条 · 第 {{ from }}-{{ to }} 条</span>
+    <span class="tabular-nums">共 {{ total }} 条 · 第 {{ from }}-{{ to }} 条</span>
     <div class="flex items-center gap-1">
-      <Button size="sm" variant="ghost" :disabled="page <= 1" aria-label="上一页" @click="emit('change', page - 1)">
-        <Icon name="chevron-left" :size="14" />
+      <Button size="sm" variant="ghost" icon-only :disabled="page <= 1" aria-label="上一页" @click="emit('change', page - 1)">
+        <Icon name="chevron-left" :size="16" />
       </Button>
       <template v-for="(p, i) in pages" :key="i">
-        <span v-if="p === '…'" class="px-1">…</span>
+        <span v-if="p === '…'" class="inline-flex size-8 items-center justify-center text-faint">…</span>
         <button
           v-else
-          class="h-8 min-w-8 px-1.5 rounded-(--radius-control) text-xs font-medium cursor-pointer transition-colors"
-          :class="p === page ? 'bg-primary text-white' : 'text-muted hover:bg-primary-soft hover:text-primary'"
+          type="button"
+          class="h-8 min-w-8 px-1.5 rounded-(--radius-control) text-xs font-medium tabular-nums cursor-pointer transition-colors duration-150"
+          :class="p === page ? 'bg-ink text-surface' : 'text-muted hover:bg-primary-soft hover:text-ink'"
+          :aria-current="p === page ? 'page' : undefined"
           @click="emit('change', p)"
         >
           {{ p }}
         </button>
       </template>
-      <Button size="sm" variant="ghost" :disabled="page >= pageCount" aria-label="下一页" @click="emit('change', page + 1)">
-        <Icon name="chevron-right" :size="14" />
+      <Button size="sm" variant="ghost" icon-only :disabled="page >= pageCount" aria-label="下一页" @click="emit('change', page + 1)">
+        <Icon name="chevron-right" :size="16" />
       </Button>
     </div>
   </div>

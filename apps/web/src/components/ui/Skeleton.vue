@@ -7,5 +7,5 @@
 </script>
 
 <template>
-  <div class="animate-pulse rounded-(--radius-control) bg-line/50" aria-hidden="true" />
+  <div class="animate-pulse rounded-md bg-primary-soft" aria-hidden="true" />
 </template>

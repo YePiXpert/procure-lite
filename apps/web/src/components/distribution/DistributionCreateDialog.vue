@@ -5,6 +5,7 @@ import Button from '@/components/ui/Button.vue';
 import Icon from '@/components/ui/Icon.vue';
 import Input from '@/components/ui/Input.vue';
 import Select from '@/components/ui/Select.vue';
+import Tabs from '@/components/ui/Tabs.vue';
 import { distributionsApi, itemsApi, type ItemRow, type ProductRow } from '@/api';
 import { useToastStore } from '@/stores/toast';
 import { useCatalogStore } from '@/stores/catalog';
@@ -226,100 +227,93 @@ async function submit(): Promise<void> {
     <div v-if="loading" class="py-16 text-center text-sm text-faint">加载可发放清单…</div>
 
     <template v-else>
-      <p v-if="loadError" class="mb-3 flex items-start gap-1.5 px-3 py-2 bg-red-soft border border-red/25 rounded-(--radius-control) text-xs text-red">
-        <Icon name="alert" :size="13" class="mt-px shrink-0" />{{ loadError }}
+      <p v-if="loadError" class="mb-4 flex items-start gap-1.5 px-3 py-2 bg-red-soft rounded-lg text-[13px] text-red">
+        <Icon name="alert" :size="14" class="mt-0.5 shrink-0" />{{ loadError }}
       </p>
 
-      <div class="grid grid-cols-2 gap-3 mb-4">
+      <div class="grid gap-4 sm:grid-cols-2">
         <Input v-model="form.date" label="发放日期" type="date" required />
         <Input v-model="form.department" label="领用部门（可空）" placeholder="默认取申领部门" />
       </div>
 
-      <!-- 模式切换 -->
-      <div class="flex gap-2 mb-3">
-        <button
-          v-for="m in [{ key: 'DIRECT', label: '从台账直发' }, { key: 'STOCK', label: '从库存发放' }]"
-          :key="m.key"
-          type="button"
-          class="h-8 px-3 rounded-(--radius-control) text-xs font-medium border cursor-pointer transition-all duration-150 active:scale-[0.98]"
-          :class="mode === m.key ? 'bg-ink text-surface border-ink' : 'bg-surface text-muted border-line-strong hover:border-primary'"
-          @click="switchMode(m.key as DistributionSource)"
-        >
-          {{ m.label }}
-        </button>
-      </div>
+      <div class="mt-5 pt-5 border-t border-line">
+        <!-- 模式切换：只读绑定 + change，切换仍走 switchMode（会清空明细） -->
+        <Tabs
+          :model-value="mode"
+          variant="segmented"
+          :tabs="[{ value: 'DIRECT', label: '从台账直发' }, { value: 'STOCK', label: '从库存发放' }]"
+          @change="(v) => switchMode(v as DistributionSource)"
+        />
 
-      <p v-if="mode === 'DIRECT' && pendingItems.length === 0" class="mb-3 text-xs text-faint">
-        当前没有「待分发」状态的台账记录。可以先在工作台确认到货，或改用「从库存发放」。
-      </p>
-      <p v-if="mode === 'STOCK' && products.length === 0" class="mb-3 text-xs text-faint">
-        库存里暂时没有可发放的物品。可以在库存页登记入库，或在工作台把采购单整单入库。
-      </p>
+        <p v-if="mode === 'DIRECT' && pendingItems.length === 0" class="mt-3 flex items-start gap-1.5 text-[13px] text-muted">
+          <Icon name="info" :size="14" class="mt-0.5 shrink-0 text-faint" />当前没有「待分发」状态的台账记录。可以先在工作台确认到货，或改用「从库存发放」。
+        </p>
+        <p v-if="mode === 'STOCK' && products.length === 0" class="mt-3 flex items-start gap-1.5 text-[13px] text-muted">
+          <Icon name="info" :size="14" class="mt-0.5 shrink-0 text-faint" />库存里暂时没有可发放的物品。可以在库存页登记入库，或在工作台把采购单整单入库。
+        </p>
 
-      <!-- 明细行 -->
-      <div class="space-y-2">
-        <div v-for="(line, i) in lines" :key="line.id" class="p-3 bg-canvas/60 border border-line rounded-(--radius-control) space-y-2">
-          <div class="grid grid-cols-12 gap-2 items-end">
-            <div class="col-span-12 sm:col-span-5">
-              <Select
-                v-if="mode === 'DIRECT'"
-                :model-value="line.itemId ? String(line.itemId) : ''"
-                :options="itemOptions"
-                placeholder="选择待分发台账记录"
-                @update:model-value="(v) => onPickItem(i, v)"
-              />
-              <Select
-                v-else
-                :model-value="line.productId ? String(line.productId) : ''"
-                :options="productOptions"
-                placeholder="选择库存物品"
-                @update:model-value="(v) => onPickProduct(i, v)"
-              />
+        <!-- 明细行 -->
+        <div class="mt-3 space-y-2">
+          <div v-for="(line, i) in lines" :key="line.id" class="p-3 bg-surface-2 border border-line rounded-lg space-y-2">
+            <div class="grid grid-cols-12 gap-2 items-end">
+              <div class="col-span-12 sm:col-span-5">
+                <Select
+                  v-if="mode === 'DIRECT'"
+                  :model-value="line.itemId ? String(line.itemId) : ''"
+                  :options="itemOptions"
+                  placeholder="选择待分发台账记录"
+                  @update:model-value="(v) => onPickItem(i, v)"
+                />
+                <Select
+                  v-else
+                  :model-value="line.productId ? String(line.productId) : ''"
+                  :options="productOptions"
+                  placeholder="选择库存物品"
+                  @update:model-value="(v) => onPickProduct(i, v)"
+                />
+              </div>
+              <div class="col-span-5 sm:col-span-3">
+                <Input v-model="line.recipient" placeholder="领用人" :suggestions="knownRecipients" />
+              </div>
+              <div class="col-span-5 sm:col-span-3">
+                <Input v-model="line.quantity" type="number" min="0" step="any" placeholder="数量" />
+              </div>
+              <div class="col-span-2 sm:col-span-1 flex justify-end">
+                <button
+                  type="button"
+                  class="inline-flex items-center justify-center size-9 rounded-(--radius-control) text-faint transition-colors duration-150 enabled:cursor-pointer enabled:hover:text-red enabled:hover:bg-red-soft disabled:opacity-30 disabled:cursor-not-allowed"
+                  :aria-label="`删除明细 ${i + 1}`"
+                  :disabled="lines.length === 1"
+                  @click="lines.splice(i, 1)"
+                >
+                  <Icon name="trash" :size="16" />
+                </button>
+              </div>
             </div>
-            <div class="col-span-5 sm:col-span-3">
-              <Input v-model="line.recipient" placeholder="领用人" :suggestions="knownRecipients" />
-            </div>
-            <div class="col-span-4 sm:col-span-3">
-              <Input v-model="line.quantity" type="number" min="0" step="any" placeholder="数量" />
-            </div>
-            <div class="col-span-3 sm:col-span-1 flex justify-end pb-1">
-              <button
-                type="button"
-                class="p-2 text-faint rounded-md transition-colors"
-                :class="lines.length === 1
-                  ? 'opacity-30 cursor-not-allowed'
-                  : 'hover:text-red hover:bg-red-soft cursor-pointer'"
-                :aria-label="`删除明细 ${i + 1}`"
-                :disabled="lines.length === 1"
-                @click="lines.splice(i, 1)"
-              >
-                <Icon name="close" :size="14" />
-              </button>
-            </div>
+            <!-- 签收备注：字段一直在提交，之前只是没有输入框 -->
+            <Input v-model="line.signoffNote" placeholder="签收备注（可空，如：本人签收 / 代领）" />
           </div>
-          <!-- 签收备注：字段一直在提交，之前只是没有输入框 -->
-          <Input v-model="line.signoffNote" placeholder="签收备注（可空，如：本人签收 / 代领）" />
-        </div>
 
-        <Button variant="ghost" size="sm" @click="lines.push(emptyLine())">
-          <Icon name="plus" :size="13" /> 添加领用明细
-        </Button>
+          <Button variant="ghost" size="sm" @click="lines.push(emptyLine())">
+            <Icon name="plus" :size="14" /> 添加领用明细
+          </Button>
+        </div>
       </div>
 
-      <div class="mt-4">
+      <div class="mt-5 pt-5 border-t border-line">
         <Input v-model="form.note" label="备注（可空）" placeholder="如：第二次集中发放" />
       </div>
     </template>
 
     <template #footer>
-      <p v-if="validation" class="mr-auto self-center flex items-center gap-1 text-xs text-red">
-        <Icon name="alert" :size="12" class="shrink-0" />{{ validation }}
+      <p v-if="validation" class="mr-auto self-center flex items-start gap-1.5 text-[13px] text-red">
+        <Icon name="alert" :size="14" class="mt-0.5 shrink-0" />{{ validation }}
       </p>
-      <p v-else class="mr-auto self-center text-xs text-muted">
-        共 {{ lines.length }} 笔 · 合计 <b class="num text-ink">{{ totalQuantity }}</b> 件
+      <p v-else class="mr-auto self-center text-[13px] text-muted">
+        共 {{ lines.length }} 笔 · 合计 <b class="num font-semibold text-ink">{{ totalQuantity }}</b> 件
       </p>
       <Button variant="ghost" @click="emit('update:open', false)">取消</Button>
-      <Button variant="primary" :loading="saving" :disabled="!!validation || loading" @click="submit">确认发放</Button>
+      <Button variant="accent" :loading="saving" :disabled="!!validation || loading" @click="submit">确认发放</Button>
     </template>
   </Dialog>
 </template>

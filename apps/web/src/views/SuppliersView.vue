@@ -9,6 +9,7 @@ import Badge from '@/components/ui/Badge.vue';
 import EmptyState from '@/components/ui/EmptyState.vue';
 import ErrorState from '@/components/ui/ErrorState.vue';
 import Skeleton from '@/components/ui/Skeleton.vue';
+import Tabs from '@/components/ui/Tabs.vue';
 import Dialog from '@/components/ui/Dialog.vue';
 import ConfirmDialog from '@/components/ui/ConfirmDialog.vue';
 import { suppliersApi, type PriceRecordRow, type SupplierRow } from '@/api';
@@ -228,15 +229,15 @@ async function runSuggest(): Promise<void> {
 </script>
 
 <template>
-  <div class="h-full flex flex-col space-y-4">
-    <!-- 采购建议 -->
-    <div class="card p-4">
-      <h2 class="text-sm font-semibold text-ink mb-1">比价建议</h2>
-      <p class="text-xs text-faint mb-2.5">按品名查各家最新报价；下单登记时也会自动提示</p>
-      <div class="flex gap-2">
+  <div class="space-y-6">
+    <!-- 比价查询：surface-2 搜索条（不是独立卡片），结果表就跟在条里 -->
+    <section class="bg-surface-2 rounded-(--radius-card) p-4 sm:p-5">
+      <h2 class="text-[15px] leading-6 font-semibold text-ink">比价建议</h2>
+      <p class="mt-0.5 text-[13px] text-muted">按品名查各家最新报价；下单登记时也会自动提示</p>
+      <div class="mt-3 flex items-center gap-2">
         <SearchInput
           v-model="state.suggest"
-          class="flex-1 max-w-sm"
+          class="min-w-0 flex-1 sm:max-w-md"
           placeholder="输入品名查各家最新报价"
           :delay="0"
           @search="runSuggest"
@@ -246,85 +247,116 @@ async function runSuggest(): Promise<void> {
 
       <EmptyState
         v-if="suggestedFor && suggestions.length === 0 && !suggestLoading"
+        class="mt-4 bg-surface border border-line rounded-lg"
         illustration="search"
         :title="`「${suggestedFor}」还没有报价记录`"
         description="品名需要与记价时完全一致才能匹配上。"
       />
-      <div v-else-if="suggestions.length > 0" class="mt-3 overflow-x-auto">
-        <table class="table-base table-sticky min-w-[560px]">
-          <thead><tr><th>供应商</th><th class="text-right">单价</th><th>链接</th><th>报价时间</th></tr></thead>
+      <div v-else-if="suggestions.length > 0" class="mt-4 overflow-x-auto bg-surface border border-line rounded-lg">
+        <table class="table-base min-w-[560px]">
+          <thead>
+            <tr>
+              <th>供应商</th>
+              <th class="text-right">单价</th>
+              <th>链接</th>
+              <th>报价时间</th>
+            </tr>
+          </thead>
           <tbody>
             <tr v-for="(s, i) in suggestions" :key="s.id">
-              <td>
-                <span class="font-medium">{{ s.supplier.name }}</span>
-                <Badge v-if="i === 0" tone="teal" class="ml-1.5">最低价</Badge>
+              <!-- 这格可能带 24px 的「最低价」药丸：上下内边距收 2px，行高与其它行一致（44px） -->
+              <td class="py-2.5">
+                <div class="flex items-center gap-2">
+                  <span class="font-medium text-ink">{{ s.supplier.name }}</span>
+                  <Badge v-if="i === 0" tone="teal">最低价</Badge>
+                </div>
               </td>
-              <td class="text-right num font-semibold">{{ formatCurrency(s.unitPrice) }}</td>
+              <td class="text-right num font-semibold text-ink">{{ formatCurrency(s.unitPrice) }}</td>
               <td>
-                <a v-if="s.purchaseLink" :href="s.purchaseLink" target="_blank" rel="noopener" class="text-primary hover:underline text-xs">打开链接</a>
-                <span v-else class="text-faint text-xs">—</span>
+                <a
+                  v-if="s.purchaseLink"
+                  :href="s.purchaseLink"
+                  target="_blank"
+                  rel="noopener"
+                  class="inline-flex items-center gap-1 text-accent hover:underline underline-offset-2"
+                >打开链接<Icon name="external" :size="12" class="shrink-0" /></a>
+                <span v-else class="text-faint">—</span>
               </td>
-              <td class="text-xs text-faint num">{{ formatDate(s.createdAt) }}</td>
+              <td class="text-muted num">{{ formatDate(s.createdAt) }}</td>
             </tr>
           </tbody>
         </table>
       </div>
-    </div>
+    </section>
 
-    <div class="card overflow-hidden flex-1 min-h-0 flex flex-col">
-      <div class="flex border-b border-line px-3 pt-2 gap-1">
-        <button
-          v-for="t in [{ key: 'suppliers', label: '供应商' }, { key: 'prices', label: '价格记忆' }]"
-          :key="t.key"
-          class="px-3 h-9 text-sm font-medium rounded-t-lg cursor-pointer transition-colors"
-          :class="tab === t.key ? 'text-primary border-b-2 border-primary bg-primary-soft/40' : 'text-muted hover:text-text hover:bg-canvas/60'"
-          @click="switchTab(t.key as 'suppliers' | 'prices')"
-        >
-          {{ t.label }}
-        </button>
-        <div class="ml-auto flex items-center gap-2 pb-1.5">
+    <!-- 供应商 / 价格记忆：一个面板，顶部工具栏 = 分段切换 + 过滤 + 本页动作 -->
+    <section class="card overflow-hidden">
+      <div class="flex flex-wrap items-center gap-2 px-4 py-3 border-b border-line">
+        <Tabs
+          :model-value="tab"
+          variant="segmented"
+          :tabs="[{ value: 'suppliers', label: '供应商' }, { value: 'prices', label: '价格记忆' }]"
+          @change="(v) => switchTab(v as 'suppliers' | 'prices')"
+        />
+        <template v-if="tab === 'prices'">
+          <SearchInput v-model="state.priceSearch" class="w-full sm:w-64" placeholder="按品名过滤" @search="loadPrices" />
+          <p v-if="prices.length >= 200" class="text-xs text-amber">仅显示最近 200 条，请用品名过滤</p>
+        </template>
+        <div class="ml-auto flex items-center gap-2">
           <Button v-if="tab === 'prices'" variant="secondary" size="sm" @click="openPriceDialog">
-            <Icon name="plus" :size="13" /> 记一笔价格
+            <Icon name="plus" :size="14" /> 记一笔价格
           </Button>
           <Button variant="primary" size="sm" @click="openSupplierDialog(null)">
-            <Icon name="plus" :size="13" /> 新增供应商
+            <Icon name="plus" :size="14" /> 新增供应商
           </Button>
         </div>
       </div>
 
-      <div class="flex-1 min-h-0 flex flex-col overflow-hidden">
       <!-- 供应商列表 -->
       <template v-if="tab === 'suppliers'">
-        <div class="h-full flex flex-col">
-        <div v-if="loading" class="p-3 space-y-2">
-          <Skeleton v-for="i in 8" :key="i" class="h-10" />
+        <div v-if="loading" class="p-4 space-y-2">
+          <Skeleton v-for="i in 6" :key="i" class="h-10" />
         </div>
-        <ErrorState v-else-if="loadError" class="flex-1 justify-center" :message="loadError" @retry="loadSuppliers" />
-        <EmptyState v-else-if="suppliers.length === 0" class="flex-1 justify-center" illustration="truck" title="还没有供应商" description="把常用的几家加进来，采购时快速选择" />
-        <div v-else class="flex-1 min-h-0 overflow-auto">
-          <table class="table-base table-sticky min-w-[640px]">
-            <thead><tr><th>名称</th><th>联系人</th><th>电话</th><th class="text-right">关联台账</th><th class="text-right">报价数</th><th class="w-24">操作</th></tr></thead>
+        <ErrorState v-else-if="loadError" :message="loadError" @retry="loadSuppliers" />
+        <EmptyState v-else-if="suppliers.length === 0" illustration="truck" title="还没有供应商" description="把常用的几家加进来，采购时快速选择" />
+        <!-- 操作列放的是 32px 的 .row-action，单元格上下内边距收到 6px，行高才是 44px -->
+        <div v-else class="overflow-x-auto">
+          <table class="table-base min-w-[640px]">
+            <thead>
+              <tr>
+                <th>名称</th>
+                <th>联系人</th>
+                <th>电话</th>
+                <th class="text-right">关联台账</th>
+                <th class="text-right">报价数</th>
+                <th class="w-24">操作</th>
+              </tr>
+            </thead>
             <tbody>
               <tr v-for="s in suppliers" :key="s.id">
-                <td class="font-medium">{{ s.name }}</td>
-                <td class="text-xs">{{ s.contact ?? '—' }}</td>
-                <td class="text-xs num">
-                  <a v-if="s.phone" :href="`tel:${s.phone}`" class="hover:text-primary hover:underline">{{ s.phone }}</a>
-                  <template v-else>—</template>
+                <td class="font-medium text-ink">{{ s.name }}</td>
+                <td>
+                  <template v-if="s.contact">{{ s.contact }}</template>
+                  <span v-else class="text-faint">—</span>
+                </td>
+                <td class="num">
+                  <a v-if="s.phone" :href="`tel:${s.phone}`" class="hover:text-accent hover:underline underline-offset-2">{{ s.phone }}</a>
+                  <span v-else class="text-faint">—</span>
                 </td>
                 <td class="text-right num">{{ s._count?.items ?? 0 }}</td>
                 <td class="text-right num">{{ s._count?.priceRecords ?? 0 }}</td>
-                <td>
-                  <div class="flex items-center gap-0.5">
-                    <button class="p-1.5 rounded-md text-faint transition-colors duration-150 hover:bg-canvas/80 hover:text-primary cursor-pointer" title="编辑" @click="openSupplierDialog(s)"><Icon name="edit" :size="14" /></button>
+                <td class="py-1.5">
+                  <div class="flex items-center gap-1">
+                    <button class="row-action" title="编辑" @click="openSupplierDialog(s)"><Icon name="edit" :size="16" /></button>
                     <button
-                      class="p-1.5 rounded-md text-faint transition-colors duration-150 hover:bg-canvas/80 hover:text-red cursor-pointer disabled:opacity-50"
+                      class="row-action row-action-danger"
+                      :class="removingSupplierId === s.id ? 'w-auto px-2 text-xs' : ''"
                       title="删除"
                       :disabled="removingSupplierId === s.id"
                       @click="deleteTarget = s"
                     >
                       <template v-if="removingSupplierId === s.id">删除中…</template>
-                      <Icon v-else name="trash" :size="14" />
+                      <Icon v-else name="trash" :size="16" />
                     </button>
                   </div>
                 </td>
@@ -332,68 +364,73 @@ async function runSuggest(): Promise<void> {
             </tbody>
           </table>
         </div>
-        </div>
       </template>
 
       <!-- 价格记录 -->
       <template v-else>
-        <div class="h-full flex flex-col">
-        <div class="flex items-center gap-2 px-4 py-3 border-b border-line">
-          <SearchInput v-model="state.priceSearch" class="flex-1 max-w-xs" placeholder="按品名过滤" @search="loadPrices" />
-          <p v-if="prices.length >= 200" class="text-xs text-amber">仅显示最近 200 条，请用品名过滤</p>
-        </div>
-        <div v-if="loadingPrices" class="p-3 space-y-2">
-          <Skeleton v-for="i in 8" :key="i" class="h-10" />
+        <div v-if="loadingPrices" class="p-4 space-y-2">
+          <Skeleton v-for="i in 6" :key="i" class="h-10" />
         </div>
         <EmptyState
           v-else-if="prices.length === 0"
-          class="flex-1 justify-center"
           :illustration="state.priceSearch ? 'search' : 'empty'"
           :title="state.priceSearch ? '没有匹配的价格记录' : '暂无价格记录'"
           description="下单时顺手记下单价，下次自动比价"
         />
-        <div v-else class="flex-1 min-h-0 overflow-auto">
-          <table class="table-base table-sticky min-w-[640px]">
-            <thead><tr><th>品名</th><th>供应商</th><th class="text-right">单价</th><th>链接</th><th>时间</th><th class="w-16" /></tr></thead>
+        <div v-else class="overflow-x-auto">
+          <table class="table-base min-w-[640px]">
+            <thead>
+              <tr>
+                <th>品名</th>
+                <th>供应商</th>
+                <th class="text-right">单价</th>
+                <th>链接</th>
+                <th>时间</th>
+                <th class="w-16" />
+              </tr>
+            </thead>
             <tbody>
               <tr v-for="p in prices" :key="p.id">
-                <td class="font-medium">{{ p.itemName }}</td>
-                <td class="text-xs">{{ p.supplier.name }}</td>
+                <td class="font-medium text-ink">{{ p.itemName }}</td>
+                <td>{{ p.supplier.name }}</td>
                 <td class="text-right num">{{ formatCurrency(p.unitPrice) }}</td>
                 <td>
-                  <a v-if="p.purchaseLink" :href="p.purchaseLink" target="_blank" rel="noopener" class="text-primary hover:underline text-xs">链接</a>
-                  <span v-else class="text-faint text-xs">—</span>
+                  <a
+                    v-if="p.purchaseLink"
+                    :href="p.purchaseLink"
+                    target="_blank"
+                    rel="noopener"
+                    class="inline-flex items-center gap-1 text-accent hover:underline underline-offset-2"
+                  >链接<Icon name="external" :size="12" class="shrink-0" /></a>
+                  <span v-else class="text-faint">—</span>
                 </td>
-                <td class="text-xs text-faint num">{{ formatDate(p.createdAt) }}</td>
-                <td>
+                <td class="text-muted num">{{ formatDate(p.createdAt) }}</td>
+                <td class="py-1.5">
                   <button
-                    class="p-1.5 rounded-md text-faint transition-colors duration-150 hover:bg-canvas/80 hover:text-red cursor-pointer disabled:opacity-50"
+                    class="row-action row-action-danger"
+                    :class="removingPriceId === p.id ? 'w-auto px-2 text-xs' : ''"
                     title="删除"
                     :disabled="removingPriceId === p.id"
                     @click="deletePriceTarget = p"
                   >
                     <template v-if="removingPriceId === p.id">删除中…</template>
-                    <Icon v-else name="trash" :size="14" />
+                    <Icon v-else name="trash" :size="16" />
                   </button>
                 </td>
               </tr>
             </tbody>
           </table>
         </div>
-        </div>
       </template>
-    </div>
-    </div>
+    </section>
 
     <!-- 供应商对话框 -->
     <Dialog :open="supplierDialogOpen" :title="supplierDialogTarget ? '编辑供应商' : '新增供应商'" width="440px" @update:open="supplierDialogOpen = $event">
-      <div class="space-y-3.5">
-        <Input v-model="supplierForm.name" label="名称" required placeholder="如：得力官方旗舰店" :error="supplierErrors.name" />
-        <div class="grid grid-cols-2 gap-3">
-          <Input v-model="supplierForm.contact" label="联系人" />
-          <Input v-model="supplierForm.phone" label="电话" type="tel" />
-        </div>
-        <Input v-model="supplierForm.note" label="备注" />
+      <div class="grid gap-4 sm:grid-cols-2">
+        <Input v-model="supplierForm.name" class="sm:col-span-2" label="名称" required placeholder="如：得力官方旗舰店" :error="supplierErrors.name" />
+        <Input v-model="supplierForm.contact" label="联系人" />
+        <Input v-model="supplierForm.phone" label="电话" type="tel" />
+        <Input v-model="supplierForm.note" class="sm:col-span-2" label="备注" />
       </div>
       <template #footer>
         <Button variant="ghost" @click="supplierDialogOpen = false">取消</Button>
@@ -403,9 +440,9 @@ async function runSuggest(): Promise<void> {
 
     <!-- 价格记录对话框 -->
     <Dialog :open="priceDialogOpen" title="记一笔价格" width="440px" @update:open="priceDialogOpen = $event">
-      <div class="space-y-3.5">
-        <Select v-model="priceForm.supplierId" label="供应商" :options="supplierOptions" required :error="priceErrors.supplierId" />
-        <Input v-model="priceForm.itemName" label="品名" required placeholder="与台账品名保持一致可自动比价" :error="priceErrors.itemName" />
+      <div class="grid gap-4 sm:grid-cols-2">
+        <Select v-model="priceForm.supplierId" class="sm:col-span-2" label="供应商" :options="supplierOptions" required :error="priceErrors.supplierId" />
+        <Input v-model="priceForm.itemName" class="sm:col-span-2" label="品名" required placeholder="与台账品名保持一致可自动比价" :error="priceErrors.itemName" />
         <Input v-model="priceForm.unitPrice" label="单价" type="number" min="0" step="any" required :error="priceErrors.unitPrice" />
         <Input v-model="priceForm.purchaseLink" label="商品链接" placeholder="https://…" />
       </div>

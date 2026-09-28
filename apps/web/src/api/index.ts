@@ -140,13 +140,10 @@ async function mutation<T>(url: string, body?: unknown): Promise<T> {
   const key = 'procure-operation:' + url + ':' + JSON.stringify(body ?? {});
   const id = sessionStorage.getItem(key) || crypto.randomUUID();
   sessionStorage.setItem(key, id);
-  try {
-    const response = await http.post<T>(url, body, { headers: { 'Idempotency-Key': id } });
-    sessionStorage.removeItem(key);
-    return response.data;
-  } catch (error) {
-    throw error;
-  }
+  // 失败时保留 key：下次重试沿用同一个 Idempotency-Key
+  const response = await http.post<T>(url, body, { headers: { 'Idempotency-Key': id } });
+  sessionStorage.removeItem(key);
+  return response.data;
 }
 export const importsApi = {
   upload: (file: File, continueDuplicate = false) => {

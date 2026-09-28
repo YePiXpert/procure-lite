@@ -17,8 +17,8 @@ export default defineConfig({
         name: 'Procure Lite 采购台账',
         short_name: 'Procure Lite',
         description: '办公用品采购台账：OA 导入、采购执行、库存与领用发放',
-        theme_color: '#14213D',
-        background_color: '#F3F5F8',
+        theme_color: '#F5F4F0',
+        background_color: '#F5F4F0',
         display: 'standalone',
         icons: [
           { src: '/icons/icon-192.png', sizes: '192x192', type: 'image/png' },

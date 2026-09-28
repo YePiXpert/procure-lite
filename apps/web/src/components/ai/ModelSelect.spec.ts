@@ -11,7 +11,7 @@ it('preserves a configured model missing from the list and allows manual fallbac
   expect(wrapper.emitted('update:modelValue')).toBeUndefined();
   wrapper.findComponent(Select).vm.$emit('update:modelValue', 'other-gpt');
   expect(wrapper.emitted('update:modelValue')?.[0]).toEqual(['other-gpt']);
-  await wrapper.get('button.text-primary').trigger('click');
+  await wrapper.findAll('button').find((b) => b.text() === '手动填写')!.trigger('click');
   await wrapper.get('input').setValue('custom-gpt');
   expect(wrapper.emitted('update:modelValue')?.at(-1)).toEqual(['custom-gpt']);
 });

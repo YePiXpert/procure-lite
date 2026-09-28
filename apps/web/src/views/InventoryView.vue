@@ -2,6 +2,8 @@
 import { formatDateTime } from '@/utils/datetime';
 import { computed, onMounted, reactive, ref } from 'vue';
 import Button from '@/components/ui/Button.vue';
+import PageHeader from '@/components/ui/PageHeader.vue';
+import Tabs from '@/components/ui/Tabs.vue';
 import Icon from '@/components/ui/Icon.vue';
 import Input from '@/components/ui/Input.vue';
 import Select from '@/components/ui/Select.vue';
@@ -262,86 +264,112 @@ function toggleLow(): void {
 </script>
 
 <template>
-  <div class="h-full flex flex-col space-y-4">
-    <div class="card overflow-hidden flex-1 min-h-0 flex flex-col">
-      <div class="flex flex-wrap items-center gap-1 border-b border-line px-3 pt-2">
-        <button
-          v-for="t in [{ key: 'products', label: '库存物品' }, { key: 'movements', label: '库存流水' }]"
-          :key="t.key"
-          class="px-3 h-9 text-sm font-medium rounded-t-lg cursor-pointer transition-colors"
-          :class="tab === t.key ? 'text-primary border-b-2 border-primary bg-primary-soft/40' : 'text-muted hover:text-text hover:bg-canvas/60'"
-          @click="switchTab(t.key as 'products' | 'movements')"
-        >
-          {{ t.label }}
-        </button>
-        <div class="ml-auto flex items-center gap-2 pb-1.5">
-          <Button variant="secondary" size="sm" @click="openMovementDialog">
-            <Icon name="plus" :size="13" /> 记一笔流水
-          </Button>
-          <Button variant="primary" size="sm" @click="openProductDialog(null)">
-            <Icon name="plus" :size="13" /> 新增物品
-          </Button>
-        </div>
-      </div>
+  <div>
+    <PageHeader title="库存管理" description="台账入库与库存发放自动记账，其余变动手工记一笔流水">
+      <Button variant="secondary" @click="openMovementDialog">
+        <Icon name="plus" :size="16" /> 记一笔流水
+      </Button>
+      <Button variant="primary" @click="openProductDialog(null)">
+        <Icon name="plus" :size="16" /> 新增物品
+      </Button>
+    </PageHeader>
 
-      <div class="flex-1 min-h-0 flex flex-col overflow-hidden">
-      <!-- 物品 -->
-      <template v-if="tab === 'products'">
-        <div class="h-full flex flex-col">
-        <div class="flex flex-wrap items-center gap-2 px-4 py-3 border-b border-line">
-          <SearchInput v-model="state.search" class="flex-1 min-w-44" placeholder="搜索物品名" @search="loadProducts" />
+    <section class="card overflow-hidden">
+      <!-- 工具栏：视图切换 + 本视图的筛选与统计 -->
+      <div class="flex flex-wrap items-center gap-2 px-4 py-3 border-b border-line">
+        <Tabs
+          :model-value="tab"
+          variant="segmented"
+          block
+          class="w-full sm:w-44 sm:mr-2"
+          :tabs="[{ value: 'products', label: '库存物品' }, { value: 'movements', label: '库存流水' }]"
+          @change="(v) => switchTab(v as 'products' | 'movements')"
+        />
+
+        <template v-if="tab === 'products'">
+          <SearchInput v-model="state.search" class="w-full sm:w-auto sm:flex-1 sm:min-w-44 sm:max-w-72" placeholder="搜索物品名" @search="loadProducts" />
+          <!-- 筛选开关：按下态 = 中性选中底，图标转红提示「正在只看低库存」 -->
           <button
-            class="inline-flex items-center gap-1.5 h-9 px-3 rounded-(--radius-control) border text-xs cursor-pointer transition-all duration-150 active:scale-[0.98]"
-            :class="state.low ? 'bg-ink border-ink text-surface font-semibold' : 'bg-surface border-line-strong text-muted hover:border-primary'"
+            type="button"
+            class="inline-flex shrink-0 items-center justify-center gap-2 h-9 px-3.5 whitespace-nowrap rounded-(--radius-control) border text-sm font-medium cursor-pointer select-none transition duration-150 ease-out active:scale-[0.98]"
+            :class="state.low
+              ? 'bg-primary-soft border-line-strong text-ink'
+              : 'bg-surface border-line-strong text-text hover:bg-surface-2 hover:border-faint'"
+            :aria-pressed="!!state.low"
             @click="toggleLow"
           >
-            <Icon name="alert" :size="12" /> 只看低库存
+            <Icon name="alert" :size="16" :class="state.low ? 'text-red' : 'text-faint'" /> 只看低库存
           </button>
-          <p v-if="!loadingProducts && products.length > 0" class="ml-auto text-xs text-faint">
-            {{ products.length }} 种 · 合计 <b class="num text-ink">{{ totalStock }}</b> 件<template v-if="lowCount > 0"> · <span class="text-red">{{ lowCount }} 项低库存</span></template>
+          <p v-if="!loadingProducts && products.length > 0" class="ml-auto text-xs text-muted">
+            {{ products.length }} 种 · 合计 <b class="num font-semibold text-ink">{{ totalStock }}</b> 件<template v-if="lowCount > 0"> · <span class="text-red">{{ lowCount }} 项低库存</span></template>
           </p>
-        </div>
+        </template>
 
-        <div v-if="loadingProducts" class="p-3 space-y-2">
-          <Skeleton v-for="i in 8" :key="i" class="h-10" />
+        <template v-else>
+          <Select
+            v-model="state.movementType"
+            :options="[{ label: '全部类型', value: '' }, ...Object.entries(MOVEMENT_TYPE_LABELS).map(([v, l]) => ({ label: l, value: v }))]"
+            clearable
+            class="w-full sm:w-36"
+            @update:model-value="state.movementPage = 1; loadMovements()"
+          />
+        </template>
+      </div>
+
+      <!-- 物品 -->
+      <template v-if="tab === 'products'">
+        <div v-if="loadingProducts" class="p-4 space-y-2">
+          <Skeleton v-for="i in 6" :key="i" class="h-10" />
         </div>
-        <ErrorState v-else-if="productError" class="flex-1 justify-center" :message="productError" @retry="loadProducts" />
+        <ErrorState v-else-if="productError" :message="productError" @retry="loadProducts" />
         <EmptyState
           v-else-if="products.length === 0"
-          class="flex-1 justify-center"
           :illustration="state.search || state.low ? 'search' : 'box'"
           :title="state.search || state.low ? '没有符合条件的物品' : '暂无库存物品'"
           :description="state.search || state.low ? '试试清除筛选条件' : '台账入库或手动新增后出现在这里'"
         />
 
-        <div v-else class="flex-1 min-h-0 overflow-auto">
-          <table class="table-base table-sticky min-w-[760px]">
+        <div v-else class="overflow-x-auto">
+          <table class="table-base min-w-[700px]">
             <thead>
               <tr>
-                <th>物品</th><th>分类</th><th class="text-right">当前库存</th><th class="text-right">预警阈值</th><th>状态</th><th class="text-right">领用次数</th><th class="w-24">操作</th>
+                <th>物品</th>
+                <th>分类</th>
+                <th class="text-right">当前库存</th>
+                <th class="text-right">预警阈值</th>
+                <th>状态</th>
+                <th class="text-right">领用次数</th>
+                <th class="w-24 text-right">操作</th>
               </tr>
             </thead>
             <tbody>
               <tr v-for="p in products" :key="p.id">
-                <td class="font-medium">{{ p.name }}<span v-if="p.unit" class="ml-1 text-xs text-faint">（{{ p.unit }}）</span></td>
-                <td class="text-xs text-muted">{{ p.category ?? '—' }}</td>
-                <td class="text-right num font-semibold" :class="p.isLow ? 'text-red' : ''">{{ p.stockQty }}</td>
-                <td class="text-right num text-xs text-muted">{{ p.lowStockThreshold ?? '—' }}</td>
-                <td><Badge :tone="p.isLow ? 'red' : 'teal'">{{ p.isLow ? '低库存' : '充足' }}</Badge></td>
-                <td class="text-right num text-xs">{{ p._count?.distributionLines ?? 0 }}</td>
                 <td>
-                  <div class="flex items-center gap-0.5">
-                    <button class="p-1.5 rounded-md text-faint transition-colors duration-150 hover:bg-canvas/80 hover:text-primary cursor-pointer" title="编辑" @click="openProductDialog(p)">
-                      <Icon name="edit" :size="14" />
+                  <span class="text-ink font-medium">{{ p.name }}</span><span v-if="p.unit" class="ml-1 text-meta">（{{ p.unit }}）</span>
+                </td>
+                <td>
+                  <Badge v-if="p.category">{{ p.category }}</Badge>
+                  <span v-else class="text-faint">—</span>
+                </td>
+                <td class="text-right num font-semibold" :class="p.isLow ? 'text-red' : 'text-ink'">{{ p.stockQty }}</td>
+                <td class="text-right num text-muted">{{ p.lowStockThreshold ?? '—' }}</td>
+                <td><Badge :tone="p.isLow ? 'red' : 'teal'">{{ p.isLow ? '低库存' : '充足' }}</Badge></td>
+                <td class="text-right num text-muted">{{ p._count?.distributionLines ?? 0 }}</td>
+                <td class="py-1.5">
+                  <div class="flex items-center justify-end gap-0.5">
+                    <button type="button" class="row-action" title="编辑" @click="openProductDialog(p)">
+                      <Icon name="edit" :size="16" />
                     </button>
                     <button
-                      class="p-1.5 rounded-md text-faint transition-colors duration-150 hover:bg-canvas/80 hover:text-red cursor-pointer disabled:opacity-50"
+                      type="button"
+                      class="row-action row-action-danger"
+                      :class="removingProductId === p.id ? 'w-auto px-2 text-xs' : ''"
                       title="删除"
                       :disabled="removingProductId === p.id"
                       @click="deleteTarget = p"
                     >
                       <template v-if="removingProductId === p.id">删除中…</template>
-                      <Icon v-else name="trash" :size="14" />
+                      <Icon v-else name="trash" :size="16" />
                     </button>
                   </div>
                 </td>
@@ -349,65 +377,62 @@ function toggleLow(): void {
             </tbody>
           </table>
         </div>
-        </div>
       </template>
 
       <!-- 流水 -->
       <template v-else>
-        <div class="h-full flex flex-col">
-        <div class="flex items-center gap-2 px-4 py-3 border-b border-line">
-          <Select
-            v-model="state.movementType"
-            :options="[{ label: '全部类型', value: '' }, ...Object.entries(MOVEMENT_TYPE_LABELS).map(([v, l]) => ({ label: l, value: v }))]"
-            clearable
-            class="w-36"
-            @update:model-value="state.movementPage = 1; loadMovements()"
-          />
+        <div v-if="loadingMovements" class="p-4 space-y-2">
+          <Skeleton v-for="i in 6" :key="i" class="h-10" />
         </div>
+        <ErrorState v-else-if="movementError" :message="movementError" @retry="loadMovements" />
+        <EmptyState v-else-if="movements.length === 0" illustration="empty" title="暂无库存流水" />
 
-        <div v-if="loadingMovements" class="p-3 space-y-2">
-          <Skeleton v-for="i in 8" :key="i" class="h-10" />
-        </div>
-        <ErrorState v-else-if="movementError" class="flex-1 justify-center" :message="movementError" @retry="loadMovements" />
-        <EmptyState v-else-if="movements.length === 0" class="flex-1 justify-center" illustration="empty" title="暂无库存流水" />
-
-        <div v-else class="flex-1 min-h-0 overflow-auto">
-          <table class="table-base table-sticky min-w-[680px]">
+        <div v-else class="overflow-x-auto">
+          <table class="table-base min-w-[680px]">
             <thead>
-              <tr><th>时间</th><th>物品</th><th>类型</th><th class="text-right">数量变动</th><th>说明</th><th class="w-16" /></tr>
+              <tr>
+                <th>时间</th>
+                <th>物品</th>
+                <th>类型</th>
+                <th class="text-right">数量变动</th>
+                <th>说明</th>
+                <th class="w-16" />
+              </tr>
             </thead>
             <tbody>
               <tr v-for="m in movements" :key="m.id">
-                <td class="text-xs text-muted num">{{ formatDateTime(m.createdAt) }}</td>
-                <td class="font-medium">{{ m.product.name }}</td>
+                <td class="num text-[13px] text-muted">{{ formatDateTime(m.createdAt) }}</td>
+                <td class="text-ink font-medium">{{ m.product.name }}</td>
                 <td>
                   <Badge :tone="m.type === 'INBOUND' ? 'teal' : m.type === 'OUTBOUND' ? 'blue' : 'amber'">
                     {{ MOVEMENT_TYPE_LABELS[m.type as MovementType] ?? m.type }}
                   </Badge>
                 </td>
-                <td class="text-right num font-semibold" :class="m.quantity >= 0 ? 'text-teal' : 'text-red'">
+                <td class="text-right num font-semibold" :class="m.quantity >= 0 ? 'text-accent' : 'text-red'">
                   {{ m.quantity >= 0 ? '+' : '' }}{{ m.quantity }}
                 </td>
-                <td class="text-xs text-muted">
+                <td class="text-[13px] text-muted">
                   {{ m.note ?? '—' }}
                   <template v-if="m.relatedItemId">
-                    <router-link :to="{ path: '/ledger', query: { search: String(m.relatedItemId) } }" class="text-faint num hover:text-primary hover:underline">
+                    <router-link :to="{ path: '/ledger', query: { search: String(m.relatedItemId) } }" class="num text-accent hover:underline">
                       （台账 #{{ m.relatedItemId }}）
                     </router-link>
                   </template>
                 </td>
-                <td>
+                <td class="py-1.5 text-center">
                   <button
                     v-if="!m.relatedItemId && !m.relatedDistributionId"
-                    class="p-1.5 rounded-md text-faint transition-colors duration-150 hover:bg-canvas/80 hover:text-red cursor-pointer disabled:opacity-50"
+                    type="button"
+                    class="row-action row-action-danger"
+                    :class="removingMovementId === m.id ? 'w-auto px-2 text-xs' : ''"
                     title="删除并回冲"
                     :disabled="removingMovementId === m.id"
                     @click="deleteMovementTarget = m"
                   >
                     <template v-if="removingMovementId === m.id">删除中…</template>
-                    <Icon v-else name="trash" :size="14" />
+                    <Icon v-else name="trash" :size="16" />
                   </button>
-                  <span v-else class="text-meta text-faint" title="由台账入库或发放自动产生，请从来源处作废">系统</span>
+                  <span v-else class="text-meta" title="由台账入库或发放自动产生，请从来源处作废">系统</span>
                 </td>
               </tr>
             </tbody>
@@ -421,19 +446,15 @@ function toggleLow(): void {
             @change="(p) => { state.movementPage = p; loadMovements(); }"
           />
         </div>
-        </div>
       </template>
-    </div>
-    </div>
+    </section>
 
     <!-- 物品编辑 -->
     <Dialog :open="productDialogOpen" :title="productDialogTarget ? '编辑物品' : '新增物品'" width="480px" @update:open="productDialogOpen = $event">
-      <div class="space-y-3.5">
-        <Input v-model="productForm.name" label="物品名" required :error="productErrors.name" />
-        <div class="grid grid-cols-2 gap-3">
-          <Input v-model="productForm.unit" label="单位" placeholder="个 / 盒" />
-          <Input v-model="productForm.category" label="分类" placeholder="文具 / 纸品" />
-        </div>
+      <div class="grid gap-4 sm:grid-cols-2">
+        <Input v-model="productForm.name" label="物品名" required :error="productErrors.name" class="sm:col-span-2" />
+        <Input v-model="productForm.unit" label="单位" placeholder="个 / 盒" />
+        <Input v-model="productForm.category" label="分类" placeholder="文具 / 纸品" />
         <Input
           v-model="productForm.lowStockThreshold"
           label="低库存预警阈值"
@@ -442,6 +463,7 @@ function toggleLow(): void {
           step="any"
           hint="库存 ≤ 该值时在工作台提示"
           :error="productErrors.lowStockThreshold"
+          class="sm:col-span-2"
         />
       </div>
       <template #footer>
@@ -452,8 +474,8 @@ function toggleLow(): void {
 
     <!-- 手动流水 -->
     <Dialog :open="movementDialogOpen" title="登记库存流水" description="入库或盘点调整；出库请走发放登记" width="480px" @update:open="movementDialogOpen = $event">
-      <div class="space-y-3.5">
-        <Select v-model="movementForm.productId" label="物品" :options="productOptions" required :error="movementErrors.productId" />
+      <div class="grid gap-4 sm:grid-cols-2">
+        <Select v-model="movementForm.productId" label="物品" :options="productOptions" required :error="movementErrors.productId" class="sm:col-span-2" />
         <Select v-model="movementForm.type" label="类型" :options="movementTypeOptions" />
         <Input
           v-model="movementForm.quantity"
@@ -464,13 +486,13 @@ function toggleLow(): void {
           hint="盘点调整填负数表示减库存"
           :error="movementErrors.quantity"
         />
-        <p v-if="movementPreview" class="px-3 py-2 bg-canvas border border-line rounded-(--radius-control) text-xs text-muted">
+        <p v-if="movementPreview" class="sm:col-span-2 px-3 py-2.5 bg-surface-2 border border-line rounded-lg text-[13px] leading-5 text-muted">
           {{ movementPreview.name }} 库存将从
-          <b class="num text-ink">{{ movementPreview.before }}</b> 变为
-          <b class="num" :class="movementPreview.after < 0 ? 'text-red' : 'text-ink'">{{ movementPreview.after }}</b>
-          <span v-if="movementPreview.after < 0" class="text-red">（负库存，请确认）</span>
+          <b class="num font-semibold text-ink">{{ movementPreview.before }}</b> 变为
+          <b class="num font-semibold" :class="movementPreview.after < 0 ? 'text-red' : 'text-ink'">{{ movementPreview.after }}</b>
+          <span v-if="movementPreview.after < 0" class="text-red whitespace-nowrap">（负库存，请确认）</span>
         </p>
-        <Input v-model="movementForm.note" label="说明" placeholder="如：盘点修正 / 供应商赠送" />
+        <Input v-model="movementForm.note" label="说明" placeholder="如：盘点修正 / 供应商赠送" class="sm:col-span-2" />
       </div>
       <template #footer>
         <Button variant="ghost" @click="movementDialogOpen = false">取消</Button>
