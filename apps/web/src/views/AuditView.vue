@@ -33,7 +33,7 @@ const loadError = ref('');
 const expanded = ref<Set<number>>(new Set());
 
 /**
- * 操作类型按动作分色（DESIGN.md §7.8），颜色只说明「这是哪类动作」：
+ * 操作类型按动作分色，颜色只说明「这是哪类动作」：
  * 登录 / 初始化 / 备份 gray · 新增与修改 blue · 删除 / 作废 / 失败 red ·
  * 导入 / 发放 / 入库 teal（品牌绿）· 恢复 / 回滚 / 改密这类覆盖性操作 amber 提醒。
  */

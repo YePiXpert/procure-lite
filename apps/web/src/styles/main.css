@@ -4,7 +4,7 @@
 @custom-variant dark (&:where(.dark, .dark *));
 
 /*
- * 设计令牌 ——「墨与纸」（施工图见 apps/web/DESIGN.md §2）
+ * 设计令牌 ——「墨与纸」（语义与用法见 apps/web/DESIGN.md §2）
  * - 暖纸色画布 + 白色面板 + 墨色文字与主按钮；品牌绿（accent）只做点睛
  * - 语义色：blue = 进行中、amber = 等待、red = 危险，只用于状态
  * - 深色模式只在下方 .dark 里改令牌值，全站工具类自动翻转

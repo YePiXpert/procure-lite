@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, type APIRequestContext, type Page } from '@playwright/test';
 
 test('服务器已配置密钥时可直接选择模型，列表故障保留手工入口', async ({ page, request }) => {
   const password = 'browser-test-password';
@@ -129,11 +129,329 @@ for (const scenario of ['local', 'gpt', 'timeout']) {
       .getByRole('button', { name: ai ? '确认发放' : '确认入库', exact: true })
       .click();
     await expect(card).toHaveCount(0);
+    if (!ai) {
+      // 入库后库存页能看到这件物品；不同单位的库存不相加，不再显示「合计 N 件」
+      await page.goto('/inventory');
+      const product = page.locator('tr').filter({ has: page.getByText(name, { exact: true }) });
+      await expect(product.locator('td[data-label="当前库存"]')).toHaveText('8');
+      await expect(page.getByText(/^\d+ 种/)).toBeVisible();
+      await expect(page.getByText(/合计 \d+ 件/)).toHaveCount(0);
+      // 已入账的任务不在「未完成」里；切到「已入账」能找到它，并且只能只读打开
+      await page.goto('/import');
+      const panel = importPanel(page);
+      const listed = panel.getByRole('listitem').filter({ hasText: `${scenario}.png` });
+      await expect(panel.getByText(/没有未完成的导入|共 \d+ 条|已显示 \d+ 条/).first()).toBeVisible();
+      await expect(listed).toHaveCount(0);
+      await panel.getByRole('button', { name: '已入账', exact: true }).click();
+      await expect(listed.getByText('已入账', { exact: true })).toBeVisible();
+      await listed.getByRole('link', { name: '查看', exact: true }).click();
+      await expect(page).toHaveURL(new RegExp(`task=${new URL(taskUrl).searchParams.get('task')}`));
+      await expect(page.getByText('此任务已经确认入账，仅供查看。')).toBeVisible();
+      await expect(page.getByRole('button', { name: '确认全部内容并导入' })).toBeDisabled();
+    }
     await page.goto(taskUrl);
     await expect(page.getByText('此任务已经确认入账，仅供查看。')).toBeVisible();
+    await expect(page.getByRole('button', { name: '确认全部内容并导入' })).toBeDisabled();
     await page.goto('/ledger');
     const download = page.waitForEvent('download');
     await page.getByRole('button', { name: '导出', exact: true }).click();
     expect((await download).suggestedFilename()).toMatch(/\.xlsx$/);
   });
 }
+
+/** 导入页底部的「未完成的导入」面板 */
+function importPanel(page: Page) {
+  return page.locator('section', {
+    has: page.getByRole('heading', { name: '未完成的导入', exact: true }),
+  });
+}
+
+/** 登录并关闭 AI：新任务只做本地识别，列表里的状态是确定的「待核对入账」 */
+async function loginWithoutAi(page: Page, request: APIRequestContext) {
+  const password = 'browser-test-password';
+  await request.post('/api/auth/setup', { data: { password } });
+  await page.goto('/login');
+  await page.locator('input[type=password]').fill(password);
+  await page.getByRole('button', { name: /^登\s*录$/ }).click();
+  await expect(page).toHaveURL(/workbench/);
+  const cfg = {
+    enabled: false,
+    apiKey: 'synthetic',
+    baseUrl: 'https://example.invalid/v1',
+    model: 'synthetic',
+    semanticSearch: false,
+    autoImport: false,
+  };
+  expect((await page.request.put('/api/ai/config', { data: cfg })).ok()).toBeTruthy();
+}
+
+// 同一次运行的各用例共用一个临时库：文件内容与文件名都带时间戳，只断言成员关系与相对数量。
+test.describe.serial('未完成的导入：找回、切换与隔离', () => {
+  const stamp = Date.now();
+  const file = (key: string) => ({
+    name: `resume-${key}-${stamp}.png`,
+    mimeType: 'image/png',
+    buffer: Buffer.from(`resume-${key}-${stamp}`),
+  });
+  const files = { A: file('A'), B: file('B') };
+  const ids = { A: '', B: '' };
+  const qty = (page: Page) => page.getByPlaceholder('数量：待确认');
+  const panel = importPanel;
+  const row = (page: Page, filename: string) =>
+    panel(page).getByRole('listitem').filter({ hasText: filename });
+  const openFromList = (page: Page, filename: string) =>
+    row(page, filename).getByRole('link', { name: '继续处理', exact: true }).click();
+  const currentTask = (page: Page) => new URL(page.url()).searchParams.get('task') ?? '';
+  const savedQuantity = async (page: Page, id: string) =>
+    (await (await page.request.get(`/api/imports/tasks/${id}`)).json()).draft?.items[0]?.quantity;
+  const pendingTotal = async (page: Page) =>
+    (await (await page.request.get('/api/imports/tasks?confirmed=false&pageSize=50')).json())
+      .total as number;
+
+  test.beforeEach(async ({ page, request }) => {
+    await loginWithoutAi(page, request);
+  });
+
+  test('草稿能从列表找回，切换任务与浏览器前进后退都显示对应草稿', async ({ page }) => {
+    await page.goto('/import');
+    await page.locator('input[type=file]').setInputFiles(files.A);
+    await expect(qty(page)).toHaveValue('');
+    ids.A = currentTask(page);
+    expect(ids.A).toMatch(/^[0-9a-f-]{36}$/);
+    await qty(page).fill('3');
+    await page.getByRole('button', { name: '保存草稿', exact: true }).click();
+    await expect(page.getByText('草稿已保存', { exact: true })).toBeVisible();
+    await expect.poll(() => savedQuantity(page, ids.A)).toBe(3);
+
+    // 离开再从入口进来（地址里没有 task）：从「未完成的导入」继续
+    await page.goto('/workbench');
+    await page.goto('/import');
+    await expect(row(page, files.A.name).getByText('待核对入账', { exact: true })).toBeVisible();
+    await openFromList(page, files.A.name);
+    await expect(page).toHaveURL(new RegExp(`task=${ids.A}`));
+    await expect(qty(page)).toHaveValue('3');
+
+    // 打开 A 时在页尾上传 B
+    await page.locator('input[type=file]').setInputFiles(files.B);
+    await expect.poll(() => currentTask(page)).not.toBe(ids.A);
+    ids.B = currentTask(page);
+    expect(ids.B).toMatch(/^[0-9a-f-]{36}$/);
+    await expect(qty(page)).toHaveValue('');
+    await qty(page).fill('5');
+    await page.getByRole('button', { name: '保存草稿', exact: true }).click();
+    await expect(page.getByText('草稿已保存', { exact: true })).toBeVisible();
+    await expect.poll(() => savedQuantity(page, ids.B)).toBe(5);
+
+    for (const [key, value] of [
+      ['A', '3'],
+      ['B', '5'],
+    ] as const) {
+      await openFromList(page, files[key].name);
+      await expect(page).toHaveURL(new RegExp(`task=${ids[key]}`));
+      await expect(qty(page)).toHaveValue(value);
+    }
+    await page.reload();
+    await expect(page).toHaveURL(new RegExp(`task=${ids.B}`));
+    await expect(qty(page)).toHaveValue('5');
+    await page.goBack();
+    await expect(page).toHaveURL(new RegExp(`task=${ids.A}`));
+    await expect(qty(page)).toHaveValue('3');
+    await page.goForward();
+    await expect(page).toHaveURL(new RegExp(`task=${ids.B}`));
+    await expect(qty(page)).toHaveValue('5');
+    // 本地识别完成 ≠ 入账：未确认的任务不叫「已完成」
+    for (const key of ['A', 'B'] as const) {
+      const listed = row(page, files[key].name);
+      await expect(listed.getByText('待核对入账', { exact: true })).toBeVisible();
+      await expect(listed).not.toContainText('已完成');
+    }
+  });
+
+  test('先点 A 再立刻点 B：A 迟到的响应不会覆盖 B', async ({ page }) => {
+    await page.goto(`/import?task=${ids.B}`);
+    await expect(qty(page)).toHaveValue('5');
+    // 页面里记下派发过 loadend 的请求：看到 A 的记录时，应用对这次响应的处理（含界面更新）已经跑完
+    await page.evaluate(() => {
+      const done: string[] = [];
+      Object.assign(window, { __loadend: done });
+      const open = XMLHttpRequest.prototype.open;
+      XMLHttpRequest.prototype.open = function (this: XMLHttpRequest, ...args: unknown[]) {
+        this.addEventListener('loadend', () => done.push(String(args[1])));
+        return (open as (...a: unknown[]) => void).apply(this, args);
+      } as typeof open;
+    });
+    const lateUrl = `/api/imports/tasks/${ids.A}`;
+    const slowA = `**${lateUrl}`;
+    let delayed = 0;
+    await page.route(slowA, async (route) => {
+      delayed++;
+      await new Promise((r) => setTimeout(r, 2000));
+      await route.continue();
+    });
+    const late = page.waitForResponse(
+      (r) => r.url().endsWith(lateUrl) && r.request().method() === 'GET',
+    );
+    await openFromList(page, files.A.name);
+    await expect(page).toHaveURL(new RegExp(`task=${ids.A}`));
+    await openFromList(page, files.B.name);
+    await expect(page).toHaveURL(new RegExp(`task=${ids.B}`));
+    await expect(qty(page)).toHaveValue('5');
+    // 等 A 的迟到响应真正回来，并且页面已经处理完它，再断言界面仍是 B
+    expect((await late).status()).toBe(200);
+    await page.waitForFunction(
+      (url) =>
+        ((window as unknown as { __loadend?: string[] }).__loadend ?? []).some((u) => u.endsWith(url)),
+      lateUrl,
+    );
+    expect(delayed).toBe(1);
+    // 文件名：B 在状态条与列表各一处，A 只在列表里
+    await expect(page.getByTitle(files.B.name, { exact: true })).toHaveCount(2);
+    await expect(page.getByTitle(files.A.name, { exact: true })).toHaveCount(1);
+    await expect(qty(page)).toHaveValue('5');
+    const current = panel(page).locator('li[aria-current="true"]');
+    await expect(current).toHaveCount(1);
+    await expect(current).toContainText(files.B.name);
+    await expect(current).toContainText('当前');
+    await page.unroute(slowA);
+  });
+
+  test('草稿保存失败时不能切到别的任务，编辑不会丢', async ({ page }) => {
+    await page.goto(`/import?task=${ids.B}`);
+    await expect(qty(page)).toHaveValue('5');
+    const draftUrl = `**/api/imports/tasks/${ids.B}/draft`;
+    await page.route(draftUrl, (route) =>
+      route.fulfill({ status: 500, json: { message: '合成保存失败' } }),
+    );
+    await qty(page).fill('7');
+    const saveFailed = page.getByRole('alert').filter({ hasText: '草稿保存失败' });
+    await expect(saveFailed).toBeVisible();
+    // 切换前会再试一次保存；失败就拦下，停在 B
+    const retried = page.waitForResponse(
+      (r) => r.url().endsWith(`/api/imports/tasks/${ids.B}/draft`) && r.request().method() === 'PUT',
+    );
+    await openFromList(page, files.A.name);
+    await retried;
+    await page.waitForTimeout(300);
+    await expect(page).toHaveURL(new RegExp(`task=${ids.B}`));
+    await expect(qty(page)).toHaveValue('7');
+    await expect(saveFailed).toBeVisible();
+    await page.unroute(draftUrl);
+    await page.getByRole('button', { name: '重试保存', exact: true }).click();
+    await expect(page.getByText('草稿已保存', { exact: true })).toBeVisible();
+    await expect.poll(() => savedQuantity(page, ids.B)).toBe(7);
+    await openFromList(page, files.A.name);
+    await expect(page).toHaveURL(new RegExp(`task=${ids.A}`));
+    await expect(qty(page)).toHaveValue('3');
+  });
+
+  test('重复上传同一原件：打开已有任务，不新建、不重新识别', async ({ page }) => {
+    const total = await pendingTotal(page);
+    const revisions = async () =>
+      ((await (await page.request.get(`/api/imports/tasks/${ids.A}/revisions`)).json()) as unknown[])
+        .length;
+    const revisionCount = await revisions();
+    await page.goto('/import');
+    await page.locator('input[type=file]').setInputFiles(files.A);
+    const banner = page.getByText('相同内容的原件已经上传过，本次尚未开始解析。', { exact: false });
+    await expect(banner).toBeVisible();
+    await page.getByRole('button', { name: '打开已有任务', exact: true }).click();
+    await expect(page).toHaveURL(new RegExp(`task=${ids.A}`));
+    await expect(qty(page)).toHaveValue('3');
+    await expect(banner).toHaveCount(0);
+    expect(await pendingTotal(page)).toBe(total);
+    expect(await revisions()).toBe(revisionCount);
+  });
+
+  test('任务不存在：说明原因，不轮询、不新建任务', async ({ page }) => {
+    const missing = '00000000-0000-4000-8000-000000000000';
+    const total = await pendingTotal(page);
+    let requests = 0;
+    page.on('request', (r) => {
+      if (r.url().endsWith(`/api/imports/tasks/${missing}`)) requests++;
+    });
+    await page.goto(`/import?task=${missing}`);
+    await expect(page.getByRole('alert')).toContainText('任务不存在或已被清理');
+    await expect(page.locator('main .animate-pulse')).toHaveCount(0); // 没有停在骨架屏上
+    await expect(qty(page)).toHaveCount(0);
+    // 其它错误 5 秒后重试；404 只请求一次
+    await page.waitForTimeout(5500);
+    expect(requests).toBe(1);
+    expect(await pendingTotal(page)).toBe(total);
+  });
+
+  // 放在本组最后：新增的任务会把 A、B 挤出列表第一页
+  test('列表分页：超过 10 条时显示更多并追加', async ({ page }) => {
+    const need = Math.max(0, 11 - (await pendingTotal(page)));
+    for (let i = 0; i < need; i++) {
+      const name = `page-${stamp}-${i}.png`;
+      const uploaded = await page.request.post('/api/imports/upload', {
+        multipart: { file: { name, mimeType: 'image/png', buffer: Buffer.from(name) } },
+      });
+      const { taskId } = await uploaded.json();
+      expect(taskId).toBeTruthy();
+      await expect
+        .poll(async () => (await (await page.request.get(`/api/imports/tasks/${taskId}`)).json()).status)
+        .toBe('DONE');
+    }
+    const total = await pendingTotal(page);
+    expect(total).toBeGreaterThan(10);
+    await page.goto('/import');
+    const rows = panel(page).getByRole('listitem');
+    await expect(rows).toHaveCount(10);
+    await expect(panel(page).locator('footer')).toContainText('已显示 10 条');
+    const more = panel(page).getByRole('button', { name: `显示更多（共 ${total} 条）`, exact: true });
+    await more.click();
+    await expect(rows).toHaveCount(Math.min(total, 20));
+    const tasks = await rows
+      .getByRole('link')
+      .evaluateAll((links) => links.map((a) => new URL((a as HTMLAnchorElement).href).searchParams.get('task')));
+    expect(tasks).toHaveLength(Math.min(total, 20));
+    expect(new Set(tasks).size).toBe(tasks.length);
+  });
+});
+
+test.describe('手机 390px', () => {
+  test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
+
+  test('手机：导入、确认不被遮挡，工作台采购入库后库存可见', async ({ page, request }) => {
+    await loginWithoutAi(page, request);
+    await page.getByRole('link', { name: '导入', exact: true }).tap();
+    await expect(page).toHaveURL(/\/import$/);
+    const stamp = Date.now();
+    await page.locator('input[type=file]').setInputFiles({
+      name: `mobile-${stamp}.png`,
+      mimeType: 'image/png',
+      buffer: Buffer.from(`mobile-${stamp}`),
+    });
+    const qty = page.getByPlaceholder('数量：待确认');
+    await expect(qty).toHaveValue('');
+    const name = await page.getByPlaceholder('品名（同名不同规格请明确区分）').inputValue();
+    await qty.fill('6');
+    await page.locator('input[type=date]').fill('2026-09-27');
+    await page.getByRole('button', { name: '保存草稿', exact: true }).click();
+    await expect(page.getByText('草稿已保存', { exact: true })).toBeVisible();
+    await page.screenshot({ path: test.info().outputPath('mobile-import-review.png') });
+    // 普通 click：按钮被底部标签栏等元素挡住时 Playwright 会报拦截并失败
+    await page.getByRole('button', { name: '确认全部内容并导入' }).click();
+    await expect(page.getByText(/已创建 1 条/)).toBeVisible();
+
+    const nav = page.getByRole('navigation', { name: '主导航' });
+    await nav.getByRole('link', { name: '工作台', exact: true }).click();
+    const card = page.locator('article').filter({ has: page.getByText(name, { exact: true }) });
+    await card.getByRole('button', { name: '下单登记', exact: true }).click();
+    await page
+      .getByRole('checkbox', { name: '单价记入比价库（下次采购同一品名时自动提示）' })
+      .uncheck();
+    await page.getByRole('button', { name: '保存并标记已下单' }).click();
+    await card.getByRole('button', { name: '确认到货', exact: true }).click();
+    await card.getByRole('button', { name: '入库', exact: true }).click();
+    await page.getByRole('dialog').getByRole('button', { name: '确认入库', exact: true }).click();
+    await expect(card).toHaveCount(0);
+
+    await nav.getByRole('link', { name: '库存', exact: true }).click();
+    const product = page.locator('tr').filter({ has: page.getByText(name, { exact: true }) });
+    await expect(product).toBeVisible();
+    await expect(product.locator('td[data-label="当前库存"]')).toHaveText('6');
+    await page.screenshot({ path: test.info().outputPath('mobile-inventory.png') });
+  });
+});

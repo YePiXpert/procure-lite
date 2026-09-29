@@ -271,7 +271,7 @@ async function runSuggest(): Promise<void> {
                   <Badge v-if="i === 0" tone="teal">最低价</Badge>
                 </div>
               </td>
-              <!-- 字重写在内部 span 上（§11.12 .table-cards 约定：卡片列名 ::before 固定 font-normal） -->
+              <!-- 字重写在内部 span 上（DESIGN.md §4 .table-cards 约定：卡片列名 ::before 固定 font-normal） -->
               <td data-label="单价" class="text-right num"><span class="font-semibold text-ink">{{ formatCurrency(s.unitPrice) }}</span></td>
               <td data-label="链接">
                 <a

@@ -132,7 +132,6 @@ function switchTab(t: 'products' | 'movements'): void {
 
 const productOptions = computed(() => products.value.map((p) => ({ label: p.name, value: String(p.id) })));
 const lowCount = computed(() => products.value.filter((p) => p.isLow).length);
-const totalStock = computed(() => products.value.reduce((sum, p) => sum + p.stockQty, 0));
 
 function openProductDialog(target: ProductRow | null): void {
   productDialogTarget.value = target;
@@ -292,8 +291,9 @@ function toggleLow(): void {
           <Button :pressed="!!state.low" @click="toggleLow">
             <Icon name="alert" :size="16" :class="state.low ? 'text-red' : 'text-faint'" /> 只看低库存
           </Button>
+          <!-- 各物品单位不同（盒、支、包），库存数量不能相加，只统计种数 -->
           <p v-if="!loadingProducts && products.length > 0" class="ml-auto text-xs text-muted">
-            {{ products.length }} 种 · 合计 <b class="num font-semibold text-ink">{{ totalStock }}</b> 件<template v-if="lowCount > 0"> · <span class="text-red">{{ lowCount }} 项低库存</span></template>
+            {{ products.length }} 种<template v-if="lowCount > 0"> · <span class="text-red">{{ lowCount }} 项低库存</span></template>
           </p>
         </template>
 

@@ -88,6 +88,18 @@ export interface ImportTaskView {
     durationMs: number | null;
   }[];
 }
+/** 导入任务列表的一行：只给找回 / 继续处理用，不含原件路径、识别结果、草稿与确认快照 */
+export interface ImportTaskSummary {
+  id: string;
+  filename: string;
+  createdAt: string;
+  finishedAt: string | null;
+  status: ImportTaskView['status'];
+  aiStatus: string;
+  confirmed: boolean;
+  confirmedAt: string | null;
+  originalAvailable: boolean;
+}
 @Injectable()
 export class ImportsService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(ImportsService.name);
@@ -217,8 +229,10 @@ export class ImportsService implements OnModuleInit, OnModuleDestroy {
       throw new BadRequestException('文件类型不支持或超过 30MB');
     await this.sweep();
     const contentHash = createHash('sha256').update(file.buffer).digest('hex');
+    // 同内容可能有多个任务：优先最新的未确认任务（可以继续处理），都已确认时取最近确认的
     const duplicate = await this.prisma.importTask.findFirst({
       where: { contentHash },
+      orderBy: [{ confirmedAt: { sort: 'desc', nulls: 'first' } }, { createdAt: 'desc' }],
       select: { id: true },
     });
     if (duplicate && !continueDuplicate) return { duplicateTaskId: duplicate.id };
@@ -313,6 +327,44 @@ export class ImportsService implements OnModuleInit, OnModuleDestroy {
       reviewedPages: [],
     });
   }
+  private originalAvailable(storagePath: string | null) {
+    return !!storagePath && fs.existsSync(path.join(config.uploadsDir, storagePath));
+  }
+  /** 只读列表：按是否已确认入账（confirmedAt）筛选，不触发识别、重试或清理 */
+  async list(confirmed: boolean, page: number, pageSize: number) {
+    const where = { confirmedAt: confirmed ? { not: null } : null };
+    const [rows, total] = await Promise.all([
+      this.prisma.importTask.findMany({
+        where,
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+        select: {
+          id: true,
+          filename: true,
+          createdAt: true,
+          finishedAt: true,
+          status: true,
+          aiStatus: true,
+          confirmedAt: true,
+          storagePath: true,
+        },
+      }),
+      this.prisma.importTask.count({ where }),
+    ]);
+    const tasks: ImportTaskSummary[] = rows.map((row) => ({
+      id: row.id,
+      filename: row.filename,
+      createdAt: row.createdAt.toISOString(),
+      finishedAt: row.finishedAt?.toISOString() ?? null,
+      status: row.status as ImportTaskSummary['status'],
+      aiStatus: row.aiStatus,
+      confirmed: !!row.confirmedAt,
+      confirmedAt: row.confirmedAt?.toISOString() ?? null,
+      originalAvailable: this.originalAvailable(row.storagePath),
+    }));
+    return { tasks, total, page, pageSize };
+  }
   async task(id: string): Promise<ImportTaskView> {
     const row = await this.prisma.importTask.findUnique({ where: { id } });
     if (!row) throw new NotFoundException('任务不存在');
@@ -356,8 +408,7 @@ export class ImportsService implements OnModuleInit, OnModuleDestroy {
       aiResult,
       reviewPages: reviewPages(result, row.aiStatus, aiResult, draft),
       confirmed: !!row.confirmedAt,
-      originalAvailable:
-        !!row.storagePath && fs.existsSync(path.join(config.uploadsDir, row.storagePath)),
+      originalAvailable: this.originalAvailable(row.storagePath),
       calls,
     };
   }

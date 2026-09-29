@@ -1,4 +1,6 @@
 import { beforeAll, afterAll, describe, expect, it } from 'vitest';
+import { Readable } from 'node:stream';
+import ExcelJS from 'exceljs';
 import { createApp, closeApp, type TestApp } from './utils';
 
 let ctx: TestApp;
@@ -172,5 +174,29 @@ describe('台账 CRUD', () => {
     // xlsx 是 zip，魔数 PK
     expect(res.rawPayload[0]).toBe(0x50);
     expect(res.rawPayload[1]).toBe(0x4b);
+
+    // 内容也要对：前面「列表与筛选」创建、未被删除的 A4 复印纸 × 10
+    // xlsx.read(stream)：exceljs 的 load(Buffer) 类型声明与 @types/node 24 的 Buffer 不兼容
+    const workbook = new ExcelJS.Workbook();
+    await workbook.xlsx.read(Readable.from(res.rawPayload));
+    const sheet = workbook.getWorksheet('采购台账');
+    expect(sheet).toBeDefined();
+    const header = sheet!.getRow(1).values as unknown[];
+    const nameCol = header.indexOf('品名'),
+      qtyCol = header.indexOf('数量'),
+      serialCol = header.indexOf('流水号');
+    expect(nameCol).toBeGreaterThan(0);
+    expect(qtyCol).toBeGreaterThan(0);
+    expect(serialCol).toBeGreaterThan(0);
+    const rows: { name: unknown; quantity: unknown; serial: unknown }[] = [];
+    sheet!.eachRow((row, n) => {
+      if (n > 1)
+        rows.push({
+          name: row.getCell(nameCol).value,
+          quantity: row.getCell(qtyCol).value,
+          serial: row.getCell(serialCol).value,
+        });
+    });
+    expect(rows).toContainEqual({ name: 'A4 复印纸', quantity: 10, serial: 'OA-2026-002' });
   });
 });

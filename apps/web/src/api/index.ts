@@ -135,6 +135,21 @@ export interface ImportTaskView {
     durationMs: number | null;
   }[];
 }
+/** 导入任务列表的一行（找回未完成的导入；按 confirmedAt 区分是否已入账） */
+export interface ImportTaskSummary {
+  id: string;
+  filename: string;
+  createdAt: string;
+  finishedAt: string | null;
+  status: ImportTaskView['status'];
+  aiStatus: string;
+  confirmed: boolean;
+  confirmedAt: string | null;
+  originalAvailable: boolean;
+}
+export interface ImportTasksPage extends Paged {
+  tasks: ImportTaskSummary[];
+}
 /** Keep an uncertain operation's key across retries and browser reloads. Clear only after a known result. */
 async function mutation<T>(url: string, body?: unknown): Promise<T> {
   const key = 'procure-operation:' + url + ':' + JSON.stringify(body ?? {});
@@ -163,6 +178,9 @@ export const importsApi = {
         { id: number; kind: string; version: number; snapshot: string; createdAt: string }[]
       >(`/imports/tasks/${id}/revisions`)
       .then((r) => r.data),
+  /** 只读列表：confirmed=false 是未确认入账的任务（含本地识别已完成的） */
+  tasks: (params: { confirmed?: boolean; page?: number; pageSize?: number }) =>
+    http.get<ImportTasksPage>('/imports/tasks', { params }).then((r) => r.data),
   task: (id: string) => http.get<ImportTaskView>(`/imports/tasks/${id}`).then((r) => r.data),
   saveDraft: (id: string, version: number, draft: ImportDraft) =>
     http

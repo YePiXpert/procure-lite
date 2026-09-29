@@ -36,6 +36,23 @@ export class ImportsController {
     return this.imports.upload(file, clientIp(req), continueDuplicate === 'true');
   }
 
+  /** 找回未确认 / 已入账的导入任务（只读，不触发识别） */
+  @Get('tasks')
+  list(
+    @Query(
+      new ZodValidationPipe(
+        z.object({
+          confirmed: z.enum(['true', 'false']).default('false'),
+          page: z.coerce.number().int().min(1).default(1),
+          pageSize: z.coerce.number().int().min(1).max(50).default(10),
+        }),
+      ),
+    )
+    query: { confirmed: 'true' | 'false'; page: number; pageSize: number },
+  ) {
+    return this.imports.list(query.confirmed === 'true', query.page, query.pageSize);
+  }
+
   @Get('tasks/:id')
   task(@Param('id') id: string) {
     return this.imports.task(id);

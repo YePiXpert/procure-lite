@@ -2,7 +2,7 @@ import { computed } from 'vue';
 import { useThemeStore } from '@/stores/theme';
 
 /**
- * 图表配色与坐标轴基础样式（与设计令牌对齐，见 DESIGN.md §7.6）。
+ * 图表配色与坐标轴基础样式（与设计令牌对齐，见 DESIGN.md §5.11）。
  * ECharts 画在 canvas 上读不到 CSS 变量，必须运行时解析成具体颜色；
  * 主题切换后通过 useChartTheme() 的 computed 重新取色。
  *

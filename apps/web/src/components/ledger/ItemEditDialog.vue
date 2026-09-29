@@ -248,7 +248,7 @@ async function save(): Promise<void> {
     :dirty="dirty && !saving"
     @update:open="emit('update:open', $event)"
   >
-    <!-- 三组字段：申领信息 / 采购信息 / 状态与付款（DESIGN §7.9） -->
+    <!-- 三组字段：申领信息 / 采购信息 / 状态与付款（分组写法见 DESIGN.md §6「表单」） -->
     <section>
       <h3 class="mb-3 text-[13px] font-semibold text-ink">申领信息</h3>
       <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">

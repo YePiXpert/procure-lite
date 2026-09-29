@@ -1,22 +1,39 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue';
-import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router';
+import {
+  NavigationFailureType,
+  isNavigationFailure,
+  onBeforeRouteLeave,
+  onBeforeRouteUpdate,
+  useRoute,
+  useRouter,
+} from 'vue-router';
+import { isAxiosError } from 'axios';
 import Badge from '@/components/ui/Badge.vue';
 import Button from '@/components/ui/Button.vue';
+import { buttonClass } from '@/components/ui/button';
 import Checkbox from '@/components/ui/Checkbox.vue';
 import FileDropzone from '@/components/ui/FileDropzone.vue';
 import Icon from '@/components/ui/Icon.vue';
 import Input from '@/components/ui/Input.vue';
 import NativeSelect from '@/components/ui/NativeSelect.vue';
 import PageHeader from '@/components/ui/PageHeader.vue';
+import Panel from '@/components/ui/Panel.vue';
 import Select from '@/components/ui/Select.vue';
 import Skeleton from '@/components/ui/Skeleton.vue';
 import StickyActionBar from '@/components/ui/StickyActionBar.vue';
 import Tabs from '@/components/ui/Tabs.vue';
 import { useCatalogStore } from '@/stores/catalog';
-import { importsApi, type ImportTaskView, type AiImportPage } from '@/api';
+import {
+  importsApi,
+  type ImportTaskView,
+  type ImportTaskSummary,
+  type AiImportPage,
+} from '@/api';
 import { apiError } from '@/api/client';
 import { useToastStore } from '@/stores/toast';
+import { formatDateTime } from '@/utils/datetime';
+import { createRequestGuard } from '@/utils/request';
 import {
   aiSuggestionKey,
   importConfirmSchema,
@@ -58,9 +75,13 @@ const duplicateNames = ref<string[]>([]),
   finished = ref<{ created: number; merged: number; skipped: number; attached: number } | null>(
     null,
   );
-const duplicateFile = ref<File | null>(null);
+const duplicateFile = ref<File | null>(null),
+  duplicateTaskId = ref('');
+/** 地址里的任务不存在（已被清理或从没有过）：不再轮询，也不自动新建任务 */
+const missing = ref(false);
 const previewFailed = ref(false),
   mobileTab = ref<'draft' | 'original'>('draft');
+const rootEl = ref<HTMLElement>();
 let timer: ReturnType<typeof setTimeout> | undefined,
   saveTimer: ReturnType<typeof setTimeout> | undefined;
 let saveChain: Promise<void> = Promise.resolve(),
@@ -83,13 +104,26 @@ const issuePages = computed(() => task.value?.reviewPages ?? []);
 const revisions = ref<
   { id: number; kind: string; version: number; snapshot: string; createdAt: string }[]
 >([]);
+/**
+ * 迟到的响应只属于发出它时的任务：每个异步函数在 await 之前记下任务编号，
+ * 回来后任务已切换（或页面已卸载）就直接丢弃，不改任何状态。
+ */
+function stale(id: string) {
+  return disposed || taskId.value !== id;
+}
 async function loadHistory() {
-  revisions.value = await importsApi.revisions(taskId.value);
+  const id = taskId.value;
+  if (!id) return;
+  const rows = await importsApi.revisions(id);
+  if (stale(id)) return;
+  revisions.value = rows;
 }
 async function reloadDraft() {
   if (!window.confirm('重新载入将替换当前未保存的编辑，是否继续？')) return;
+  const id = taskId.value;
   clearTimeout(saveTimer);
   await saveChain;
+  if (stale(id)) return;
   loaded = false;
   saveError.value = '';
   await refresh();
@@ -107,10 +141,15 @@ function preventUnload(event: BeforeUnloadEvent) {
     event.returnValue = '';
   }
 }
-onBeforeRouteLeave(async () => {
+/** 离开本页、或在本页切换任务（地址里的 task 变了）之前先保存；保存不了就拦下，并说明原因 */
+async function guardUnsaved() {
   await persist();
-  return saved.value || !loaded;
-});
+  if (saved.value || !loaded) return true;
+  if (!saveError.value) error.value = '草稿尚未保存，请先保存或重试保存';
+  return false;
+}
+onBeforeRouteLeave(guardUnsaved);
+onBeforeRouteUpdate(guardUnsaved);
 const suggestions = computed(
   () =>
     task.value?.aiResult.flatMap((p) => p.items.map((item) => ({ ...item, page: p.page }))) ?? [],
@@ -166,7 +205,7 @@ const stepStyles: Record<StepState, { dot: string; text: string }> = {
 const steps = computed(() => {
   const t = task.value;
   const running = (s?: string) => s === 'PENDING' || s === 'RUNNING';
-  const sent: StepState = t || taskId.value ? 'done' : 'current';
+  const sent: StepState = t || (taskId.value && !missing.value) ? 'done' : 'current';
   const local: StepState = !t
     ? 'todo'
     : running(t.status)
@@ -253,14 +292,17 @@ function persist(): Promise<void> {
   saveChain = saveChain
     .then(async () => {
       if (saved.value || !task.value || task.value.confirmed || disposed) return;
-      const expected = revision,
+      const id = taskId.value,
+        expected = revision,
         body = snapshot();
       try {
-        const result = await importsApi.saveDraft(taskId.value, task.value.version, body);
-        task.value.version = result.version;
+        const result = await importsApi.saveDraft(id, task.value.version, body);
+        if (stale(id)) return;
+        if (task.value) task.value.version = result.version;
         saved.value = expected === revision;
         saveError.value = '';
       } catch (e) {
+        if (stale(id)) return;
         saveError.value = apiError(e);
         throw e;
       }
@@ -269,9 +311,11 @@ function persist(): Promise<void> {
   return saveChain;
 }
 async function refresh() {
-  if (disposed || !taskId.value) return;
+  const id = taskId.value;
+  if (disposed || !id) return;
   try {
-    const next = await importsApi.task(taskId.value);
+    const next = await importsApi.task(id);
+    if (stale(id)) return;
     if (task.value && loaded) next.version = task.value.version; // autosave owns the optimistic version
     task.value = next;
     error.value = next.error ?? '';
@@ -290,8 +334,20 @@ async function refresh() {
       if (next.confirmed) error.value = '此任务已经确认入账，仅供查看。';
       void checkDuplicates();
     }
+    syncListRow(next);
+    clearTimeout(timer);
     if (active.value) timer = setTimeout(() => void refresh(), 1500);
   } catch (e) {
+    if (stale(id)) return;
+    clearTimeout(timer);
+    if (isAxiosError(e) && e.response?.status === 404) {
+      // 已被清理或编号有误：停止轮询，给出说明；已经打开过的任务保留编辑内容，只在底部提示
+      missing.value = true;
+      if (task.value)
+        error.value =
+          '任务已不存在或已被清理（未确认的原件保留 30 天），当前编辑无法再保存；请重新上传原件。';
+      return;
+    }
     error.value = apiError(e);
     timer = setTimeout(() => void refresh(), 5000);
   }
@@ -318,51 +374,67 @@ async function uploadFile(file: File, continueDuplicate = false) {
     const result = await importsApi.upload(file, continueDuplicate);
     if (!result.taskId) {
       duplicateFile.value = file;
+      duplicateTaskId.value = result.duplicateTaskId ?? '';
       return;
     }
     duplicateFile.value = null;
-    taskId.value = result.taskId;
-    loaded = false;
-    finished.value = null;
-    task.value = null;
+    duplicateTaskId.value = '';
+    // 地址是任务的唯一来源：换地址后由下面的 watch 清空旧任务并载入新任务
     await router.replace({ query: { task: result.taskId } });
-    void refresh();
   } catch (e) {
     error.value = apiError(e);
   } finally {
     busy.value = false;
   }
 }
+/** 相同内容的原件已上传过：打开那个任务（被未保存的草稿拦下时保留提示，保存后可再点） */
+async function openDuplicate() {
+  const failure = await router.push({ query: { task: duplicateTaskId.value } });
+  const same = isNavigationFailure(failure, NavigationFailureType.duplicated);
+  if (failure && !same) return;
+  duplicateFile.value = null;
+  duplicateTaskId.value = '';
+  if (same) scrollToTask();
+}
 async function checkDuplicates() {
+  const id = taskId.value;
   if (!form.serialNumber || !form.handler || !lines.value.length) return;
   try {
-    duplicateNames.value = (
-      await importsApi.checkDuplicates({
-        serialNumber: form.serialNumber,
-        handler: form.handler,
-        itemNames: lines.value.map((l) => l.itemName),
-      })
-    ).map((d) => d.itemName);
+    const found = await importsApi.checkDuplicates({
+      serialNumber: form.serialNumber,
+      handler: form.handler,
+      itemNames: lines.value.map((l) => l.itemName),
+    });
+    if (stale(id)) return;
+    duplicateNames.value = found.map((d) => d.itemName);
   } catch (e) {
+    if (stale(id)) return;
     error.value = apiError(e);
   }
 }
 async function cancel() {
+  const id = taskId.value;
   try {
-    await importsApi.cancel(taskId.value);
+    await importsApi.cancel(id);
+    if (stale(id)) return;
     clearTimeout(timer);
     await refresh();
   } catch (e) {
+    if (stale(id)) return;
     error.value = apiError(e);
   }
 }
 async function retry(stage: 'local' | 'ai', pages?: number[]) {
+  const id = taskId.value;
   await persist();
+  if (stale(id)) return;
   try {
-    await importsApi.retry(taskId.value, stage, pages);
+    await importsApi.retry(id, stage, pages);
+    if (stale(id)) return;
     clearTimeout(timer);
     await refresh();
   } catch (e) {
+    if (stale(id)) return;
     error.value = apiError(e);
   }
 }
@@ -424,22 +496,29 @@ function merge(index: number) {
   lines.value.splice(index, 1);
 }
 async function confirm() {
+  const id = taskId.value;
   if (!task.value || active.value) return;
   busy.value = true;
   error.value = '';
   try {
     await persist();
+    if (stale(id)) return;
     if (!saved.value || saveError.value) throw new Error(saveError.value || '草稿尚未保存');
     await checkDuplicates();
+    if (stale(id)) return;
     const parsed = importConfirmSchema.safeParse({
       ...snapshot(),
-      taskId: taskId.value,
+      taskId: id,
       version: task.value.version,
     });
     if (!parsed.success) throw new Error(parsed.error.issues.map((i) => i.message).join('；'));
-    finished.value = await importsApi.confirm(parsed.data);
-    task.value.confirmed = true;
+    const result = await importsApi.confirm(parsed.data);
+    void loadTasks(); // 已入账的任务从「未完成」里移走（即使已切到别的任务）
+    if (stale(id)) return;
+    finished.value = result;
+    if (task.value) task.value.confirmed = true;
   } catch (e) {
+    if (stale(id)) return;
     error.value = apiError(e);
   } finally {
     busy.value = false;
@@ -448,13 +527,128 @@ async function confirm() {
 watch(page, () => {
   previewFailed.value = false;
 });
+
+/* -------------------- 未完成的导入：找回已上传、尚未确认入账的任务 -------------------- */
+const LIST_PAGE_SIZE = 10;
+const listTab = ref<'pending' | 'confirmed'>('pending'),
+  listRows = ref<ImportTaskSummary[]>([]),
+  listTotal = ref(0),
+  listLoading = ref(false),
+  listError = ref('');
+const listGuard = createRequestGuard();
+/**
+ * more = 追加下一页；否则从第一页重新载入，条数保持已展开的数量（服务端单页最多 50），
+ * 切换任务后刚点过的那一行不会因为重新载入而消失。
+ */
+async function loadTasks(more = false) {
+  const isCurrent = listGuard.begin();
+  const shown = listRows.value.length,
+    pages = Math.min(5, Math.max(1, Math.ceil(shown / LIST_PAGE_SIZE)));
+  const query = more
+    ? { page: Math.floor(shown / LIST_PAGE_SIZE) + 1, pageSize: LIST_PAGE_SIZE }
+    : { page: 1, pageSize: pages * LIST_PAGE_SIZE };
+  listLoading.value = true;
+  try {
+    const res = await importsApi.tasks({ confirmed: listTab.value === 'confirmed', ...query });
+    if (!isCurrent() || disposed) return;
+    listRows.value = more
+      ? [...listRows.value, ...res.tasks.filter((t) => !listRows.value.some((r) => r.id === t.id))]
+      : res.tasks;
+    listTotal.value = res.total;
+    listError.value = '';
+  } catch (e) {
+    if (!isCurrent() || disposed) return;
+    listError.value = apiError(e);
+  } finally {
+    if (isCurrent()) listLoading.value = false;
+  }
+}
+function switchList(tab: 'pending' | 'confirmed') {
+  listTab.value = tab;
+  listRows.value = [];
+  listTotal.value = 0;
+  void loadTasks();
+}
+/** 当前任务轮询到的新状态同步到列表那一行，不用为此重新拉列表 */
+function syncListRow(t: ImportTaskView) {
+  const row = listRows.value.find((r) => r.id === t.id);
+  if (row)
+    Object.assign(row, {
+      status: t.status,
+      aiStatus: t.aiStatus,
+      confirmed: t.confirmed,
+      originalAvailable: t.originalAvailable,
+    });
+}
+/**
+ * 只看 confirmedAt：本地识别「已完成」不等于入账，未确认的任务一律不叫「已完成」。
+ * 原件缺失（originalAvailable = false）由模板在后面另加「· 原件缺失」。
+ */
+function taskStatusLabel(t: ImportTaskSummary) {
+  const running = (s: string) => s === 'PENDING' || s === 'RUNNING';
+  return t.confirmed
+    ? '已入账'
+    : running(t.status)
+      ? '本地识别中'
+      : running(t.aiStatus)
+        ? 'GPT 复核中'
+        : t.status === 'FAILED'
+          ? '本地识别失败，待人工核对'
+          : t.aiStatus === 'FAILED' || t.aiStatus === 'CANCELLED'
+            ? '待人工核对'
+            : '待核对入账';
+}
+/** 页面在外壳的 <main> 里滚动：切换任务后回到页顶，从头看新任务 */
+function scrollToTask() {
+  rootEl.value?.closest('main')?.scrollTo({ top: 0 });
+}
+/** 列表里点的就是当前任务时地址不变、不会切换，只回到页顶 */
+function openListTask(t: ImportTaskSummary, navigate: (e?: MouseEvent) => unknown, e: MouseEvent) {
+  void navigate(e);
+  if (t.id === taskId.value) scrollToTask();
+}
+
+/**
+ * 地址里的 task 是当前任务的唯一来源（上传、列表、「打开已有任务」、浏览器前进后退都只改地址）。
+ * 换任务（含换成没有任务）时先停掉轮询与自动保存，清空上一个任务的全部状态，再载入新任务。
+ * 未保存的编辑由 onBeforeRouteUpdate 在换地址之前保存或拦下。
+ */
+watch(
+  () => route.query.task,
+  (value) => {
+    if (route.name !== 'import') return; // 离开本页时路由先变、组件随后卸载，不必再载入
+    clearTimeout(timer);
+    clearTimeout(saveTimer);
+    loaded = false; // 先关掉自动保存：下面清空表单不算编辑
+    hydrating = false;
+    revision = 0;
+    taskId.value = typeof value === 'string' ? value : '';
+    task.value = null;
+    missing.value = false;
+    for (const f of fields) form[f] = '';
+    lines.value = [];
+    reviewedPages.value = [];
+    reviewedAi.value = [];
+    supplierId.value = '';
+    selected.value = '';
+    page.value = 1;
+    duplicateNames.value = [];
+    finished.value = null;
+    error.value = '';
+    saveError.value = '';
+    saved.value = true;
+    revisions.value = [];
+    previewFailed.value = false;
+    mobileTab.value = 'draft';
+    scrollToTask();
+    void refresh();
+    void loadTasks();
+  },
+  { immediate: true },
+);
 onMounted(() => {
   void catalog.ensureSuppliers();
   window.addEventListener('beforeunload', preventUnload);
-  if (typeof route.query.task === 'string') {
-    taskId.value = route.query.task;
-    void refresh();
-  }
 });
 onUnmounted(() => {
   window.removeEventListener('beforeunload', preventUnload);
@@ -465,7 +659,7 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="space-y-6">
+  <div ref="rootEl" class="space-y-6">
     <PageHeader title="导入 OA 单据" description="保存原件 · 本地识别 · GPT 复核 · 人工确认" />
 
     <!-- 步骤条：手机上只保留焦点步的文字，其余步只显示圆点（文字留给读屏） -->
@@ -1114,6 +1308,14 @@ onUnmounted(() => {
       </div>
     </template>
 
+    <!-- 地址里的任务不存在：说明原因，不自动新建任务（下面的上传区与列表照常可用） -->
+    <div v-else-if="missing" role="alert" class="card flex items-start gap-3 px-5 py-4">
+      <Icon name="alert" :size="18" class="mt-0.5 shrink-0 text-amber" />
+      <p class="min-w-0 text-sm leading-6 text-ink">
+        任务不存在或已被清理（未确认的原件保留 30 天），请重新上传原件。
+      </p>
+    </div>
+
     <!-- 已有任务编号、任务还没取回：骨架占位 -->
     <div v-else-if="taskId" class="space-y-4" aria-hidden="true">
       <Skeleton class="h-18 w-full" />
@@ -1153,9 +1355,16 @@ onUnmounted(() => {
       >
         <p class="flex min-w-0 flex-1 basis-64 items-start gap-2 text-[13px] leading-5 text-amber">
           <Icon name="alert" :size="16" class="mt-0.5 shrink-0" />
-          <span>相同内容的原件已经上传过，本次尚未开始解析。</span>
+          <span
+            >相同内容的原件已经上传过，本次尚未开始解析。<template v-if="duplicateTaskId"
+              >可以打开已有任务继续处理。</template
+            ></span
+          >
         </p>
         <div class="flex flex-wrap gap-2">
+          <Button v-if="duplicateTaskId" size="sm" variant="primary" @click="openDuplicate"
+            >打开已有任务</Button
+          >
           <Button
             size="sm"
             variant="secondary"
@@ -1170,5 +1379,100 @@ onUnmounted(() => {
         <span>启用自动智能导入后，每张单据的原件将发送给设置中的 GPT 服务。最终入账需人工确认。</span>
       </p>
     </section>
+
+    <!--
+      未完成的导入：已上传、还没确认入账的任务（只看 confirmedAt，本地识别「已完成」不算完成）。
+      放在页尾，打开或没打开任务都能找回；切到「已入账」可以只读查看。
+      行在窄屏上换行（文件名一栏 min-w-0 + basis-40），不会横向溢出。
+    -->
+    <Panel
+      title="未完成的导入"
+      description="已上传但尚未确认入账的单据；未确认的原件保留 30 天"
+      flush
+    >
+      <template #actions>
+        <Tabs
+          :model-value="listTab"
+          variant="segmented"
+          aria-label="导入任务筛选"
+          :tabs="[
+            { value: 'pending', label: '未完成' },
+            { value: 'confirmed', label: '已入账' },
+          ]"
+          @change="(v) => switchList(v === 'confirmed' ? 'confirmed' : 'pending')"
+        />
+      </template>
+      <div v-if="listLoading && !listRows.length" class="space-y-2.5 px-5 py-4">
+        <Skeleton class="h-9 w-full" />
+        <Skeleton class="h-9 w-4/5" />
+      </div>
+      <div
+        v-else-if="listError && !listRows.length"
+        class="flex flex-wrap items-center gap-x-3 gap-y-2 px-5 py-4 text-[13px] text-muted"
+      >
+        <span class="min-w-0">列表加载失败：{{ listError }}</span>
+        <Button size="sm" variant="ghost" @click="loadTasks()"
+          ><Icon name="refresh" :size="14" />重新加载</Button
+        >
+      </div>
+      <p v-else-if="!listRows.length" class="px-5 py-4 text-[13px] text-muted">
+        {{ listTab === 'pending' ? '没有未完成的导入' : '没有已入账的导入' }}
+      </p>
+      <ul v-else class="divide-y divide-line">
+        <li
+          v-for="t in listRows"
+          :key="t.id"
+          class="flex flex-wrap items-center gap-x-4 gap-y-2 px-5 py-3 transition-colors duration-150"
+          :class="t.id === taskId ? 'bg-accent-soft/40' : ''"
+          :aria-current="t.id === taskId ? 'true' : undefined"
+        >
+          <div class="min-w-0 flex-1 basis-40">
+            <p class="flex min-w-0 items-center gap-2">
+              <span class="truncate text-sm font-medium text-ink" :title="t.filename">{{
+                t.filename
+              }}</span>
+              <Badge v-if="t.id === taskId" tone="gray" class="shrink-0">当前</Badge>
+            </p>
+            <!-- 各段不折行，窄屏只在「·」处换行 -->
+            <p class="mt-0.5 text-meta">
+              <span class="num whitespace-nowrap">{{ formatDateTime(t.createdAt) }}</span> ·
+              <span>{{ taskStatusLabel(t) }}</span
+              ><template v-if="!t.originalAvailable">
+                · <span class="whitespace-nowrap">原件缺失</span></template
+              >
+            </p>
+          </div>
+          <!-- custom：RouterLink 判断「当前」时不看 query，会给每一行都标 aria-current，这里自己渲染 <a> -->
+          <router-link
+            v-slot="{ href, navigate }"
+            :to="{ path: '/import', query: { task: t.id } }"
+            custom
+          >
+            <a
+              :href="href"
+              :class="buttonClass({ variant: 'secondary', size: 'sm' })"
+              @click="openListTask(t, navigate, $event)"
+              >{{ t.confirmed ? '查看' : '继续处理' }}</a
+            >
+          </router-link>
+        </li>
+      </ul>
+      <template v-if="listRows.length" #footer>
+        <div class="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+          <p class="text-meta num">
+            {{ listTotal > listRows.length ? `已显示 ${listRows.length} 条` : `共 ${listTotal} 条` }}
+          </p>
+          <Button
+            v-if="listTotal > listRows.length"
+            variant="ghost"
+            size="sm"
+            class="-mr-2"
+            :loading="listLoading"
+            @click="loadTasks(true)"
+            >显示更多（共 {{ listTotal }} 条）</Button
+          >
+        </div>
+      </template>
+    </Panel>
   </div>
 </template>

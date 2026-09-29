@@ -22,7 +22,7 @@ const props = withDefaults(
     /** 表单有未保存改动：关闭前先问一句，避免点遮罩把填了一半的表单弄丢 */
     dirty?: boolean;
     /**
-     * 手机（< 640px）上全屏、无圆角（DESIGN.md §8），默认开启。
+     * 手机（< 640px）上全屏、无圆角（DESIGN.md §4），默认开启。
      * 只有「一句话 + 两个按钮」的确认框（ConfirmDialog）传 false，保持居中小卡片。
      */
     mobileFullscreen?: boolean;

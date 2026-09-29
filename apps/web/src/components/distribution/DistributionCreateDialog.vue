@@ -253,7 +253,7 @@ async function submit(): Promise<void> {
         </p>
 
         <!--
-          明细行：行内控件统一 sm（h-8，DESIGN.md §7.9）。删除按钮用 .row-action：桌面 32px 与输入框同高、
+          明细行：行内控件统一 sm（h-8，DESIGN.md §6「表单」）。删除按钮用 .row-action：桌面 32px 与输入框同高、
           整行悬停（.group）时显出，触屏放大到 40px 触控目标，所以这一行按垂直居中对齐。
         -->
         <div class="mt-3 space-y-2">

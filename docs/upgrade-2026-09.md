@@ -1,6 +1,8 @@
 # 可信导入、OCR 3 与 Responses 升级
 
-本次保留 Vue、Nest/Fastify、SQLite、Python 和六项业务导航。原件上传后本地逐页解析，启用并检测合格的 GPT 会自动复核每一页；人工保存草稿、明确处理数量/价格建议后才能入账。
+本文是可信导入（草稿、确认、原件）、OCR 3、第三方 Responses 以及备份、恢复与回退的当前参考。技术栈仍是 Vue、Nest/Fastify、SQLite 与 Python OCR，业务导航六项。原件上传后本地逐页解析，启用并检测合格的 GPT 会自动复核每一页；人工保存草稿、明确处理数量/价格建议后才能入账。
+
+2026-09-29 的迭代增加了导入草稿的找回（任务列表接口与导入页「未完成的导入」），并去掉了库存页跨单位的数量合计；其余行为不变。
 
 ## 实现与默认值
 
@@ -8,7 +10,7 @@
 | --- | --- |
 | 草稿 | 未知数量为 null，申请日期不补当天；独立行、稳定 lineId、逐页来源、乐观版本号、修改历史 |
 | 确认 | 严格数量/价格校验；同名行须明确区分或合并；已有台账默认跳过；任务只能确认一次 |
-| 原件 | 内容哈希提示重复，用户明确继续才创建新任务；未确认原件保留 30 天，上传及每 6 小时清理到期任务；确认后的来源长期保留 |
+| 原件 | 内容哈希提示重复，可直接打开已有任务，用户明确继续才创建新任务；未确认原件保留 30 天，上传及每 6 小时清理到期任务；确认后的来源长期保留 |
 | OCR | Python 3.11、PaddleOCR 3.7.0、PaddlePaddle 3.3.1、PP-OCRv6 medium；方向识别开启，去畸变关闭 |
 | OCR 资源 | 一个进程/推理实例/活动解析，2 CPU、4GB 内存、2 推理线程，页面最大边 2560；30MB、自动最多 30 页 |
 | GPT | Responses，第三方 baseURL 可配置；模型建议值 gpt-6-sol，识别/问答/搜索共用一个模型；能力按实际请求检测 |
@@ -47,7 +49,9 @@ services:
 
 ## API 与数据兼容
 
-- `GET /api/imports/tasks/:id`：阶段状态、草稿版本、逐页结果、`reviewPages`（页码、原因、人工核对状态）、建议及调用记录。
+- `POST /api/imports/upload`：multipart 单文件；内容与已有任务相同时只返回 `{duplicateTaskId}`、不创建任务：优先指向最新的未确认任务，都已确认时指向最近确认的那个；带 `?continueDuplicate=true` 才新建。
+- `GET /api/imports/tasks?confirmed=false|true&page=1&pageSize=10`：只读任务列表，只按 `confirmedAt` 筛选（`false` 为未确认入账，包括本地识别已完成的任务），按上传时间倒序；`page` ≥ 1，`pageSize` 1–50（默认 10），参数不合法返回 400。返回 `{tasks,total,page,pageSize}`，每行只有 `id`、`filename`、`createdAt`、`finishedAt`、`status`、`aiStatus`、`confirmed`、`confirmedAt`、`originalAvailable`；不返回存储路径、识别结果、草稿、GPT 结果或确认快照，也不触发识别、重试或清理。
+- `GET /api/imports/tasks/:id`：阶段状态、草稿版本、逐页结果、`reviewPages`（页码、原因、人工核对状态）、建议及调用记录。任务不存在（编号有误或已被清理）时返回 404；导入页据此显示说明、停止轮询，不自动新建任务。
 - `PUT .../:id/draft`：`{version,draft}`；旧版本返回 409，不覆盖当前编辑。
 - `GET .../:id/revisions`：本地识别与人工草稿版本记录。
 - `GET .../:id/original`、`GET .../:id/pages/:page`：鉴权读取，服务端路径不对外暴露。
@@ -85,7 +89,7 @@ docker run --rm --network none --cpus 2 --memory 4g procure-lite-ocr:test python
 
 中断恢复在 Prisma 打开数据库前执行；容器入口也在迁移前执行恢复。WAL/SHM 在切换时处理，连接设置重新应用，旧会话失效，配置和定时任务刷新。数据库与文件切换失败会恢复完整旧状态。
 
-生产发布是独立步骤。本轮不会运行部署脚本修改现网。
+生产发布是独立步骤：本地验证与测试不运行部署脚本、不修改现网。
 
 ```sh
 # 构建或拉取同一源码标签的全部三个镜像；OCR 失败必须失败退出
