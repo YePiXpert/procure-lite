@@ -10,7 +10,12 @@ export const router = createRouter({
       component: () => import('@/components/layout/AppShell.vue'),
       children: [
         { path: '', redirect: '/workbench' },
-        { path: 'workbench', name: 'workbench', component: () => import('@/views/WorkbenchView.vue'), meta: { title: '工作台', icon: 'kanban' } },
+        { path: 'workbench', name: 'workbench', component: () => import('@/views/workflow/WorkView.vue'), meta: { title: '工作台', icon: 'kanban' } },
+        { path: 'requests', name: 'requests', component: () => import('@/views/workflow/RequestsView.vue'), meta: { title: '申请单', icon: 'ledger' } },
+        { path: 'requests/:id', name: 'request-detail', component: () => import('@/views/workflow/RequestDetailView.vue'), meta: { title: '申请详情', icon: 'ledger' } },
+        { path: 'stock', name: 'stock', component: () => import('@/views/workflow/StockView.vue'), meta: { title: '库存与领用', icon: 'inventory' } },
+        { path: 'insights', name: 'insights', component: () => import('@/views/WorkflowReportsView.vue'), meta: { title: '报表', icon: 'report' } },
+        { path: 'legacy-workbench', name: 'legacy-workbench', component: () => import('@/views/WorkbenchView.vue'), meta: { title: '旧工作台', icon: 'kanban' } },
         { path: 'ledger', name: 'ledger', component: () => import('@/views/LedgerView.vue'), meta: { title: '采购台账', icon: 'ledger' } },
         { path: 'import', name: 'import', component: () => import('@/views/ImportView.vue'), meta: { title: '导入单据', icon: 'import' } },
         { path: 'distributions', name: 'distributions', component: () => import('@/views/DistributionsView.vue'), meta: { title: '领用发放', icon: 'distribution' } },

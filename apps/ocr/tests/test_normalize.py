@@ -4,6 +4,7 @@ from app.normalize import (
     parse_date,
     parse_price,
     parse_quantity,
+    parse_unit,
     to_halfwidth,
 )
 
@@ -55,6 +56,10 @@ class TestParseQuantity:
 
 
 class TestParsePrice:
+    def test_integer_and_explicit_zero(self):
+        assert parse_price('3') == 3
+        assert parse_price('单价0元') == 0
+
     def test_yuan_symbol(self):
         assert parse_price("¥12.50") == 12.5
 
@@ -78,6 +83,10 @@ class TestExtractUrl:
 
 
 class TestCleanItemName:
+    def test_labeled_price_suffix_and_unit(self):
+        assert clean_item_name('签字笔 2 支 单价3元') == '签字笔'
+        assert parse_unit('签字笔 2 支 单价3元') == '支'
+
     def test_strips_qty_price(self):
         assert clean_item_name("签字笔 5 ¥12.50") == "签字笔"
 

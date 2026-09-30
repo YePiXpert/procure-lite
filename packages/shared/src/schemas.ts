@@ -237,6 +237,7 @@ export const sourceSchema = z.object({
 export const parsedItemSchema = z.object({
   lineId: z.string().optional(),
   itemName: z.string().trim(),
+  spec: z.string().trim().max(200).nullish(),
   quantity: z.number().finite().nullable(),
   unit: z.string().max(16).nullish(),
   unitPrice: z.number().finite().nonnegative().nullish(),
@@ -260,12 +261,13 @@ export const parseResultSchema = z.object({
   warnings: z.array(z.string()),
   pages: z.array(parsePageSchema).optional(),
   pageCount: z.number().int().positive().optional(),
-  mode: z.enum(['PDF_TEXT', 'PDF_OCR', 'IMAGE_OCR', 'PDF_MIXED', 'TEXT']),
+  mode: z.enum(['PDF_TEXT', 'PDF_OCR', 'IMAGE_OCR', 'PDF_MIXED', 'TEXT', 'AI_IMAGE']),
 });
 export type ParseResult = z.infer<typeof parseResultSchema>;
 export const confirmedItemSchema = z.object({
   lineId: z.string().optional(),
   itemName: z.string().trim().min(1).max(200),
+  spec: z.string().trim().max(200).nullish(),
   quantity: positiveNumber,
   unit: z.string().trim().max(16).nullish(),
   unitPrice: nonNegativeNumber.nullish(),
@@ -306,19 +308,23 @@ export const importDraftSchema = z.object({
 export function aiSuggestionKey(item: {
   lineId: string | null;
   itemName: string;
+  spec?: string | null;
   quantity: number | null;
   unit?: string | null;
   unitPrice?: number | null;
   purchaseLink?: string | null;
 }): string {
-  return JSON.stringify([
+  const fields: (string | number | null)[] = [
     item.lineId,
     item.itemName,
     item.quantity,
     item.unit ?? null,
     item.unitPrice ?? null,
     item.purchaseLink ?? null,
-  ]);
+  ];
+  // Existing decisions without a specification retain their original fingerprint.
+  if (item.spec != null) fields.push(item.spec);
+  return JSON.stringify(fields);
 }
 export type ImportDraft = z.infer<typeof importDraftSchema>;
 export const saveImportDraftSchema = z.object({

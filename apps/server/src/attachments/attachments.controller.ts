@@ -46,6 +46,20 @@ export class AttachmentsController {
     return this.attachments.save({ file, kind: 'SIGNOFF', distributionId: id, ip: clientIp(req) });
   }
 
+  @Post('requests/:id')
+  async uploadForRequest(@Param('id', ParseIntPipe) id: number, @Req() req: FastifyRequest) {
+    return this.attachments.save({ file: await readUpload(req), kind: 'OA_DOC', procurementRequestId: id, ip: clientIp(req) });
+  }
+
+  @Post('documents/:id')
+  async uploadForDocument(
+    @Param('id', ParseIntPipe) id: number,
+    @Query(new ZodValidationPipe(kindQuery)) query: { kind: 'INVOICE' | 'SIGNOFF' },
+    @Req() req: FastifyRequest,
+  ) {
+    return this.attachments.save({ file: await readUpload(req), kind: query.kind, businessDocumentId: id, ip: clientIp(req) });
+  }
+
   @Get()
   list(
     @Query(
@@ -53,10 +67,12 @@ export class AttachmentsController {
         z.object({
           itemId: z.coerce.number().int().positive().optional(),
           distributionId: z.coerce.number().int().positive().optional(),
+          procurementRequestId: z.coerce.number().int().positive().optional(),
+          businessDocumentId: z.coerce.number().int().positive().optional(),
         }),
       ),
     )
-    query: { itemId?: number; distributionId?: number },
+    query: { itemId?: number; distributionId?: number; procurementRequestId?: number; businessDocumentId?: number },
   ) {
     return this.attachments.list(query);
   }

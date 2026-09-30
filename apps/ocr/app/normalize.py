@@ -59,17 +59,26 @@ def parse_quantity(text: str) -> float | None:
     return float(m.group(1)) if m else None
 
 
+def parse_unit(text: str) -> str | None:
+    text = PRICE_LABELED_RE.sub("", PRICE_SYMBOL_RE.sub("", URL_RE.sub("", text)))
+    match = re.search(r"(?<![A-Za-z\d.])\d+(?:\.\d+)?\s*" + UNIT_RE, text)
+    return match.group(1) if match else None
+
+
 def parse_price(text: str) -> float | None:
     """提取单价：优先「单价/价格」标签或 ¥ 符号后的数字，否则取唯一的带小数数字。"""
     for pattern in (PRICE_LABELED_RE, PRICE_SYMBOL_RE):
         m = pattern.search(text)
         if m:
             value = float(m.group(1))
-            return value if 0.01 <= value <= 1_000_000 else None
+            return value if 0 <= value <= 1_000_000 else None
     m = PRICE_DECIMAL_RE.search(text)
     if m:
         value = float(m.group(1))
-        return value if 0.01 <= value <= 1_000_000 else None
+        return value if 0 <= value <= 1_000_000 else None
+    if re.fullmatch(r"\s*\d+(?:\.\d{1,4})?\s*(?:元)?\s*", text):
+        value = float(text.strip().removesuffix("元").strip())
+        return value if 0 <= value <= 1_000_000 else None
     return None
 
 
@@ -82,7 +91,7 @@ def clean_item_name(text: str) -> str:
     """去掉价格、数量、链接等杂质，留下物品名。"""
     text = URL_RE.sub("", text)
     text = re.sub(r"[¥￥]\s*\d+(?:\.\d+)?", "", text)
-    text = re.sub(r"(?:单价|价格)[:：]?\s*\d+(?:\.\d+)?", "", text)
+    text = re.sub(r"(?:单价|价格)[:：]?\s*\d+(?:\.\d+)?\s*元?", "", text)
     text = re.sub(r"(?<![\d.])\d+(?:\.\d+)?\s*" + UNIT_RE, "", text)
     text = re.sub(r"[xX×]\s*\d+(?:\.\d+)?", "", text)
     # 行尾独立数字视为数量

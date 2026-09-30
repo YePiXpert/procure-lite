@@ -164,6 +164,19 @@ describe('import task list', () => {
     expect((await list()).tasks.find((t) => t.id === id)?.originalAvailable).toBe(false);
   });
 
+  it('restores workflow-confirmed task links from the confirmation summary without exposing its JSON', async () => {
+    const id = await seedTask();
+    const { body } = await completeDraft(id);
+    const confirmed = await post('/api/workflow/imports/confirm', body);
+    expect(confirmed.statusCode, confirmed.body).toBe(201);
+    const requestId = confirmed.json().requestId;
+    const row = (await list('?confirmed=true&pageSize=50')).tasks.find((task) => task.id === id);
+    expect(row).toMatchObject({ confirmed: true, requestId });
+    expect(Object.keys(row!).sort()).toEqual([...SUMMARY_KEYS, 'requestId'].sort());
+    expect(row).not.toHaveProperty('confirmation');
+    expect((await imports.task(id)).requestId).toBe(requestId);
+  });
+
   it('paginates newest first and validates the query', async () => {
     const a = await seedTask(),
       b = await seedTask();

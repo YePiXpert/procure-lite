@@ -37,12 +37,12 @@ const ocr = {
   page: vi.fn(async () => Buffer.from('image')),
 };
 const llm = {
-  chat: vi.fn(async () => ({
+  chat: vi.fn(async (_input: unknown) => ({
     content: JSON.stringify({
-      serialNumber: null,
-      department: null,
-      handler: null,
-      requestDate: null,
+      serialNumber: 'OA-AI',
+      department: '行政部',
+      handler: '张三',
+      requestDate: '2026-09-27',
       items: [
         {
           lineId: 'p1-r1',
@@ -85,15 +85,15 @@ function post(url: string, payload: unknown, key = randomUUID()) {
     payload: payload as object,
   });
 }
-async function seedTask() {
+async function seedTask(filename = 'sample.png') {
   const id = randomUUID(),
-    storagePath = `imports/${id}.png`;
+    storagePath = `imports/${id}${path.extname(filename)}`;
   fs.mkdirSync(path.join(config.uploadsDir, 'imports'), { recursive: true });
   fs.writeFileSync(path.join(config.uploadsDir, storagePath), 'original');
   await prisma.importTask.create({
     data: {
       id,
-      filename: 'sample.png',
+      filename,
       storagePath,
       status: 'DONE',
       result: JSON.stringify(local),
@@ -200,7 +200,7 @@ describe('trusted import', () => {
     // leave an intact fixture for backup tests in the separate suite
     fs.writeFileSync(source.full, 'original');
   });
-  it('automatically proposes GPT quantities without changing the editable draft', async () => {
+  it('recognizes the original with AI first, seeds the draft, and preserves manual edits on retry', async () => {
     const cfgService = ctx.app.get(AiConfigService);
     let cfg = await cfgService.updateConfig({
       enabled: true,
@@ -218,6 +218,8 @@ describe('trusted import', () => {
       tools: true,
     });
     await cfgService.updateConfig({ ...cfg, autoImport: true });
+    const localCalls = ocr.parse.mock.calls.length;
+    const inspectCalls = ocr.inspect.mock.calls.length;
     const { taskId } = await imports.upload({
       buffer: Buffer.from('img'),
       filename: 'auto.png',
@@ -227,7 +229,14 @@ describe('trusted import', () => {
     const t = await settle(taskId);
     expect(t.aiStatus).toBe('DONE');
     expect(t.aiResult[0].items[0].quantity).toBe(8);
-    expect(t.draft!.items[0].quantity).toBeNull();
+    expect(t.draft!.items[0].quantity).toBe(8);
+    expect(t.result!.items[0].source?.method).toBe('AI');
+    expect(t.result!.mode).toBe('AI_IMAGE');
+    expect(ocr.parse.mock.calls.length).toBe(localCalls);
+    expect(ocr.inspect.mock.calls.length).toBe(inspectCalls);
+    const sent = llm.chat.mock.calls.at(-1)?.[0] as { messages: { image?: string; content: string }[] };
+    expect(sent.messages[1].image).toBe('data:image/png;base64,aW1n');
+    expect(JSON.parse(sent.messages[1].content).existingRows).toEqual([]);
     const changed = { ...t.draft!, items: [{ ...t.draft!.items[0], quantity: 11 }] };
     await imports.saveDraft(taskId, 0, changed);
     await imports.retry(taskId, 'ai', [1]);
@@ -285,7 +294,7 @@ describe('trusted import', () => {
     }
   });
   it('resumes only remote pages never attempted after restart', async () => {
-    const id = await seedTask();
+    const id = await seedTask('restart.pdf');
     await prisma.importTask.update({
       where: { id },
       data: {
@@ -366,23 +375,17 @@ async function completedDraft(id: string) {
 }
 
 describe('release blocking review and accounting regressions', () => {
-  it('blocks local-success/GPT-timeout confirmation until an explicit manual page review', async () => {
+  it('falls back to local OCR after an AI timeout and permits a corrected draft', async () => {
     await enableImport();
     llm.chat.mockRejectedValueOnce(new AiResponseError('timeout', 'UNKNOWN'));
     const task = await freshUpload();
     expect(task.result?.pages?.[0].status).toBe('DONE');
     expect(task.calls[0].status).toBe('UNKNOWN');
-    expect(task.reviewPages).toEqual([{ page: 1, reasons: ['GPT 复核未完成'], reviewed: false }]);
+    expect(task.result?.items[0].source?.method).toBe('IMAGE_OCR');
+    expect(task.reviewPages).toEqual([]);
     const { draft, version } = await completedDraft(task.id);
-    const rejected = await post('/api/imports/confirm', { ...draft, taskId: task.id, version });
-    expect(rejected.statusCode).toBe(400);
-    expect(rejected.json().message).toContain('第 1 页未完成核对');
-    expect(await prisma.item.count({ where: { serialNumber: draft.serialNumber } })).toBe(0);
-    draft.reviewedPages = [{ page: 1, note: '核对原件，数量为5，无漏行' }];
-    await imports.saveDraft(task.id, version, draft);
-    expect((await imports.task(task.id)).reviewPages[0].reviewed).toBe(true);
     expect(
-      (await post('/api/imports/confirm', { ...draft, taskId: task.id, version: version + 1 }))
+      (await post('/api/imports/confirm', { ...draft, taskId: task.id, version }))
         .statusCode,
     ).toBe(201);
   });
@@ -398,7 +401,7 @@ describe('release blocking review and accounting regressions', () => {
           result: JSON.stringify({
             ...local,
             pageCount: 3,
-            pages: [1, 2, 3].map((page) => ({ page, status: 'DONE', mode: 'IMAGE_OCR' })),
+            pages: [1, 2, 3].map((page) => ({ page, status: page === 2 ? 'FAILED' : 'DONE', mode: 'IMAGE_OCR' })),
           }),
           aiResult: JSON.stringify([1, 3].map((page) => ({ page, items: [], warnings: [] }))),
         },
@@ -411,11 +414,11 @@ describe('release blocking review and accounting regressions', () => {
     },
   );
 
-  it('keeps cancelled queued GPT pages subject to manual review', async () => {
+  it('does not require a second engine when an existing page was already recognized', async () => {
     const id = await seedTask();
     await prisma.importTask.update({ where: { id }, data: { aiStatus: 'PENDING' } });
     await imports.cancel(id);
-    expect((await imports.task(id)).reviewPages[0].reasons).toContain('GPT 复核未完成');
+    expect((await imports.task(id)).reviewPages).toEqual([]);
   });
 
   it('does not impose GPT review when AI was disabled, including local cancellation', async () => {
@@ -482,7 +485,7 @@ describe('release blocking review and accounting regressions', () => {
       const second = await freshUpload();
       expect(llm.chat.mock.calls.length).toBe(before);
       expect(second.error).toContain('预算');
-      expect(second.reviewPages[0].reasons).toContain('GPT 复核未完成');
+      expect(second.reviewPages).toEqual([]);
     },
   );
 
@@ -490,8 +493,11 @@ describe('release blocking review and accounting regressions', () => {
     await prisma.aiCall.updateMany({ data: { createdAt: new Date('2020-01-01') } });
     await enableImport(1);
     const before = llm.chat.mock.calls.length;
+    ocr.inspect.mockResolvedValue({ pageCount: 1 });
     ocr.page.mockRejectedValueOnce(new Error('render failed'));
-    const first = await freshUpload();
+    const buffer = Buffer.from(randomUUID());
+    const uploaded = await imports.upload({ buffer, filename: 'render.pdf', size: buffer.length });
+    const first = await settle(uploaded.taskId!);
     expect(first.calls[0]).toMatchObject({
       status: 'NOT_SENT',
       cost: 0,

@@ -8,20 +8,20 @@ export interface ReviewPage {
 
 /** The API view and transactional confirmation use the same page-completion rule. */
 export function reviewPages(
-  local: ParseResult | undefined,
-  aiStatus: string,
+  result: ParseResult | undefined,
+  _aiStatus: string,
   aiPages: { page: number }[],
   draft: ImportDraft | null | undefined,
 ): ReviewPage[] {
-  const count = local?.pageCount ?? 1;
+  const count = result?.pageCount ?? Math.max(1, ...aiPages.map((p) => p.page));
   return Array.from({ length: count }, (_, i) => {
     const page = i + 1;
     const reasons: string[] = [];
-    if (local?.pages?.find((p) => p.page === page)?.status !== 'DONE')
-      reasons.push(local?.pageCount ? '本地解析未完成' : '未能取得页数，请核对原件全部页面');
-    // A scheduled review remains required even if disabled/cancelled before it finishes.
-    if (aiStatus !== 'DISABLED' && !aiPages.some((p) => p.page === page))
-      reasons.push('GPT 复核未完成');
+    if (
+      result?.pages?.find((p) => p.page === page)?.status !== 'DONE' &&
+      !aiPages.some((p) => p.page === page)
+    )
+      reasons.push(result?.pageCount ? '识别未完成' : '未能取得页数，请核对原件全部页面');
     return { page, reasons, reviewed: !!draft?.reviewedPages.some((p) => p.page === page) };
   }).filter((p) => p.reasons.length > 0);
 }

@@ -15,7 +15,7 @@ def evaluate(samples, split):
     selected = [s for s in samples if s['split'] == split]
     reports = {}
     for variant in VARIANTS:
-        total = missing = numeric = errors = extra = 0
+        total = missing = numeric = errors = extra = names = units = specs = 0
         edits, seconds = [], []
         complete = True
         for sample in selected:
@@ -27,9 +27,14 @@ def evaluate(samples, split):
                 raise ValueError('Duplicate sourceRowId; annotate physical rows independently')
             gold = {r['sourceRowId']: r for r in sample['gold']}
             if len(gold) != len(sample['gold']): raise ValueError('Duplicate gold sourceRowId')
+            if any(not str(row.get('itemName', '')).strip() or 'unit' not in row for row in gold.values()):
+                complete = False
             total += len(gold); extra += len(set(actual)-set(gold))
             for key, row in gold.items():
                 if key not in actual: missing += 1
+                if key not in actual or row.get('itemName') != actual[key].get('itemName'): names += 1
+                if key not in actual or row.get('unit') != actual[key].get('unit'): units += 1
+                if key not in actual or row.get('spec') != actual[key].get('spec'): specs += 1
                 for field in ('quantity', 'unitPrice'):
                     numeric += 1
                     if key not in actual or number(row.get(field)) != number(actual[key].get(field)): errors += 1
@@ -38,12 +43,17 @@ def evaluate(samples, split):
         reports[variant] = {'complete': complete and bool(selected), 'documents': len(selected),
                             'goldRows': total, 'missingRows': missing, 'extraRows': extra,
                             'missingRate': missing / total if total else None,
+                            'extraRate': extra / total if total else None,
+                            'nameErrorRate': names / total if total else None,
+                            'unitErrorRate': units / total if total else None,
+                            'specErrorRate': specs / total if total else None,
                             'numericErrorRate': errors / numeric if numeric else None,
                             'humanEdits': sum(edits) if len(edits) == len(selected) and edits else None,
                             'reviewSeconds': sum(seconds) if len(seconds) == len(selected) and seconds else None}
     baseline, new, gpt = (reports[k] for k in ('fixed_old', 'new_ocr', 'new_ocr_gpt'))
     ready = all(r['complete'] for r in reports.values())
-    accuracy = ready and baseline['missingRate'] is not None and all(r['missingRate'] is not None and r['missingRate'] <= baseline['missingRate'] and r['numericErrorRate'] <= baseline['numericErrorRate'] for r in (new, gpt))
+    metrics = ('missingRate', 'extraRate', 'numericErrorRate', 'nameErrorRate', 'unitErrorRate', 'specErrorRate')
+    accuracy = ready and all(baseline[key] is not None and all(r[key] is not None and r[key] <= baseline[key] for r in (new, gpt)) for key in metrics)
     improved = any(baseline[k] is not None and gpt[k] is not None and gpt[k] < baseline[k] for k in ('humanEdits', 'reviewSeconds'))
     holdout = sum(s['split'] == 'holdout' for s in samples)
     sample_gate = 30 <= len(samples) <= 50 and holdout * 3 >= len(samples)

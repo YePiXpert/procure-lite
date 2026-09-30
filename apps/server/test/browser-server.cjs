@@ -86,16 +86,21 @@ const llm = {
     if (last.content.includes('Return value 7')) return { content: '{"value":7}', toolCalls: [] };
     if (opts.model === 'synthetic-timeout')
       throw new AiResponseError('合成超时，结果未知', 'UNKNOWN');
-    const { local } = JSON.parse(last.content);
+    const { existingRows = [], local = existingRows } = JSON.parse(last.content);
+    // The original-image provider fixture works independently of local OCR output.
+    const rows = local.length ? local : [{
+      lineId: null, itemName: `测试用品${++sequence}`, unit: '盒', spec: '标准',
+    }];
     return {
       content: JSON.stringify({
-        serialNumber: null,
-        department: null,
-        handler: null,
+        serialNumber: `OA-BROWSER-${sequence}`,
+        department: '行政部',
+        handler: '张三',
         requestDate: '2026-09-27',
-        items: local.map((i) => ({
+        items: rows.map((i) => ({
           lineId: i.lineId,
           itemName: i.itemName,
+          spec: i.spec ?? null,
           quantity: 8,
           unit: i.unit,
           unitPrice: 5,

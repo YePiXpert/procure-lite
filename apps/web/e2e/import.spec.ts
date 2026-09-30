@@ -1,4 +1,8 @@
 import { test, expect, type APIRequestContext, type Page } from '@playwright/test';
+import { capabilityImage } from '../../server/src/ai/capability-image';
+
+// Valid image bytes exercise direct original preview; suffix keeps each synthetic source unique.
+const imageFile = (marker: string) => Buffer.concat([Buffer.from(capabilityImage().split(',')[1], 'base64'), Buffer.from(marker)]);
 
 test('服务器已配置密钥时可直接选择模型，列表故障保留手工入口', async ({ page, request }) => {
   const password = 'browser-test-password';
@@ -50,7 +54,7 @@ test('服务器已配置密钥时可直接选择模型，列表故障保留手�
 for (const scenario of ['local', 'gpt', 'timeout']) {
   const ai = scenario !== 'local';
   const timeout = scenario === 'timeout';
-  test(`${timeout ? 'GPT 超时后人工核对' : ai ? '自动 GPT' : '关闭 AI'}：导入、恢复草稿、采购与${ai ? '发放' : '入库'}`, async ({
+  test(`${timeout ? 'AI 超时后 OCR 备用' : ai ? 'AI 原件识别' : '关闭 AI'}：导入、恢复草稿、采购与${ai ? '发放' : '入库'}`, async ({
     page,
     request,
   }) => {
@@ -76,38 +80,32 @@ for (const scenario of ['local', 'gpt', 'timeout']) {
         (await page.request.put('/api/ai/config', { data: { ...cfg, autoImport: true } })).ok(),
       ).toBeTruthy();
     }
-    await page.goto('/import');
+    await page.goto('/import?legacy=1');
     await page.locator('input[type=file]').setInputFiles({
       name: `${scenario}.png`,
       mimeType: 'image/png',
-      buffer: Buffer.from(`${scenario}-synthetic`),
+      buffer: imageFile(`${scenario}-synthetic`),
     });
     const qty = page.getByPlaceholder('数量：待确认');
     await expect(qty).toBeVisible();
-    await expect(qty).toHaveValue('');
-    await expect(page.locator('input[type=date]')).toHaveValue('');
     const taskUrl = page.url();
     if (ai && !timeout) {
-      await expect(page.getByText('GPT：已完成', { exact: false })).toBeVisible();
-      await page.getByText('识别依据与 GPT 建议', { exact: true }).click();
-      await page.getByRole('button', { name: '已核对，采用建议' }).click();
+      await expect(page.getByText('AI：已完成', { exact: false })).toBeVisible();
       await expect(qty).toHaveValue('8');
-      await page.getByRole('button', { name: '采用 GPT：2026-09-27' }).click();
+      await expect(page.locator('input[type=date]')).toHaveValue('2026-09-27');
     } else {
+      await expect(qty).toHaveValue('');
       await qty.fill('8');
       await page.locator('input[type=date]').fill('2026-09-27');
     }
     if (timeout) {
-      await expect(page.getByText('GPT：部分失败', { exact: false })).toBeVisible();
-      await page.getByRole('button', { name: '确认全部内容并导入' }).click();
-      await expect(page.getByRole('alert')).toContainText('第 1 页未完成核对');
-      await page.getByRole('checkbox', { name: /GPT 复核未完成/ }).check();
+      await expect(page.getByText('AI：部分失败', { exact: false })).toBeVisible();
+      await expect(page.getByText('第 1 页 AI 未完成，已使用本地 OCR，请核对原件', { exact: false })).toBeVisible();
     }
     await page.getByRole('button', { name: '保存草稿', exact: true }).click();
     await expect(page.getByText('草稿已保存', { exact: true })).toBeVisible();
     await page.reload();
     await expect(qty).toHaveValue('8');
-    if (timeout) await expect(page.getByRole('checkbox', { name: /GPT 复核未完成/ })).toBeChecked();
     await expect(page.locator('img[alt="单据原件页面"]')).toBeVisible();
     await page.screenshot({ path: test.info().outputPath('import-review.png'), fullPage: true });
     const originalUrl = await page.getByRole('link', { name: '打开原件' }).getAttribute('href');
@@ -115,7 +113,7 @@ for (const scenario of ['local', 'gpt', 'timeout']) {
     const name = await page.getByPlaceholder('品名（同名不同规格请明确区分）').inputValue();
     await page.getByRole('button', { name: '确认全部内容并导入' }).click();
     await expect(page.getByText(/已创建 1 条/)).toBeVisible();
-    await page.goto('/workbench');
+    await page.goto('/legacy-workbench');
     const card = page.locator('article').filter({ hasText: name });
     await card.getByRole('button', { name: '下单登记', exact: true }).click();
     await page
@@ -137,7 +135,7 @@ for (const scenario of ['local', 'gpt', 'timeout']) {
       await expect(page.getByText(/^\d+ 种/)).toBeVisible();
       await expect(page.getByText(/合计 \d+ 件/)).toHaveCount(0);
       // 已入账的任务不在「未完成」里；切到「已入账」能找到它，并且只能只读打开
-      await page.goto('/import');
+      await page.goto('/import?legacy=1');
       const panel = importPanel(page);
       const listed = panel.getByRole('listitem').filter({ hasText: `${scenario}.png` });
       await expect(panel.getByText(/没有未完成的导入|共 \d+ 条|已显示 \d+ 条/).first()).toBeVisible();
@@ -191,7 +189,7 @@ test.describe.serial('未完成的导入：找回、切换与隔离', () => {
   const file = (key: string) => ({
     name: `resume-${key}-${stamp}.png`,
     mimeType: 'image/png',
-    buffer: Buffer.from(`resume-${key}-${stamp}`),
+    buffer: imageFile(`resume-${key}-${stamp}`),
   });
   const files = { A: file('A'), B: file('B') };
   const ids = { A: '', B: '' };
@@ -385,7 +383,7 @@ test.describe.serial('未完成的导入：找回、切换与隔离', () => {
     for (let i = 0; i < need; i++) {
       const name = `page-${stamp}-${i}.png`;
       const uploaded = await page.request.post('/api/imports/upload', {
-        multipart: { file: { name, mimeType: 'image/png', buffer: Buffer.from(name) } },
+        multipart: { file: { name, mimeType: 'image/png', buffer: imageFile(name) } },
       });
       const { taskId } = await uploaded.json();
       expect(taskId).toBeTruthy();
@@ -413,15 +411,13 @@ test.describe.serial('未完成的导入：找回、切换与隔离', () => {
 test.describe('手机 390px', () => {
   test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
 
-  test('手机：导入、确认不被遮挡，工作台采购入库后库存可见', async ({ page, request }) => {
+  test('手机：核对原件后创建申请，继续办理与返回列表均可用', async ({ page, request }) => {
     await loginWithoutAi(page, request);
     await page.getByRole('link', { name: '导入', exact: true }).tap();
     await expect(page).toHaveURL(/\/import$/);
     const stamp = Date.now();
     await page.locator('input[type=file]').setInputFiles({
-      name: `mobile-${stamp}.png`,
-      mimeType: 'image/png',
-      buffer: Buffer.from(`mobile-${stamp}`),
+      name: `mobile-${stamp}.png`, mimeType: 'image/png', buffer: imageFile(`mobile-${stamp}`),
     });
     const qty = page.getByPlaceholder('数量：待确认');
     await expect(qty).toHaveValue('');
@@ -431,27 +427,17 @@ test.describe('手机 390px', () => {
     await page.getByRole('button', { name: '保存草稿', exact: true }).click();
     await expect(page.getByText('草稿已保存', { exact: true })).toBeVisible();
     await page.screenshot({ path: test.info().outputPath('mobile-import-review.png') });
-    // 普通 click：按钮被底部标签栏等元素挡住时 Playwright 会报拦截并失败
     await page.getByRole('button', { name: '确认全部内容并导入' }).click();
     await expect(page.getByText(/已创建 1 条/)).toBeVisible();
-
+    await page.getByRole('button', { name: '继续办理申请', exact: true }).click();
+    await expect(page).toHaveURL(/\/requests\/\d+$/);
+    await expect(page.getByText(name, { exact: true })).toBeVisible();
+    await expect(page.getByRole('link', { name: 'mobile-' + stamp + '.png', exact: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: '登记采购', exact: true })).toBeVisible();
+    await page.screenshot({ path: test.info().outputPath('mobile-request.png') });
     const nav = page.getByRole('navigation', { name: '主导航' });
-    await nav.getByRole('link', { name: '工作台', exact: true }).click();
-    const card = page.locator('article').filter({ has: page.getByText(name, { exact: true }) });
-    await card.getByRole('button', { name: '下单登记', exact: true }).click();
-    await page
-      .getByRole('checkbox', { name: '单价记入比价库（下次采购同一品名时自动提示）' })
-      .uncheck();
-    await page.getByRole('button', { name: '保存并标记已下单' }).click();
-    await card.getByRole('button', { name: '确认到货', exact: true }).click();
-    await card.getByRole('button', { name: '入库', exact: true }).click();
-    await page.getByRole('dialog').getByRole('button', { name: '确认入库', exact: true }).click();
-    await expect(card).toHaveCount(0);
-
-    await nav.getByRole('link', { name: '库存', exact: true }).click();
-    const product = page.locator('tr').filter({ has: page.getByText(name, { exact: true }) });
-    await expect(product).toBeVisible();
-    await expect(product.locator('td[data-label="当前库存"]')).toHaveText('6');
-    await page.screenshot({ path: test.info().outputPath('mobile-inventory.png') });
+    await nav.getByRole('link', { name: '申请', exact: true }).click();
+    await expect(page).toHaveURL(/\/requests$/);
+    await expect(page.getByText(name, { exact: true })).toBeVisible();
   });
 });

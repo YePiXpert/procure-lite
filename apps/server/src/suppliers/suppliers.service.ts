@@ -14,7 +14,7 @@ export class SuppliersService {
   async list() {
     return this.prisma.supplier.findMany({
       include: {
-        _count: { select: { items: true, priceRecords: true } },
+        _count: { select: { items: true, priceRecords: true, businessDocuments: true } },
       },
       orderBy: { name: 'asc' },
     });
@@ -39,11 +39,11 @@ export class SuppliersService {
   async remove(id: number, ip?: string) {
     const supplier = await this.prisma.supplier.findUnique({
       where: { id },
-      include: { _count: { select: { items: true } } },
+      include: { _count: { select: { items: true, businessDocuments: true } } },
     });
     if (!supplier) throw new NotFoundException('供应商不存在');
-    if (supplier._count.items > 0) {
-      throw new ConflictException('该供应商已关联台账记录，不能删除');
+    if (supplier._count.items > 0 || supplier._count.businessDocuments > 0) {
+      throw new ConflictException('该供应商已关联采购记录，不能删除');
     }
     await this.prisma.supplier.delete({ where: { id } });
     await this.audit.log('SUPPLIER_DELETE', { entity: 'supplier', entityId: id, ip });

@@ -33,15 +33,14 @@ const groups: { label: string; items: NavItem[] }[] = [
     label: '日常',
     items: [
       { path: '/workbench', title: '工作台', icon: 'kanban' },
-      { path: '/ledger', title: '采购台账', icon: 'ledger' },
-      { path: '/distributions', title: '领用发放', icon: 'distribution' },
-      { path: '/inventory', title: '库存管理', icon: 'inventory' },
+      { path: '/requests', title: '申请单', icon: 'ledger' },
+      { path: '/stock', title: '库存与领用', icon: 'inventory' },
     ],
   },
   {
     label: '管理',
     items: [
-      { path: '/reports', title: '统计报表', icon: 'report' },
+      { path: '/insights', title: '报表', icon: 'report' },
       { path: '/settings', title: '系统设置', icon: 'settings' },
     ],
   },
@@ -49,12 +48,12 @@ const groups: { label: string; items: NavItem[] }[] = [
 
 const allItems = computed(() => groups.flatMap((g) => g.items));
 
-/** 移动端底部四项 + 更多 */
+/** 移动端三个日常入口 + 报表 + 更多 */
 const mobileItems: NavItem[] = [
   { path: '/workbench', title: '工作台', icon: 'kanban' },
-  { path: '/ledger', title: '台账', icon: 'ledger' },
-  { path: '/distributions', title: '发放', icon: 'distribution' },
-  { path: '/inventory', title: '库存', icon: 'inventory' },
+  { path: '/requests', title: '申请', icon: 'ledger' },
+  { path: '/stock', title: '库存与领用', icon: 'inventory' },
+  { path: '/insights', title: '报表', icon: 'report' },
 ];
 
 /** 「更多」里只列底部导航放不下的，避免重复 */
@@ -72,7 +71,7 @@ watch(() => route.path, () => {
 /** 已经在导入页时，主按钮换成别的入口（二级样式），不做无意义的自我跳转 */
 const primaryAction = computed(() =>
   route.path === '/import'
-    ? { to: '/ledger', icon: 'ledger', long: '查看台账', short: '台账', variant: 'secondary' as const }
+    ? { to: '/requests', icon: 'ledger', long: '查看申请', short: '申请', variant: 'secondary' as const }
     : { to: '/import', icon: 'plus', long: '导入 OA 单', short: '导入', variant: 'primary' as const },
 );
 
@@ -103,7 +102,7 @@ function navItemClass(active = false): string {
         </span>
         <div class="min-w-0 leading-tight">
           <p class="text-sm font-semibold tracking-tight text-ink">Procure Lite</p>
-          <p class="text-meta">采购台账</p>
+          <p class="text-meta">OA 申请 · 采购与领用</p>
         </div>
       </div>
 

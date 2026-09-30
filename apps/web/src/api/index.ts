@@ -12,6 +12,7 @@ import type {
   DistributionQuery,
   DuplicatePreview,
   ImportConfirmInput,
+  WorkflowImportConfirmInput,
   ItemCreateInput,
   ItemQuery,
   ItemUpdateInput,
@@ -102,6 +103,7 @@ export interface AiImportPage {
   items: {
     lineId: string | null;
     itemName: string;
+    spec?: string | null;
     quantity: number | null;
     unit: string | null;
     unitPrice: number | null;
@@ -122,6 +124,7 @@ export interface ImportTaskView {
   aiResult: AiImportPage[];
   reviewPages: { page: number; reasons: string[]; reviewed: boolean }[];
   confirmed: boolean;
+  requestId?: number;
   originalAvailable: boolean;
   calls: {
     id: string;
@@ -196,6 +199,8 @@ export const importsApi = {
       '/imports/confirm',
       body,
     ),
+  confirmRequest: (body: WorkflowImportConfirmInput) =>
+    mutation<{ requestId: number; created: number; merged: number; skipped: number; attached: number }>('/workflow/imports/confirm', body),
 };
 
 /* ---------------------------------- 附件 ---------------------------------- */
@@ -204,13 +209,15 @@ export interface AttachmentRow {
   kind: string;
   itemId: number | null;
   distributionId: number | null;
+  procurementRequestId?: number | null;
+  businessDocumentId?: number | null;
   filename: string;
   mimeType: string;
   sizeBytes: number;
   createdAt: string;
 }
 export const attachmentsApi = {
-  list: (params: { itemId?: number; distributionId?: number }) =>
+  list: (params: { itemId?: number; distributionId?: number; procurementRequestId?: number; businessDocumentId?: number }) =>
     http.get<AttachmentRow[]>('/attachments', { params }).then((r) => r.data),
   uploadForItem: (itemId: number, file: File, kind: 'INVOICE' | 'SIGNOFF' = 'INVOICE') => {
     const form = new FormData();
@@ -233,6 +240,16 @@ export const attachmentsApi = {
       .then((r) => r.data);
   },
   remove: (id: number) => http.delete(`/attachments/${id}`).then((r) => r.data),
+  uploadForRequest: (requestId: number, file: File) => {
+    const form = new FormData();
+    form.append('file', file);
+    return http.post<AttachmentRow>(`/attachments/requests/${requestId}`, form).then((r) => r.data);
+  },
+  uploadForDocument: (documentId: number, file: File, kind: 'INVOICE' | 'SIGNOFF') => {
+    const form = new FormData();
+    form.append('file', file);
+    return http.post<AttachmentRow>(`/attachments/documents/${documentId}`, form, { params: { kind } }).then((r) => r.data);
+  },
 };
 
 /* ---------------------------------- 发放 ---------------------------------- */
@@ -317,7 +334,7 @@ export interface SupplierRow {
   contact: string | null;
   phone: string | null;
   note: string | null;
-  _count?: { items: number; priceRecords: number };
+  _count?: { items: number; priceRecords: number; businessDocuments?: number };
 }
 export interface PriceRecordRow {
   id: number;

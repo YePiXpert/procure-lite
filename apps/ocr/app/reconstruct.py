@@ -9,6 +9,7 @@ from .normalize import (
     extract_url,
     parse_price,
     parse_quantity,
+    parse_unit,
     to_halfwidth,
 )
 
@@ -140,6 +141,7 @@ def extract_item_lines(lines: list[str]) -> list[dict]:
                 "rawText": raw,
                 "itemName": name,
                 "quantity": qty,
+                "unit": parse_unit(line),
                 "unitPrice": price,
                 "purchaseLink": url,
             }
@@ -171,6 +173,146 @@ def rebuild_from_lines(lines: list[str]) -> dict:
     return {**fields, "items": items, "warnings": warnings}
 
 
+def _positioned_rows(entries: list[dict]) -> list[dict]:
+    """Group overlapping text boxes in reading orientation, retaining original boxes."""
+    cells = []
+    for entry in entries:
+        box = entry.get("box")
+        if not box or len(box) < 2:
+            continue
+        angle = entry.get("rotation", 0)
+        points = []
+        for x, y in box:
+            if angle == 90:
+                x, y = y, 1 - x
+            elif angle == 180:
+                x, y = 1 - x, 1 - y
+            elif angle == 270:
+                x, y = 1 - y, x
+            points.append((x, y))
+        xs, ys = zip(*points)
+        cells.append({**entry, "left": min(xs), "right": max(xs),
+                      "top": min(ys), "bottom": max(ys)})
+    rows = []
+    for cell in sorted(cells, key=lambda c: ((c["top"] + c["bottom"]) / 2, c["left"])):
+        height = max(cell["bottom"] - cell["top"], .0001)
+        candidates = []
+        for row in rows:
+            overlap = min(cell["bottom"], row["bottom"]) - max(cell["top"], row["top"])
+            if overlap >= .4 * min(height, row["bottom"] - row["top"]):
+                distance = abs((cell["top"] + cell["bottom"] - row["top"] - row["bottom"]) / 2)
+                candidates.append((distance, row))
+        if candidates:
+            row = min(candidates, key=lambda r: r[0])[1]
+            row["cells"].append(cell)
+            row["top"], row["bottom"] = min(row["top"], cell["top"]), max(row["bottom"], cell["bottom"])
+        else:
+            rows.append({"cells": [cell], "top": cell["top"], "bottom": cell["bottom"]})
+    for row in rows:
+        row["cells"].sort(key=lambda c: (c["left"], c["top"]))
+    return sorted(rows, key=lambda r: r["top"])
+
+
+def _row_source(cells: list[dict]) -> dict:
+    points = [point for cell in cells for point in cell.get("box", [])]
+    xs, ys = zip(*points)
+    scores = [cell["confidence"] for cell in cells if cell.get("confidence") is not None]
+    return {"box": [[min(xs), min(ys)], [max(xs), min(ys)], [max(xs), max(ys)], [min(xs), max(ys)]],
+            "confidence": min(scores) if scores else None, "rotation": cells[0].get("rotation", 0)}
+
+
+def _header_columns(cells: list[dict]) -> list[tuple[str, float]]:
+    columns = []
+    for cell in cells:
+        text = to_halfwidth(cell["text"]).replace(" ", "")
+        key = None
+        if "品名" in text or "名称" in text or text == "物品":
+            key = "name"
+        elif "数量" in text:
+            key = "qty"
+        elif "单价" in text or text == "价格":
+            key = "price"
+        elif "单位" in text:
+            key = "unit"
+        elif "规格" in text or "型号" in text:
+            key = "spec"
+        elif "链接" in text:
+            key = "url"
+        elif "金额" in text or "备注" in text or text == "序号":
+            key = "ignore"
+        if key:
+            columns.append((key, (cell["left"] + cell["right"]) / 2))
+    if not {"name", "qty"}.issubset({key for key, _ in columns}):
+        return []
+    return sorted(columns, key=lambda c: c[1])
+
+
+def rebuild_from_entries(entries: list[dict]) -> dict:
+    """Recover physical table rows from cells, without merging by item name."""
+    rows = _positioned_rows(entries)
+    if not rows:
+        return rebuild_from_lines([entry["text"] for entry in entries])
+    unpositioned = [entry["text"] for entry in entries if not entry.get("box")]
+    remaining, items, columns, previous_row = [], [], [], None
+    for row in rows:
+        cells = row["cells"]
+        text = " ".join(cell["text"] for cell in cells)
+        header = _header_columns(cells)
+        if header:
+            columns = header
+            previous_row = None
+            continue
+        if not columns:
+            remaining.append(text)
+            continue
+        values: dict[str, list[str]] = {}
+        for cell in cells:
+            center = (cell["left"] + cell["right"]) / 2
+            key = min(columns, key=lambda column: abs(column[1] - center))[0]
+            values.setdefault(key, []).append(to_halfwidth(cell["text"]).strip())
+        values = {key: " ".join(parts) for key, parts in values.items()}
+        name = values.get("name", "")
+        if re.search(r"^(?:合计|总计|审批意见|签字|经办人|申请人|部门|流水号)(?:[:：\s]|$)", name):
+            columns = []
+            remaining.append(text)
+            continue
+        # A closely spaced line containing only name/spec text is a wrapped cell.
+        # A new row with numeric/unit anchors always remains a separate physical row.
+        continuation = (
+            previous_row is not None and items and
+            set(values).issubset({"name", "spec"}) and
+            row["top"] - previous_row["bottom"] <= .3 * min(
+                row["bottom"] - row["top"], previous_row["bottom"] - previous_row["top"])
+        )
+        if continuation:
+            for key, field in (("name", "itemName"), ("spec", "spec")):
+                if values.get(key):
+                    items[-1][field] = " ".join(filter(None, [items[-1].get(field), values[key]]))
+            previous_row["cells"].extend(cells)
+            previous_row["bottom"] = row["bottom"]
+            items[-1]["_source"] = _row_source(previous_row["cells"])
+            items[-1]["rawText"] += " " + text
+            continue
+        if not name or is_ui_noise(name):
+            remaining.append(text)
+            previous_row = None
+            continue
+        item = rows_from_table([
+            ["品名", "规格", "数量", "单位", "单价", "链接"],
+            [name, values.get("spec"), values.get("qty"), values.get("unit"), values.get("price"), values.get("url")],
+        ])
+        if item:
+            item[0].update({"rawText": text, "_source": _row_source(cells)})
+            items.extend(item)
+            previous_row = row
+    result = rebuild_from_lines(remaining + unpositioned)
+    if items:
+        table_items, warnings = finalize_items(items)
+        result["items"] = table_items + result["items"]
+        result["warnings"] = warnings + [w for w in result["warnings"] if "未识别到物品明细" not in w]
+    return result
+
+
 def rows_from_table(table: list[list[str | None]]) -> list[dict]:
     """pdfplumber 表格行 → 物品行：按表头列名定位品名/数量/单价/链接列。"""
     if not table:
@@ -186,6 +328,13 @@ def rows_from_table(table: list[list[str | None]]) -> list[dict]:
             continue
         qty_raw = (row[col_map["qty"]] or "").strip() if col_map.get("qty") is not None and col_map["qty"] < len(row) else ""
         qty = parse_quantity(to_halfwidth(qty_raw)) if qty_raw else None
+        unit = None
+        if col_map.get("unit") is not None and col_map["unit"] < len(row):
+            unit = (row[col_map["unit"]] or "").strip() or None
+        unit = unit or parse_unit(qty_raw)
+        spec = None
+        if col_map.get("spec") is not None and col_map["spec"] < len(row):
+            spec = (row[col_map["spec"]] or "").strip() or None
         price = None
         if col_map.get("price") is not None and col_map["price"] < len(row) and row[col_map["price"]]:
             price = parse_price(to_halfwidth(str(row[col_map["price"]])))
@@ -196,6 +345,8 @@ def rows_from_table(table: list[list[str | None]]) -> list[dict]:
             {
                 "itemName": clean_item_name(to_halfwidth(name)),
                 "quantity": qty,
+                "unit": unit,
+                "spec": spec,
                 "unitPrice": price,
                 "purchaseLink": link,
             }
@@ -211,17 +362,21 @@ def find_header(table: list[list[str | None]]) -> tuple[int, dict | None]:
             continue
         if not (("名称" in text or "品名" in text or "物品" in text) and "数量" in text):
             continue
-        col_map: dict[str, int | None] = {"name": None, "qty": None, "price": None, "url": None}
+        col_map: dict[str, int | None] = {"name": None, "qty": None, "unit": None, "spec": None, "price": None, "url": None}
         for j, cell in enumerate(cells):
             c = cell.strip()
             if not c:
                 continue
-            if col_map["name"] is None and ("品名" in c or "物品名称" in c or c == "名称" or "物品" in c):
+            if col_map["name"] is None and ("品名" in c or "名称" in c or c == "物品"):
                 col_map["name"] = j
             elif col_map["qty"] is None and "数量" in c:
                 col_map["qty"] = j
             elif col_map["price"] is None and "单价" in c:
                 col_map["price"] = j
+            elif col_map["unit"] is None and "单位" in c:
+                col_map["unit"] = j
+            elif col_map["spec"] is None and ("规格" in c or "型号" in c):
+                col_map["spec"] = j
             elif col_map["url"] is None and ("链接" in c or "网址" in c):
                 col_map["url"] = j
         if col_map["name"] is not None and col_map["qty"] is not None:

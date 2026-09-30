@@ -38,6 +38,8 @@ export class AttachmentsService implements OnModuleDestroy {
     kind: string;
     itemId?: number;
     distributionId?: number;
+    procurementRequestId?: number;
+    businessDocumentId?: number;
     ip?: string;
   }) {
     const filename = path.basename(params.file.filename || 'attachment');
@@ -48,8 +50,8 @@ export class AttachmentsService implements OnModuleDestroy {
     if (params.file.size > config.maxUploadBytes) {
       throw new BadRequestException('附件超过大小限制');
     }
-    if (!params.itemId && !params.distributionId) {
-      throw new BadRequestException('缺少关联对象');
+    if ([params.itemId, params.distributionId, params.procurementRequestId, params.businessDocumentId].filter((id) => id !== undefined).length !== 1) {
+      throw new BadRequestException('附件必须关联一个业务对象');
     }
     if (params.itemId) {
       const item = await this.prisma.item.findFirst({
@@ -63,6 +65,18 @@ export class AttachmentsService implements OnModuleDestroy {
       });
       if (!dist) throw new NotFoundException('发放单不存在');
     }
+    if (params.procurementRequestId) {
+      const request = await this.prisma.procurementRequest.findUnique({ where: { id: params.procurementRequestId } });
+      if (!request) throw new NotFoundException('申请单不存在');
+      if (params.kind !== 'OA_DOC') throw new BadRequestException('申请附件请使用原单类型');
+    }
+    if (params.businessDocumentId) {
+      const document = await this.prisma.businessDocument.findUnique({ where: { id: params.businessDocumentId } });
+      if (!document) throw new NotFoundException('业务单据不存在');
+      if ((params.kind === 'INVOICE' && document.kind !== 'PURCHASE') || (params.kind === 'SIGNOFF' && document.kind !== 'DISTRIBUTION')) {
+        throw new BadRequestException('发票须关联采购单，签收凭证须关联发放单');
+      }
+    }
 
     const storedName = `${randomUUID()}${ext}`;
     const storagePath = path.join(config.uploadsDir, 'attachments', storedName);
@@ -74,11 +88,16 @@ export class AttachmentsService implements OnModuleDestroy {
         kind: params.kind,
         itemId: params.itemId ?? null,
         distributionId: params.distributionId ?? null,
+        procurementRequestId: params.procurementRequestId ?? null,
+        businessDocumentId: params.businessDocumentId ?? null,
         filename,
         storagePath: `attachments/${storedName}`,
         mimeType: params.file.mimetype || 'application/octet-stream',
         sizeBytes: params.file.size,
       },
+    }).catch((error) => {
+      fs.rmSync(storagePath, { force: true });
+      throw error;
     });
     await this.audit.log('ATTACHMENT_UPLOAD', {
       entity: 'attachment',
@@ -89,11 +108,13 @@ export class AttachmentsService implements OnModuleDestroy {
     return record;
   }
 
-  async list(params: { itemId?: number; distributionId?: number }) {
+  async list(params: { itemId?: number; distributionId?: number; procurementRequestId?: number; businessDocumentId?: number }) {
     return this.prisma.attachment.findMany({
       where: {
         ...(params.itemId ? { itemId: params.itemId } : {}),
         ...(params.distributionId ? { distributionId: params.distributionId } : {}),
+        ...(params.procurementRequestId ? { procurementRequestId: params.procurementRequestId } : {}),
+        ...(params.businessDocumentId ? { businessDocumentId: params.businessDocumentId } : {}),
       },
       orderBy: { createdAt: 'desc' },
     });
@@ -110,6 +131,9 @@ export class AttachmentsService implements OnModuleDestroy {
   async remove(id: number, ip?: string) {
     const record = await this.prisma.attachment.findUnique({ where: { id } });
     if (!record) throw new NotFoundException('附件不存在');
+    if (record.kind === 'OA_DOC' && record.procurementRequestId) {
+      throw new BadRequestException('已入账申请的原件须保留，不能删除');
+    }
     await this.prisma.attachment.delete({ where: { id } });
     await this.releaseFile(record.storagePath);
     await this.audit.log('ATTACHMENT_DELETE', {

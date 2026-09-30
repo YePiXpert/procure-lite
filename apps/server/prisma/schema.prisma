@@ -155,6 +155,7 @@ model Supplier {
 
   items        Item[]
   priceRecords SupplierPriceRecord[]
+  businessDocuments BusinessDocument[]
 }
 
 /* 价格记忆：同一品名在各供应商的单价与链接 */
@@ -179,6 +180,10 @@ model Attachment {
   item          Item?        @relation(fields: [itemId], references: [id], onDelete: Cascade)
   distributionId Int?
   distribution  Distribution? @relation(fields: [distributionId], references: [id], onDelete: Cascade)
+  procurementRequestId Int?
+  procurementRequest ProcurementRequest? @relation(fields: [procurementRequestId], references: [id], onDelete: Restrict)
+  businessDocumentId Int?
+  businessDocument BusinessDocument? @relation(fields: [businessDocumentId], references: [id], onDelete: Restrict)
   filename      String
   storagePath   String
   mimeType      String
@@ -187,6 +192,8 @@ model Attachment {
 
   @@index([itemId])
   @@index([distributionId])
+  @@index([procurementRequestId])
+  @@index([businessDocumentId])
 }
 
 /* OA 导入任务（持久化，重启不丢） */
@@ -208,6 +215,7 @@ model ImportTask {
   aiResult    String?
   confirmedAt DateTime?
   confirmation String?
+  procurementRequest ProcurementRequest?
   @@index([contentHash])
 }
 
@@ -261,4 +269,143 @@ model AiCall {
   durationMs Int?
   createdAt DateTime @default(now())
   @@index([taskId, createdAt])
+}
+
+// V3 workflow is additive: old ledger and API remain readable during rollout.
+// Scaled integers: quantities 6 decimals, unit prices 4, line amounts CNY fen.
+model CatalogProduct {
+  id Int @id @default(autoincrement())
+  name String
+  specification String @default("")
+  unit String
+  createdAt DateTime @default(now())
+  requestLines ProcurementLine[]
+  businessLines BusinessLine[]
+  balances StockBalance[]
+  entries StockEntry[]
+  @@unique([name, specification, unit])
+}
+
+model ProcurementRequest {
+  id Int @id @default(autoincrement())
+  serialNumber String
+  department String
+  handler String
+  requestDate String
+  note String?
+  sourceTaskId String? @unique
+  sourceTask ImportTask? @relation(fields: [sourceTaskId], references: [id], onDelete: Restrict)
+  createdAt DateTime @default(now())
+  lines ProcurementLine[]
+  attachments Attachment[]
+  @@index([requestDate])
+  @@index([serialNumber])
+}
+
+model ProcurementLine {
+  id Int @id @default(autoincrement())
+  requestId Int
+  request ProcurementRequest @relation(fields: [requestId], references: [id], onDelete: Restrict)
+  lineNumber Int
+  productId Int
+  product CatalogProduct @relation(fields: [productId], references: [id], onDelete: Restrict)
+  itemName String
+  specification String @default("")
+  unit String
+  quantityUnits BigInt
+  cancelledUnits BigInt @default(0)
+  orderedUnits BigInt @default(0)
+  note String?
+  businessLines BusinessLine[]
+  @@unique([requestId, lineNumber])
+  @@index([productId])
+}
+
+model BusinessDocument {
+  id Int @id @default(autoincrement())
+  kind String
+  date String
+  status String @default("POSTED")
+  supplierId Int?
+  supplier Supplier? @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+  supplierName String?
+  department String?
+  source String?
+  returnMode String?
+  note String?
+  totalAmountUnits BigInt?
+  paymentStatus String @default("UNPAID")
+  invoiceIssued Boolean @default(false)
+  voidReason String?
+  voidDate String?
+  voidedAt DateTime?
+  createdAt DateTime @default(now())
+  lines BusinessLine[]
+  attachments Attachment[]
+  @@index([kind, status, date])
+  @@index([supplierId])
+}
+
+model BusinessLine {
+  id Int @id @default(autoincrement())
+  documentId Int
+  document BusinessDocument @relation(fields: [documentId], references: [id], onDelete: Restrict)
+  requestLineId Int?
+  requestLine ProcurementLine? @relation(fields: [requestLineId], references: [id], onDelete: Restrict)
+  sourceLineId Int?
+  sourceLine BusinessLine? @relation("BusinessLineSource", fields: [sourceLineId], references: [id], onDelete: Restrict)
+  derivedLines BusinessLine[] @relation("BusinessLineSource")
+  productId Int
+  product CatalogProduct @relation(fields: [productId], references: [id], onDelete: Restrict)
+  itemName String
+  specification String @default("")
+  unit String
+  quantityUnits BigInt
+  unitPriceUnits BigInt?
+  amountUnits BigInt?
+  purchaseReductionAmountUnits BigInt?
+  receivedUnits BigInt @default(0)
+  cancelledUnits BigInt @default(0)
+  purchaseLink String?
+  recipient String?
+  location String?
+  reason String?
+  balances StockBalance[] @relation("BalanceOrigin")
+  originEntries StockEntry[] @relation("EntryOrigin")
+  entries StockEntry[] @relation("EntryBusinessLine")
+  @@index([requestLineId])
+  @@index([sourceLineId])
+  @@index([documentId])
+}
+
+model StockBalance {
+  id Int @id @default(autoincrement())
+  productId Int
+  product CatalogProduct @relation(fields: [productId], references: [id], onDelete: Restrict)
+  originLineId Int
+  originLine BusinessLine @relation("BalanceOrigin", fields: [originLineId], references: [id], onDelete: Restrict)
+  location String
+  quantityUnits BigInt @default(0)
+  @@unique([productId, originLineId, location])
+  @@index([productId, location])
+}
+
+model StockEntry {
+  id Int @id @default(autoincrement())
+  productId Int
+  product CatalogProduct @relation(fields: [productId], references: [id], onDelete: Restrict)
+  businessLineId Int
+  businessLine BusinessLine @relation("EntryBusinessLine", fields: [businessLineId], references: [id], onDelete: Restrict)
+  originLineId Int
+  originLine BusinessLine @relation("EntryOrigin", fields: [originLineId], references: [id], onDelete: Restrict)
+  location String
+  quantityUnits BigInt
+  date String
+  reversalOfId Int? @unique
+  reversalOf StockEntry? @relation("StockEntryReversal", fields: [reversalOfId], references: [id], onDelete: Restrict)
+  reversal StockEntry? @relation("StockEntryReversal")
+  createdAt DateTime @default(now())
+  @@index([productId, date])
+  @@index([originLineId, location])
+  @@index([businessLineId])
 }

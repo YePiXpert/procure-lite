@@ -76,10 +76,11 @@ export class ImportsController {
     @Param('page', ParseIntPipe) page: number,
     @Res() reply: FastifyReply,
   ) {
+    const image = await this.imports.page(id, page);
     return reply
       .header('Cache-Control', 'private, no-store')
-      .type('image/png')
-      .send(await this.imports.page(id, page));
+      .type(image.mime)
+      .send(image.bytes);
   }
 
   @Put('tasks/:id/draft')

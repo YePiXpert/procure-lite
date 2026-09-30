@@ -11,14 +11,14 @@ import {
 import { isAxiosError } from 'axios';
 import Badge from '@/components/ui/Badge.vue';
 import Button from '@/components/ui/Button.vue';
-import { buttonClass } from '@/components/ui/button';
 import Checkbox from '@/components/ui/Checkbox.vue';
 import FileDropzone from '@/components/ui/FileDropzone.vue';
 import Icon from '@/components/ui/Icon.vue';
 import Input from '@/components/ui/Input.vue';
 import NativeSelect from '@/components/ui/NativeSelect.vue';
+import ImportRecognitionSteps from '@/components/import/ImportRecognitionSteps.vue';
+import ImportTaskList from '@/components/import/ImportTaskList.vue';
 import PageHeader from '@/components/ui/PageHeader.vue';
-import Panel from '@/components/ui/Panel.vue';
 import Select from '@/components/ui/Select.vue';
 import Skeleton from '@/components/ui/Skeleton.vue';
 import StickyActionBar from '@/components/ui/StickyActionBar.vue';
@@ -27,16 +27,14 @@ import { useCatalogStore } from '@/stores/catalog';
 import {
   importsApi,
   type ImportTaskView,
-  type ImportTaskSummary,
   type AiImportPage,
 } from '@/api';
 import { apiError } from '@/api/client';
 import { useToastStore } from '@/stores/toast';
-import { formatDateTime } from '@/utils/datetime';
-import { createRequestGuard } from '@/utils/request';
 import {
   aiSuggestionKey,
   importConfirmSchema,
+  workflowImportConfirmSchema,
   type ImportDraft,
   type ParseResult,
 } from '@procure-lite/shared';
@@ -44,6 +42,7 @@ import {
 type Line = {
   lineId: string;
   itemName: string;
+  spec: string;
   quantity: string;
   unit: string;
   unitPrice: string;
@@ -55,6 +54,7 @@ const route = useRoute(),
   router = useRouter(),
   toast = useToastStore(),
   catalog = useCatalogStore();
+const isLegacy = computed(() => route.query.legacy === '1');
 const supplierId = ref('');
 const supplierOptions = computed(() =>
   catalog.suppliers.map((s) => ({ label: s.name, value: String(s.id) })),
@@ -72,7 +72,7 @@ const lines = ref<Line[]>([]),
   page = ref(1),
   selected = ref<string>('');
 const duplicateNames = ref<string[]>([]),
-  finished = ref<{ created: number; merged: number; skipped: number; attached: number } | null>(
+  finished = ref<{ created: number; merged: number; skipped: number; attached: number; requestId?: number } | null>(
     null,
   );
 const duplicateFile = ref<File | null>(null),
@@ -82,6 +82,7 @@ const missing = ref(false);
 const previewFailed = ref(false),
   mobileTab = ref<'draft' | 'original'>('draft');
 const rootEl = ref<HTMLElement>();
+const taskList = ref<InstanceType<typeof ImportTaskList>>();
 let timer: ReturnType<typeof setTimeout> | undefined,
   saveTimer: ReturnType<typeof setTimeout> | undefined;
 let saveChain: Promise<void> = Promise.resolve(),
@@ -173,6 +174,9 @@ function needsReview(l: Line) {
   const original = task.value?.result?.items.find((i) => i.lineId === l.lineId);
   return (
     (!original ||
+      original.itemName !== s.itemName ||
+      (original.spec ?? '') !== (s.spec ?? '') ||
+      (original.unit ?? '') !== (s.unit ?? '') ||
       original.quantity !== s.quantity ||
       (original.unitPrice ?? null) !== s.unitPrice) &&
     !reviewedAi.value.includes(aiSuggestionKey(s))
@@ -189,55 +193,6 @@ const aiState = computed(
       CANCELLED: '已取消',
     })[task.value?.aiStatus ?? 'DISABLED'],
 );
-/*
- * 以下几项只服务于展示，不参与任何业务判断。
- * 步骤条：上传原件 → 本地识别 → GPT 复核 → 核对入账，从 task.status / aiStatus / confirmed / finished 推导。
- * warn = 该步没有完整完成（本地解析失败、GPT 部分失败或被停止）；skipped = 未启用 GPT。
- */
-type StepState = 'done' | 'current' | 'todo' | 'warn' | 'skipped';
-const stepStyles: Record<StepState, { dot: string; text: string }> = {
-  done: { dot: 'bg-accent text-primary-fg', text: 'text-text' },
-  current: { dot: 'bg-ink text-surface', text: 'font-medium text-ink' },
-  todo: { dot: 'border border-line-strong text-faint', text: 'text-faint' },
-  warn: { dot: 'bg-amber-soft text-amber', text: 'text-text' },
-  skipped: { dot: 'border border-dashed border-line-strong text-faint', text: 'text-faint' },
-};
-const steps = computed(() => {
-  const t = task.value;
-  const running = (s?: string) => s === 'PENDING' || s === 'RUNNING';
-  const sent: StepState = t || (taskId.value && !missing.value) ? 'done' : 'current';
-  const local: StepState = !t
-    ? 'todo'
-    : running(t.status)
-      ? 'current'
-      : t.status === 'FAILED'
-        ? 'warn'
-        : 'done';
-  const gpt: StepState = !t
-    ? 'todo'
-    : t.aiStatus === 'DISABLED'
-      ? 'skipped'
-      : running(t.status)
-        ? 'todo'
-        : running(t.aiStatus)
-          ? 'current'
-          : t.aiStatus === 'DONE'
-            ? 'done'
-            : 'warn';
-  const review: StepState =
-    finished.value || t?.confirmed ? 'done' : t && !active.value ? 'current' : 'todo';
-  const states = [sent, local, gpt, review];
-  // 手机上只显示「焦点步」的文字：当前步，否则第一个未开始的步，全部完成时是最后一步
-  const current = states.indexOf('current');
-  const next = states.indexOf('todo');
-  const focus = current >= 0 ? current : next >= 0 ? next : states.length - 1;
-  return ['上传原件', '本地识别', 'GPT 复核', '核对入账'].map((label, i) => ({
-    label,
-    state: states[i],
-    focus: i === focus,
-    ...stepStyles[states[i]],
-  }));
-});
 /** 状态行圆点：蓝 = 进行中，绿 = 已完成，琥珀 = 失败 / 部分失败，其余（未启用、已取消）灰 */
 const stateDot: Partial<Record<string, string>> = {
   PENDING: 'bg-blue',
@@ -254,6 +209,7 @@ function line(item?: ImportDraft['items'][number]): Line {
   return {
     lineId: item?.lineId ?? crypto.randomUUID(),
     itemName: item?.itemName ?? '',
+    spec: item?.spec ?? '',
     quantity: item?.quantity == null ? '' : String(item.quantity),
     unit: item?.unit ?? '',
     unitPrice: item?.unitPrice == null ? '' : String(item.unitPrice),
@@ -334,7 +290,6 @@ async function refresh() {
       if (next.confirmed) error.value = '此任务已经确认入账，仅供查看。';
       void checkDuplicates();
     }
-    syncListRow(next);
     clearTimeout(timer);
     if (active.value) timer = setTimeout(() => void refresh(), 1500);
   } catch (e) {
@@ -380,7 +335,7 @@ async function uploadFile(file: File, continueDuplicate = false) {
     duplicateFile.value = null;
     duplicateTaskId.value = '';
     // 地址是任务的唯一来源：换地址后由下面的 watch 清空旧任务并载入新任务
-    await router.replace({ query: { task: result.taskId } });
+    await router.replace({ query: { ...route.query, task: result.taskId } });
   } catch (e) {
     error.value = apiError(e);
   } finally {
@@ -389,7 +344,7 @@ async function uploadFile(file: File, continueDuplicate = false) {
 }
 /** 相同内容的原件已上传过：打开那个任务（被未保存的草稿拦下时保留提示，保存后可再点） */
 async function openDuplicate() {
-  const failure = await router.push({ query: { task: duplicateTaskId.value } });
+  const failure = await router.push({ query: { ...route.query, task: duplicateTaskId.value } });
   const same = isNavigationFailure(failure, NavigationFailureType.duplicated);
   if (failure && !same) return;
   duplicateFile.value = null;
@@ -397,6 +352,7 @@ async function openDuplicate() {
   if (same) scrollToTask();
 }
 async function checkDuplicates() {
+  if (!isLegacy.value) { duplicateNames.value = []; return; }
   const id = taskId.value;
   if (!form.serialNumber || !form.handler || !lines.value.length) return;
   try {
@@ -453,6 +409,7 @@ function apply(l: Line) {
   const s = suggestion(l);
   if (!s) return;
   l.itemName = s.itemName;
+  l.spec = s.spec ?? '';
   l.quantity = s.quantity == null ? '' : String(s.quantity);
   l.unit = s.unit ?? '';
   l.unitPrice = s.unitPrice == null ? '' : String(s.unitPrice);
@@ -464,7 +421,7 @@ function addSuggestion(s: AiImportPage['items'][number] & { page: number }) {
     line({
       ...s,
       lineId: s.lineId ?? crypto.randomUUID(),
-      source: { page: s.page, method: 'GPT' },
+      source: { page: s.page, method: 'AI' },
     }),
   );
   acknowledge(s);
@@ -506,14 +463,16 @@ async function confirm() {
     if (!saved.value || saveError.value) throw new Error(saveError.value || '草稿尚未保存');
     await checkDuplicates();
     if (stale(id)) return;
-    const parsed = importConfirmSchema.safeParse({
+    const parsed = (isLegacy.value ? importConfirmSchema : workflowImportConfirmSchema).safeParse({
       ...snapshot(),
       taskId: id,
       version: task.value.version,
     });
     if (!parsed.success) throw new Error(parsed.error.issues.map((i) => i.message).join('；'));
-    const result = await importsApi.confirm(parsed.data);
-    void loadTasks(); // 已入账的任务从「未完成」里移走（即使已切到别的任务）
+    const result = isLegacy.value
+      ? await importsApi.confirm(parsed.data)
+      : await importsApi.confirmRequest(workflowImportConfirmSchema.parse(parsed.data));
+    void taskList.value?.refresh(); // 已入账的任务从「未完成」里移走（即使已切到别的任务）
     if (stale(id)) return;
     finished.value = result;
     if (task.value) task.value.confirmed = true;
@@ -528,86 +487,10 @@ watch(page, () => {
   previewFailed.value = false;
 });
 
-/* -------------------- 未完成的导入：找回已上传、尚未确认入账的任务 -------------------- */
-const LIST_PAGE_SIZE = 10;
-const listTab = ref<'pending' | 'confirmed'>('pending'),
-  listRows = ref<ImportTaskSummary[]>([]),
-  listTotal = ref(0),
-  listLoading = ref(false),
-  listError = ref('');
-const listGuard = createRequestGuard();
-/**
- * more = 追加下一页；否则从第一页重新载入，条数保持已展开的数量（服务端单页最多 50），
- * 切换任务后刚点过的那一行不会因为重新载入而消失。
- */
-async function loadTasks(more = false) {
-  const isCurrent = listGuard.begin();
-  const shown = listRows.value.length,
-    pages = Math.min(5, Math.max(1, Math.ceil(shown / LIST_PAGE_SIZE)));
-  const query = more
-    ? { page: Math.floor(shown / LIST_PAGE_SIZE) + 1, pageSize: LIST_PAGE_SIZE }
-    : { page: 1, pageSize: pages * LIST_PAGE_SIZE };
-  listLoading.value = true;
-  try {
-    const res = await importsApi.tasks({ confirmed: listTab.value === 'confirmed', ...query });
-    if (!isCurrent() || disposed) return;
-    listRows.value = more
-      ? [...listRows.value, ...res.tasks.filter((t) => !listRows.value.some((r) => r.id === t.id))]
-      : res.tasks;
-    listTotal.value = res.total;
-    listError.value = '';
-  } catch (e) {
-    if (!isCurrent() || disposed) return;
-    listError.value = apiError(e);
-  } finally {
-    if (isCurrent()) listLoading.value = false;
-  }
-}
-function switchList(tab: 'pending' | 'confirmed') {
-  listTab.value = tab;
-  listRows.value = [];
-  listTotal.value = 0;
-  void loadTasks();
-}
-/** 当前任务轮询到的新状态同步到列表那一行，不用为此重新拉列表 */
-function syncListRow(t: ImportTaskView) {
-  const row = listRows.value.find((r) => r.id === t.id);
-  if (row)
-    Object.assign(row, {
-      status: t.status,
-      aiStatus: t.aiStatus,
-      confirmed: t.confirmed,
-      originalAvailable: t.originalAvailable,
-    });
-}
-/**
- * 只看 confirmedAt：本地识别「已完成」不等于入账，未确认的任务一律不叫「已完成」。
- * 原件缺失（originalAvailable = false）由模板在后面另加「· 原件缺失」。
- */
-function taskStatusLabel(t: ImportTaskSummary) {
-  const running = (s: string) => s === 'PENDING' || s === 'RUNNING';
-  return t.confirmed
-    ? '已入账'
-    : running(t.status)
-      ? '本地识别中'
-      : running(t.aiStatus)
-        ? 'GPT 复核中'
-        : t.status === 'FAILED'
-          ? '本地识别失败，待人工核对'
-          : t.aiStatus === 'FAILED' || t.aiStatus === 'CANCELLED'
-            ? '待人工核对'
-            : '待核对入账';
-}
 /** 页面在外壳的 <main> 里滚动：切换任务后回到页顶，从头看新任务 */
 function scrollToTask() {
   rootEl.value?.closest('main')?.scrollTo({ top: 0 });
 }
-/** 列表里点的就是当前任务时地址不变、不会切换，只回到页顶 */
-function openListTask(t: ImportTaskSummary, navigate: (e?: MouseEvent) => unknown, e: MouseEvent) {
-  void navigate(e);
-  if (t.id === taskId.value) scrollToTask();
-}
-
 /**
  * 地址里的 task 是当前任务的唯一来源（上传、列表、「打开已有任务」、浏览器前进后退都只改地址）。
  * 换任务（含换成没有任务）时先停掉轮询与自动保存，清空上一个任务的全部状态，再载入新任务。
@@ -642,7 +525,7 @@ watch(
     mobileTab.value = 'draft';
     scrollToTask();
     void refresh();
-    void loadTasks();
+    void taskList.value?.refresh();
   },
   { immediate: true },
 );
@@ -660,39 +543,9 @@ onUnmounted(() => {
 
 <template>
   <div ref="rootEl" class="space-y-6">
-    <PageHeader title="导入 OA 单据" description="保存原件 · 本地识别 · GPT 复核 · 人工确认" />
+    <PageHeader title="导入 OA 单据" description="保存原件 · AI 原件识别 / OCR 备用 · 人工确认" />
 
-    <!-- 步骤条：手机上只保留焦点步的文字，其余步只显示圆点（文字留给读屏） -->
-    <ol class="flex max-w-3xl items-center gap-2 sm:gap-3">
-      <li
-        v-for="(step, n) in steps"
-        :key="step.label"
-        class="flex min-w-0 items-center gap-2 sm:gap-3"
-        :class="n > 0 ? 'flex-1' : ''"
-        :aria-current="step.state === 'current' ? 'step' : undefined"
-      >
-        <span
-          v-if="n > 0"
-          class="h-px min-w-3 flex-1 transition-colors duration-150"
-          :class="step.state === 'todo' ? 'bg-line-strong' : 'bg-accent/40'"
-          aria-hidden="true"
-        />
-        <span
-          class="flex size-6 shrink-0 items-center justify-center rounded-full text-xs font-semibold tabular-nums"
-          :class="step.dot"
-        >
-          <Icon v-if="step.state === 'done'" name="check" :size="14" />
-          <Icon v-else-if="step.state === 'warn'" name="alert" :size="13" />
-          <Icon v-else-if="step.state === 'skipped'" name="minus" :size="14" />
-          <template v-else>{{ n + 1 }}</template>
-        </span>
-        <span
-          class="whitespace-nowrap text-[13px]"
-          :class="[step.text, step.focus ? '' : 'max-sm:sr-only']"
-          >{{ step.label }}</span
-        >
-      </li>
-    </ol>
+    <ImportRecognitionSteps :task="task" :task-id="taskId" :missing="missing" :finished="!!finished" />
 
     <!-- 提示与错误：核对阶段放进底部操作条（随时可见），其余阶段显示在这里 -->
     <template v-if="finished || !task">
@@ -729,15 +582,15 @@ onUnmounted(() => {
       <p class="min-w-0 flex-1 text-sm leading-6 text-ink">
         已创建 {{ finished.created }} 条，合并 {{ finished.merged }} 条，跳过 {{ finished.skipped }} 条；关联 {{ finished.attached }} 份原件。
       </p>
-      <Button variant="primary" @click="router.push('/ledger')">
-        查看台账<Icon name="arrow-right" :size="16" />
+      <Button variant="primary" @click="router.push(finished.requestId ? `/requests/${finished.requestId}` : '/ledger')">
+        {{ finished.requestId ? '继续办理申请' : '查看台账' }}<Icon name="arrow-right" :size="16" />
       </Button>
     </section>
 
     <!-- 处理中 / 待核对 / 已确认（只读） -->
     <template v-else-if="task">
       <div class="space-y-3">
-        <!-- 状态条：文件名 + 本地 / GPT 状态 + 草稿保存状态，右侧是处理动作 -->
+        <!-- 状态条：文件名 + 本地 / AI 状态 + 草稿保存状态，右侧是处理动作 -->
         <section class="card flex flex-wrap items-center gap-x-6 gap-y-3 px-5 py-4">
           <div class="flex min-w-0 flex-1 basis-80 items-center gap-3.5">
             <span
@@ -761,19 +614,19 @@ onUnmounted(() => {
                     class="size-1.5 shrink-0 rounded-full"
                     :class="stateDot[task.status] ?? 'bg-faint'"
                     aria-hidden="true"
-                  />本地：{{ localState }}</span
+                  />识别：{{ localState }}</span
                 >
                 <span class="inline-flex items-center gap-1.5"
                   ><span
                     class="size-1.5 shrink-0 rounded-full"
                     :class="stateDot[task.aiStatus] ?? 'bg-faint'"
                     aria-hidden="true"
-                  />GPT：{{ aiState }}</span
+                  />AI：{{ aiState }}</span
                 >
                 <span class="num inline-flex items-center gap-1"
                   ><Icon name="layers" :size="12" class="shrink-0 text-faint" />{{
                     task.result?.pages?.filter((p) => p.status === 'DONE').length ?? 0
-                  }}/{{ pageCount }} 页本地完成 · {{ task.aiResult.length }}/{{ pageCount }} 页 GPT
+                  }}/{{ pageCount }} 页识别完成 · {{ task.aiResult.length }}/{{ pageCount }} 页 AI
                   完成</span
                 >
                 <span class="inline-flex items-center gap-1" :class="saved ? 'text-accent' : ''"
@@ -784,6 +637,7 @@ onUnmounted(() => {
               </p>
             </div>
           </div>
+          <Button v-if="task.confirmed && task.requestId" size="sm" variant="primary" @click="router.push(`/requests/${task!.requestId}`)">查看已入账申请</Button>
           <div v-if="active || !task.confirmed" class="flex flex-wrap items-center gap-2">
             <Button v-if="active" variant="secondary" size="sm" @click="cancel"
               >停止处理，人工核对</Button
@@ -801,7 +655,7 @@ onUnmounted(() => {
                 ><Icon name="refresh" :size="14" />重试本地失败页</Button
               >
               <Button size="sm" variant="secondary" @click="retry('ai')"
-                ><Icon name="refresh" :size="14" />重试 GPT 未完成页</Button
+                ><Icon name="refresh" :size="14" />重试 AI 未完成页</Button
               >
             </template>
           </div>
@@ -819,7 +673,7 @@ onUnmounted(() => {
           </li>
           <li
             v-for="(warning, i) in task.aiResult.flatMap((p) =>
-              p.warnings.map((w) => `GPT 第 ${p.page} 页：${w}`),
+              p.warnings.map((w) => `AI 第 ${p.page} 页：${w}`),
             )"
             :key="`ai-${i}`"
             class="flex items-start gap-2"
@@ -944,13 +798,14 @@ onUnmounted(() => {
                       class="mt-1.5 mr-3 inline-flex items-start gap-1 text-left text-xs text-accent hover:underline disabled:cursor-not-allowed disabled:text-faint disabled:no-underline"
                       @click="form[f] = p[f]!"
                     >
-                      <Icon name="sparkles" :size="12" class="mt-[3px] shrink-0" />采用 GPT：{{
+                      <Icon name="sparkles" :size="12" class="mt-[3px] shrink-0" />采用 AI：{{
                         p[f]
                       }}
                     </button></template
                   >
                 </div>
                 <Select
+                  v-if="isLegacy"
                   v-model="supplierId"
                   label="统一指定供应商（可空）"
                   :options="supplierOptions"
@@ -1001,6 +856,7 @@ onUnmounted(() => {
                         placeholder="品名（同名不同规格请明确区分）"
                         @blur="checkDuplicates"
                       />
+                      <Input v-model="l.spec" size="sm" label="规格" hide-label placeholder="规格（可空）" class="mt-1.5" />
                     </td>
                     <td class="border-b-0 px-1.5 pb-2 pt-3 @max-xl:p-0">
                       <span aria-hidden="true" :class="stackedLabel">数量</span>
@@ -1053,8 +909,8 @@ onUnmounted(() => {
                           <template
                             v-if="lines.some((o, j) => j !== i && o.itemName === l.itemName)"
                           >
-                            <Badge tone="amber">存在同名明细，请补充规格区分。</Badge>
-                            <Button size="sm" variant="secondary" @click="merge(i)"
+                            <Badge tone="amber">请核对同名明细的规格。</Badge>
+                            <Button v-if="isLegacy" size="sm" variant="secondary" @click="merge(i)"
                               >确认同物品并合并</Button
                             >
                           </template>
@@ -1089,8 +945,8 @@ onUnmounted(() => {
                         v-if="needsReview(l)"
                         class="mt-2 flex items-start gap-1.5 text-xs leading-5 text-amber"
                       >
-                        <Icon name="alert" :size="13" class="mt-[3px] shrink-0" />GPT
-                        数量或价格与本地结果存在差异，请展开建议核对。
+                        <Icon name="alert" :size="13" class="mt-[3px] shrink-0" />AI
+                        数量或价格与首次识别结果存在差异，请展开建议核对。
                       </p>
                       <details class="group/why mt-2 rounded-lg bg-surface-2">
                         <summary
@@ -1100,23 +956,23 @@ onUnmounted(() => {
                             name="chevron-right"
                             :size="14"
                             class="shrink-0 transition-transform duration-150 group-open/why:rotate-90"
-                          />识别依据与 GPT 建议
+                          />识别依据与 AI 建议
                         </summary>
                         <div class="space-y-3 px-3 pb-3 text-xs leading-5 text-muted">
                           <p class="break-all">原始文本：{{ l.source?.rawText || '无可信文本来源' }}</p>
                           <div v-if="localValue(l)" class="space-y-2 border-t border-line pt-3">
                             <p>
-                              本地识别：<span class="text-text">{{ localValue(l)!.itemName }}</span> · 数量
+                              首次识别：<span class="text-text">{{ localValue(l)!.itemName }}</span> · 数量
                               {{ localValue(l)!.quantity ?? '未知' }}{{ localValue(l)!.unit ?? '' }} · 单价
                               {{ localValue(l)!.unitPrice ?? '未填' }}
                             </p>
                             <Button size="sm" variant="secondary" @click="applyLocal(l)"
-                              >核对后采用本地值</Button
+                              >核对后采用首次识别值</Button
                             >
                           </div>
                           <div v-if="suggestion(l)" class="space-y-2 border-t border-line pt-3">
                             <p>
-                              GPT：<span class="text-text">{{ suggestion(l)!.itemName }}</span>，数量
+                              AI：<span class="text-text">{{ suggestion(l)!.itemName }}</span>，数量
                               {{ suggestion(l)!.quantity ?? '未知' }}，单价
                               {{ suggestion(l)!.unitPrice ?? '未知' }}
                             </p>
@@ -1172,7 +1028,7 @@ onUnmounted(() => {
                 <p class="flex min-w-0 flex-1 basis-60 items-start gap-2">
                   <Icon name="sparkles" :size="15" class="mt-0.5 shrink-0 text-faint" />
                   <span
-                    >GPT 新增候选：<span class="text-ink">{{ s.itemName }}</span> ×
+                    >AI 新增候选：<span class="text-ink">{{ s.itemName }}</span> ×
                     <span class="num">{{ s.quantity ?? '待确认' }}</span>（第 {{ s.page }} 页）</span
                   >
                 </p>
@@ -1251,7 +1107,7 @@ onUnmounted(() => {
           <summary
             class="flex cursor-pointer list-none items-center gap-2.5 px-5 py-3.5 text-sm font-medium text-text transition-colors duration-150 hover:text-ink [&::-webkit-details-marker]:hidden"
           >
-            <Icon name="history" :size="16" class="shrink-0 text-faint" />草稿修改与本地识别历史<Icon
+            <Icon name="history" :size="16" class="shrink-0 text-faint" />草稿修改与识别历史<Icon
               name="chevron-down"
               :size="16"
               class="ml-auto shrink-0 text-faint transition-transform duration-150 group-open/history:rotate-180"
@@ -1268,7 +1124,7 @@ onUnmounted(() => {
                   class="shrink-0 text-faint transition-transform duration-150 group-open/rev:rotate-90"
                 />
                 <span class="num"
-                  >{{ r.kind === 'DRAFT' ? '人工草稿' : '本地识别' }} · 版本 {{ r.version }} ·
+                  >{{ r.kind === 'DRAFT' ? '人工草稿' : '识别结果' }} · 版本 {{ r.version }} ·
                   {{ new Date(r.createdAt).toLocaleString() }}</span
                 >
               </summary>
@@ -1285,7 +1141,7 @@ onUnmounted(() => {
           <summary
             class="flex cursor-pointer list-none items-center gap-2.5 px-5 py-3.5 text-sm font-medium text-text transition-colors duration-150 hover:text-ink [&::-webkit-details-marker]:hidden"
           >
-            <Icon name="sparkles" :size="16" class="shrink-0 text-faint" />GPT 调用与用量<Icon
+            <Icon name="sparkles" :size="16" class="shrink-0 text-faint" />AI 调用与用量<Icon
               name="chevron-down"
               :size="16"
               class="ml-auto shrink-0 text-faint transition-transform duration-150 group-open/calls:rotate-180"
@@ -1376,103 +1232,10 @@ onUnmounted(() => {
       </div>
       <p class="flex items-start gap-1.5 text-meta">
         <Icon name="info" :size="13" class="mt-[3px] shrink-0" />
-        <span>启用自动智能导入后，每张单据的原件将发送给设置中的 GPT 服务。最终入账需人工确认。</span>
+        <span>启用自动智能导入后，每张单据的原件将发送给设置中的 AI 服务。最终入账需人工确认。</span>
       </p>
     </section>
 
-    <!--
-      未完成的导入：已上传、还没确认入账的任务（只看 confirmedAt，本地识别「已完成」不算完成）。
-      放在页尾，打开或没打开任务都能找回；切到「已入账」可以只读查看。
-      行在窄屏上换行（文件名一栏 min-w-0 + basis-40），不会横向溢出。
-    -->
-    <Panel
-      title="未完成的导入"
-      description="已上传但尚未确认入账的单据；未确认的原件保留 30 天"
-      flush
-    >
-      <template #actions>
-        <Tabs
-          :model-value="listTab"
-          variant="segmented"
-          aria-label="导入任务筛选"
-          :tabs="[
-            { value: 'pending', label: '未完成' },
-            { value: 'confirmed', label: '已入账' },
-          ]"
-          @change="(v) => switchList(v === 'confirmed' ? 'confirmed' : 'pending')"
-        />
-      </template>
-      <div v-if="listLoading && !listRows.length" class="space-y-2.5 px-5 py-4">
-        <Skeleton class="h-9 w-full" />
-        <Skeleton class="h-9 w-4/5" />
-      </div>
-      <div
-        v-else-if="listError && !listRows.length"
-        class="flex flex-wrap items-center gap-x-3 gap-y-2 px-5 py-4 text-[13px] text-muted"
-      >
-        <span class="min-w-0">列表加载失败：{{ listError }}</span>
-        <Button size="sm" variant="ghost" @click="loadTasks()"
-          ><Icon name="refresh" :size="14" />重新加载</Button
-        >
-      </div>
-      <p v-else-if="!listRows.length" class="px-5 py-4 text-[13px] text-muted">
-        {{ listTab === 'pending' ? '没有未完成的导入' : '没有已入账的导入' }}
-      </p>
-      <ul v-else class="divide-y divide-line">
-        <li
-          v-for="t in listRows"
-          :key="t.id"
-          class="flex flex-wrap items-center gap-x-4 gap-y-2 px-5 py-3 transition-colors duration-150"
-          :class="t.id === taskId ? 'bg-accent-soft/40' : ''"
-          :aria-current="t.id === taskId ? 'true' : undefined"
-        >
-          <div class="min-w-0 flex-1 basis-40">
-            <p class="flex min-w-0 items-center gap-2">
-              <span class="truncate text-sm font-medium text-ink" :title="t.filename">{{
-                t.filename
-              }}</span>
-              <Badge v-if="t.id === taskId" tone="gray" class="shrink-0">当前</Badge>
-            </p>
-            <!-- 各段不折行，窄屏只在「·」处换行 -->
-            <p class="mt-0.5 text-meta">
-              <span class="num whitespace-nowrap">{{ formatDateTime(t.createdAt) }}</span> ·
-              <span>{{ taskStatusLabel(t) }}</span
-              ><template v-if="!t.originalAvailable">
-                · <span class="whitespace-nowrap">原件缺失</span></template
-              >
-            </p>
-          </div>
-          <!-- custom：RouterLink 判断「当前」时不看 query，会给每一行都标 aria-current，这里自己渲染 <a> -->
-          <router-link
-            v-slot="{ href, navigate }"
-            :to="{ path: '/import', query: { task: t.id } }"
-            custom
-          >
-            <a
-              :href="href"
-              :class="buttonClass({ variant: 'secondary', size: 'sm' })"
-              @click="openListTask(t, navigate, $event)"
-              >{{ t.confirmed ? '查看' : '继续处理' }}</a
-            >
-          </router-link>
-        </li>
-      </ul>
-      <template v-if="listRows.length" #footer>
-        <div class="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
-          <p class="text-meta num">
-            {{ listTotal > listRows.length ? `已显示 ${listRows.length} 条` : `共 ${listTotal} 条` }}
-          </p>
-          <Button
-            v-if="listTotal > listRows.length"
-            variant="ghost"
-            size="sm"
-            class="-mr-2"
-            :loading="listLoading"
-            @click="loadTasks(true)"
-            >显示更多（共 {{ listTotal }} 条）</Button
-          >
-        </div>
-      </template>
-    </Panel>
+    <ImportTaskList ref="taskList" :current-task-id="taskId" :current-task="task" @current="scrollToTask" />
   </div>
 </template>

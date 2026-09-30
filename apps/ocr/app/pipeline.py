@@ -6,7 +6,7 @@ import io
 import os
 from .normalize import to_halfwidth
 from .ocr import ocr_pdf_page, run_ocr
-from .reconstruct import rebuild_from_lines, rows_from_table, finalize_items, extract_fields
+from .reconstruct import rebuild_from_entries, rebuild_from_lines, rows_from_table, finalize_items, extract_fields
 
 MAX_PAGES = int(os.environ.get("OCR_MAX_PAGES", "30"))
 PARSER_VERSION = "3"
@@ -16,7 +16,7 @@ def _source(items: list[dict], page: int, method: str, entries: list[dict] | Non
     for i, item in enumerate(items):
         item["lineId"] = f"p{page}-r{i + 1}"
         matches = [e for e in entries or [] if e["text"] == item.get("rawText")]
-        entry = matches[0] if len(matches) == 1 else {}
+        entry = item.pop("_source", None) or (matches[0] if len(matches) == 1 else {})
         item["source"] = {"page": page, "method": method, "rawText": item.pop("rawText", item["itemName"]),
                           "box": entry.get("box"), "confidence": entry.get("confidence"), "rotation": entry.get("rotation", 0)}
     return items
@@ -86,7 +86,7 @@ async def parse_pdf(pdf_bytes: bytes, page_number: int | None = None) -> dict:
                     mode = "PDF_TEXT"
                     if scanned or not result["items"]:
                         entries = await ocr_pdf_page(pdf_bytes, index)
-                        result = rebuild_from_lines([e["text"] for e in entries])
+                        result = rebuild_from_entries(entries)
                         mode = "PDF_OCR"
                         _source(result["items"], number, mode, entries)
                 if not all("lineId" in it for it in result["items"]):
@@ -99,7 +99,7 @@ async def parse_pdf(pdf_bytes: bytes, page_number: int | None = None) -> dict:
 
 async def parse_image(image_bytes: bytes) -> dict:
     entries = await run_ocr(image_bytes)
-    result = rebuild_from_lines([e["text"] for e in entries])
+    result = rebuild_from_entries(entries)
     _source(result["items"], 1, "IMAGE_OCR", entries)
     return _result([_page_result(result, 1, "IMAGE_OCR")], 1)
 

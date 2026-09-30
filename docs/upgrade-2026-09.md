@@ -1,27 +1,27 @@
-# 可信导入、OCR 3 与 Responses 升级
+# 按量采购工作流、原件识别与升级
 
-本文是可信导入（草稿、确认、原件）、OCR 3、第三方 Responses 以及备份、恢复与回退的当前参考。技术栈仍是 Vue、Nest/Fastify、SQLite 与 Python OCR，业务导航六项。原件上传后本地逐页解析，启用并检测合格的 GPT 会自动复核每一页；人工保存草稿、明确处理数量/价格建议后才能入账。
+本文记录 2026-09-30 重构后的业务接口、原件识别与部署维护。需求已经确认，见 [重构需求](./rebuild-requirements.md)。技术栈仍为 Vue、Nest/Fastify、SQLite 与 Python OCR；主导航为工作台、申请、库存与领用、报表、系统设置。
 
-2026-09-29 的迭代增加了导入草稿的找回（任务列表接口与导入页「未完成的导入」），并去掉了库存页跨单位的数量合计；其余行为不变。
+新主流程使用独立的申请、业务单据、库存余额和不可覆盖的库存流水。旧表与旧路由保留兼容，不推算或伪造历史采购、到货事实。本次开发不清空既有目录；在新测试库执行迁移即可使用新主流程。
 
 ## 实现与默认值
 
 | 范围 | 行为 |
 | --- | --- |
 | 草稿 | 未知数量为 null，申请日期不补当天；独立行、稳定 lineId、逐页来源、乐观版本号、修改历史 |
-| 确认 | 严格数量/价格校验；同名行须明确区分或合并；已有台账默认跳过；任务只能确认一次 |
+| 确认 | 严格数量/价格校验；保留原件物理行，含同名行；规格和单位参与物品身份；任务只能确认一次 |
 | 原件 | 内容哈希提示重复，可直接打开已有任务，用户明确继续才创建新任务；未确认原件保留 30 天，上传及每 6 小时清理到期任务；确认后的来源长期保留 |
 | OCR | Python 3.11、PaddleOCR 3.7.0、PaddlePaddle 3.3.1、PP-OCRv6 medium；方向识别开启，去畸变关闭 |
 | OCR 资源 | 一个进程/推理实例/活动解析，2 CPU、4GB 内存、2 推理线程，页面最大边 2560；30MB、自动最多 30 页 |
-| GPT | Responses，第三方 baseURL 可配置；模型建议值 gpt-6-sol，识别/问答/搜索共用一个模型；能力按实际请求检测 |
+| AI | Responses，第三方 baseURL 可配置；原件识别优先，本地 OCR 备用；能力按实际请求检测 |
 | 请求 | 智能导入并发 1，单页输出最多 4096 tokens，120 秒；429/500/502/503 最多重试一次，不确定超时不自动重发 |
 | 用量 | 输入/输出 tokens、模型、耗时、请求标识；缺少用量为未知，未配置价格不计算费用 |
-| 库存 | 入库/直发结余归并校验单位，已有库存单位未知也必须先处理；终态单位不可修改或回滚 |
-| 写防重 | 确认、下单、入库、发放、手工库存变动必须带 Idempotency-Key；同事务持久化请求指纹及结果 |
+| 库存 | 品名、规格、单位构成物品身份；收货待处理与库存分开；直发余量不自动入库 |
+| 写防重 | 申请、采购、收货、入库、发放、退回、取消、调整及撤销等写操作必须带 Idempotency-Key；同事务持久化请求指纹及结果 |
 
 模型文件在构建期预下载，以 `apps/ocr/models.sha256` 校验；依赖来自 `apps/ocr/requirements.lock`。禁止运行时补下载作为正常启动流程。真实 CPU 测试发现当前 oneDNN 路径不兼容，已明确关闭 MKLDNN；更新此设置需重跑真实容器测试。
 
-本地结果、GPT 建议和人工草稿分开保存。后台迟到结果不能覆盖人工编辑；重试保留历史。GPT 只有页级定位，不会伪造坐标。原件文本只作为数据，自动识别不携带业务写工具；问答仍使用只读工具白名单、参数校验和六轮工具上限。
+首次识别结果、AI 重试建议和人工草稿分开保存。图片优先直接识别原始字节；PDF 仅依赖 Python 做页数检查和渲染，AI 成功时无需启动 OCR 模型。失败页才回退本地 OCR。后台迟到结果不能覆盖人工编辑；重试保留历史。AI 只有页级定位，不会伪造坐标。原件文本只作为数据，自动识别不携带业务写工具；问答仍使用只读工具白名单、参数校验和六轮工具上限。
 
 ## 配置第三方 Responses
 
@@ -29,7 +29,7 @@
 2. 服务器密钥配置一次后，设置页显示“服务器已配置 Key，无需填写”。已有密钥时自动从已保存服务的 `GET /models` 获取模型，只需选择一个模型，识别、问答和搜索共用；旧配置中的分任务模型不再生效，曾单独指定任务模型时需重新检测能力。服务地址或密钥改动后先保存，再获取列表；服务商不支持列表时可手动填写。列表不代表 Responses 能力，也不会自动更改模型或启用 AI。旧数据库密钥兼容；服务器密钥优先，界面及日志不返回明文。
 3. 点击能力检测。测试使用合成图像和固定文本，分别验证文本、图像、严格 JSON Schema、工具调用与结果回传。更换服务、密钥或模型会使结果失效。
 4. 图像和结构化输出通过后，明确打开自动智能导入并保存。工具检测失败仅限制问答。
-5. 新单自动执行 GPT，失败时保留本地结果。用户可取消后台处理，核对原件并继续。本地成功但 GPT 失败、取消、结果未知或缺少结果的页面，也必须重试完成或逐页记录人工核对；后端返回统一的 `reviewPages` 清单，并在确认事务中按同一规则校验。上传时记录是否安排 GPT，后续停用配置不能抹去核对要求。关闭 AI 上传的任务不增加 GPT 核对要求。
+5. 新单优先由 AI 识别原件，失败页回退本地 OCR。用户可取消后台处理，核对原件并继续。AI 或 OCR 任一方式完成后仍须人工确认最终草稿；两种方式均未完成的页面须补录并逐页记录人工核对。后端返回统一的 `reviewPages` 清单，并在确认事务中按同一规则校验，停用配置不能抹去未完成页面的核对要求。
 
 secret 文件示例（文件路径由管理员在 VPS 上准备，权限应仅允许服务读取）：
 
@@ -45,22 +45,41 @@ services:
 
 `store:false` 只是请求参数，不代表第三方零留存。模型名称不代表能力。设置页不再提供计价和预算项；未配置时只记录用量，预算默认关闭。历史单价与预算记录保留兼容，币种由服务商决定。月预算按已记录的导入估算费用停止后续请求，单页请求可能跨过阈值；它不是第三方账单硬限额。问答和搜索不计入导入预算。
 
-识别成功与费用记账分开：截断、拒绝、JSON/Schema 错误只要带有可信用量，就按该次配置单价估算费用。发出后没有用量的失败调用费用为未知，启用预算时阻止后续自动请求；在页面渲染等发送前步骤失败的调用标记为 `NOT_SENT`，费用为 0，不占预算。旧记录缺少费用依据时仍保持未知，不使用当前单价补造历史账单。预算拦截只结束 GPT 阶段，保留已完成的本地草稿，允许明确人工核对后继续入账。
+识别成功与费用记账分开：截断、拒绝、JSON/Schema 错误只要带有可信用量，就按该次配置单价估算费用。发出后没有用量的失败调用费用为未知，启用预算时阻止后续自动请求；在页面渲染等发送前步骤失败的调用标记为 `NOT_SENT`，费用为 0，不占预算。旧记录缺少费用依据时仍保持未知，不使用当前单价补造历史账单。预算拦截只结束 AI 阶段，保留已完成的识别草稿，允许明确人工核对后继续入账。
 
 ## API 与数据兼容
 
 - `POST /api/imports/upload`：multipart 单文件；内容与已有任务相同时只返回 `{duplicateTaskId}`、不创建任务：优先指向最新的未确认任务，都已确认时指向最近确认的那个；带 `?continueDuplicate=true` 才新建。
-- `GET /api/imports/tasks?confirmed=false|true&page=1&pageSize=10`：只读任务列表，只按 `confirmedAt` 筛选（`false` 为未确认入账，包括本地识别已完成的任务），按上传时间倒序；`page` ≥ 1，`pageSize` 1–50（默认 10），参数不合法返回 400。返回 `{tasks,total,page,pageSize}`，每行只有 `id`、`filename`、`createdAt`、`finishedAt`、`status`、`aiStatus`、`confirmed`、`confirmedAt`、`originalAvailable`；不返回存储路径、识别结果、草稿、GPT 结果或确认快照，也不触发识别、重试或清理。
+- `GET /api/imports/tasks?confirmed=false|true&page=1&pageSize=10`：只读任务列表，只按 `confirmedAt` 筛选（`false` 为未确认入账，包括本地识别已完成的任务），按上传时间倒序；`page` ≥ 1，`pageSize` 1–50（默认 10），参数不合法返回 400。返回 `{tasks,total,page,pageSize}`，每行只有 `id`、`filename`、`createdAt`、`finishedAt`、`status`、`aiStatus`、`confirmed`、`confirmedAt`、`originalAvailable`，新流程已确认任务另带 `requestId`；不返回存储路径、识别结果、草稿、AI 结果或确认快照，也不触发识别、重试或清理。
 - `GET /api/imports/tasks/:id`：阶段状态、草稿版本、逐页结果、`reviewPages`（页码、原因、人工核对状态）、建议及调用记录。任务不存在（编号有误或已被清理）时返回 404；导入页据此显示说明、停止轮询，不自动新建任务。
 - `PUT .../:id/draft`：`{version,draft}`；旧版本返回 409，不覆盖当前编辑。
 - `GET .../:id/revisions`：本地识别与人工草稿版本记录。
 - `GET .../:id/original`、`GET .../:id/pages/:page`：鉴权读取，服务端路径不对外暴露。
 - `POST .../:id/retry`：`{stage:"local"|"ai",pages?:number[]}`；`POST .../:id/cancel` 取消当前代次。
-- `POST /api/imports/confirm`：严格最终值、taskId、version，以及 Idempotency-Key 请求头。
+- `POST /api/workflow/imports/confirm`：人工确认后的最终值、taskId、version，以及 Idempotency-Key 请求头；同一事务校验任务/页核对/版本、建立申请与原件关联、标记确认并记录审计。旧 `POST /api/imports/confirm` 仅用于兼容旧台账。
 - `POST /api/ai/capabilities`：检测 Responses 的实际能力。
 - OCR `/health` 为进程存活；`/ready` 要求加载模型并完成小样例推理。
 
 新增迁移 `20260927000000_trusted_import`，增加 ImportTask 字段、ImportRevision、OperationReceipt、AiCall。历史解析读取时补稳定历史 ID，未知值保持空；没有依据的历史字段不创建框选。历史台账和 Float 数据不自动重归并或转换。
+
+## 新业务接口与数据库
+
+新迁移 `20260930000000_quantity_workflow` 建立 `CatalogProduct`、`ProcurementRequest`、`ProcurementLine`、`BusinessDocument`、`BusinessLine`、`StockBalance` 与 `StockEntry`，以及申请/业务单据附件关系。所有新关联均有外键；已记账单据与库存来源受到删除约束。
+
+- `GET /api/workflow/requests`、`requests/:id`：申请与逐行进度，支持待办阶段筛选和分页。
+- `POST /api/workflow/requests`：人工创建；来源任务只能经导入确认接口绑定。
+- `POST /api/workflow/purchases`、`receipts`：多供应商分次成交与按量收货。
+- `POST /api/workflow/stock-in`、`distributions`：明确入库、直发或库存领用。
+- `POST /api/workflow/supplier-returns`：退款退货或换货；`employee-returns`：员工归还入库。
+- `POST /api/workflow/purchase-cancellations`、`request-cancellations`：取消尚未收货的采购量、尚未采购的申请量。
+- `POST /api/workflow/adjustments`：带原因的库存增减；`documents/:id/void`：检查下游依赖并追加反向流水。
+- `PATCH /api/workflow/documents/:id/metadata`：付款/报销、开票与备注。
+- `GET /api/workflow/stock`、`entries`、`documents`、`overview`、`reports`：只读库存、流水、历史与统计。
+- `POST /api/attachments/requests/:id`：补充原件；`documents/:id?kind=INVOICE|SIGNOFF`：采购发票或发放签收。已入账申请原件不可删除。
+
+新数量以六位定点整数存储，单价四位，金额两位，接口返回十进制字符串。行金额使用四舍五入，聚合累加行金额。退款减少净成交，换货不减少；收货与实物退货单独统计。日期筛选按每次业务发生日期，跨期退款可使当期净额为负。不同物品、规格或单位的数量不混加，领用次数按发放单去重。
+
+旧 Float 台账不直接转换为新采购事实。恢复旧备份会先在隔离副本迁移结构，历史仍通过旧兼容入口查看；正式使用从新的申请开始。
 
 ## 验证命令
 
@@ -81,7 +100,7 @@ docker run --rm --network none --cpus 2 --memory 4g procure-lite-ocr:test
 docker run --rm --network none --cpus 2 --memory 4g procure-lite-ocr:test python -m tests.smoke_engine
 ```
 
-浏览器测试启动独立临时 SQLite 和真实 API，OCR/GPT 使用明确的合成替身；不访问生产数据。协议错误测试另外覆盖 Responses 请求与异常。真实 OCR 在断网、资源限制下运行真实模型。
+浏览器测试启动独立临时 SQLite 和真实 API，OCR/AI 使用明确的合成替身；不访问生产数据。协议错误测试另外覆盖 Responses 请求与异常。真实 OCR 容器验收命令在断网和资源限制下运行模型；实际执行状态须查对应验收记录，合成测试通过不代表本次已完成真实模型验收。
 
 ## 备份、恢复与回退
 
