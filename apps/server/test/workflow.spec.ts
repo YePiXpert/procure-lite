@@ -276,6 +276,40 @@ describe('整单下单登记', () => {
     expect(await getItem(b)).toMatchObject({ status: 'PENDING_PURCHASE', unitPrice: null });
   });
 
+  it('同一供应商同一品名同价同链接重复登记不重复记入比价库，改价或改链接才新增', async () => {
+    const supplierId = await createSupplier('齐心文具');
+    const [id] = await seedForm(['复写纸']);
+    const register = async (unitPrice: number, purchaseLink: string) => {
+      const res = await ctx.inject({
+        method: 'POST',
+        url: '/api/items/purchase',
+        ...auth({
+          payload: { supplierId, lines: [{ id, unitPrice, purchaseLink }], markOrdered: false },
+        }),
+      });
+      expect(res.statusCode).toBe(200);
+    };
+    const records = async (): Promise<{ unitPrice: number; purchaseLink: string | null }[]> =>
+      (
+        await ctx.inject({
+          method: 'GET',
+          url: `/api/suppliers/price-records?itemName=${encodeURIComponent('复写纸')}&supplierId=${supplierId}`,
+          ...auth(),
+        })
+      ).json();
+
+    await register(12, 'https://example.com/copy-paper');
+    await register(12, 'https://example.com/copy-paper');
+    expect(await records()).toHaveLength(1);
+
+    await register(13, 'https://example.com/copy-paper');
+    expect((await records()).map((r) => r.unitPrice).sort((a, b) => a - b)).toEqual([12, 13]);
+
+    await register(13, 'https://example.com/copy-paper-2');
+    expect(await records()).toHaveLength(3);
+    expect(await getItem(id)).toMatchObject({ status: 'PENDING_PURCHASE', unitPrice: 13 });
+  });
+
   it('含已发放明细则整批拒绝', async () => {
     const [a, b] = await seedForm(['计算器', '订书机'], 'PENDING_DISTRIBUTION');
     await distribute(b, '订书机');

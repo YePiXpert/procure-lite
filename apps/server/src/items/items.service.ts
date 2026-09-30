@@ -371,14 +371,26 @@ export class ItemsService {
           }
           const price = after.unitPrice;
           if (input.rememberPrice && input.supplierId && price != null && price > 0) {
-            await tx.supplierPriceRecord.create({
-              data: {
-                supplierId: input.supplierId,
-                itemName: after.itemName,
-                unitPrice: price,
-                purchaseLink: after.purchaseLink ?? undefined,
-              },
+            const supplierId = input.supplierId;
+            // 与该供应商这个品名的最近一条报价完全相同（同价同链接）就不再记：反复点「只保存」不该刷出重复行
+            const latest = await tx.supplierPriceRecord.findFirst({
+              where: { supplierId, itemName: after.itemName },
+              orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
             });
+            const unchanged =
+              latest != null &&
+              latest.unitPrice === price &&
+              (latest.purchaseLink ?? null) === (after.purchaseLink ?? null);
+            if (!unchanged) {
+              await tx.supplierPriceRecord.create({
+                data: {
+                  supplierId,
+                  itemName: after.itemName,
+                  unitPrice: price,
+                  purchaseLink: after.purchaseLink ?? undefined,
+                },
+              });
+            }
           }
           out.push({ id: line.id, ordered });
         }
